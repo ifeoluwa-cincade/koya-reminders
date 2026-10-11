@@ -1,0 +1,74 @@
+name: Discord reminder
+
+# Posts one follow-up reminder to Discord when the Koya Outbound reminder script asks for it
+# (repository_dispatch, event discord_reminder). It then writes the result to the dashboard's activity log.
+# test=true posts to the TEST channel only. The job exits with an error if Discord never accepts the message,
+# so a failed delivery is never reported as delivered.
+on:
+  repository_dispatch:
+    types: [discord_reminder]
+  workflow_dispatch:
+    inputs:
+      message:
+        description: "Test only: the text to post"
+        default: "Test reminder (nothing to do)"
+      test:
+        description: "true = post to the TEST channel"
+        default: "true"
+
+permissions: {}
+
+concurrency:
+  group: discord-reminder-${{ github.run_id }}
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      LIVE_URL: ${{ secrets.HOT_LEADS_WEBHOOK_URL }}
+      TEST_URL: ${{ secrets.TEST_WEBHOOK_URL }}
+      LEAD_ACTIONS_URL: ${{ secrets.LEAD_ACTIONS_URL }}
+      LEAD_ACTIONS_HOOK: ${{ secrets.LEAD_ACTIONS_HOOK }}
+      MESSAGE: ${{ github.event.client_payload.message || github.event.inputs.message }}
+      LABEL: ${{ github.event.client_payload.label || 'reminder' }}
+      LEAD: ${{ github.event.client_payload.lead }}
+      TEST: ${{ github.event.client_payload.test || github.event.inputs.test }}
+    steps:
+      - name: Post to Discord (up to 5 tries)
+        run: |
+          python3 - <<'PY'
+          import os, json, time, urllib.request, urllib.error, urllib.parse
+          test = os.environ.get("TEST") == "true"
+          url = os.environ["TEST_URL" if test else "LIVE_URL"]
+          msg = os.environ.get("MESSAGE", "").strip()
+          if not msg:
+              raise SystemExit("no message to post")
+          def post():
+              req = urllib.request.Request(url, data=json.dumps({"content": msg, "username": "Koya follow-ups" + (" (TEST)" if test else "")}).encode(),
+                                           headers={"Content-Type": "application/json", "User-Agent": "DiscordBot (https://koya.dev, 1.0)"})
+              return urllib.request.urlopen(req, timeout=30).status
+          result, err = None, ""
+          for i in range(5):
+              try:
+                  result = post(); break
+              except urllib.error.HTTPError as e:
+                  err = f"Discord answered {e.code}"
+                  if e.code not in (429,) and e.code < 500: break
+                  time.sleep(3 * (i + 1))
+              except Exception as e:
+                  err = type(e).__name__; time.sleep(3 * (i + 1))
+          ok = result is not None and result < 300
+          where = "the TEST channel" if test else "Hot Leads"
+          kind, text, level = ("reminder", f"Reminder posted in {where} from GitHub", "info") if ok else ("error", f"GitHub could not post to {where}: {err}", "bad")
+          if test: text = "[TEST] " + text
+          label = os.environ.get("LABEL", "")
+          try:
+              if not ok or label in ("reminder", "test"):
+                  q = urllib.parse.urlencode({"logact": os.environ["LEAD_ACTIONS_HOOK"], "kind": kind, "text": text, "lead": os.environ.get("LEAD", ""), "level": level})
+                  urllib.request.urlopen(os.environ["LEAD_ACTIONS_URL"] + "?" + q, timeout=60).read()
+          except Exception as e:
+              print("could not write to the activity log:", type(e).__name__)
+          print("posted" if ok else "FAILED: " + err)
+          raise SystemExit(0 if ok else 1)
+          PY
