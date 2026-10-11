@@ -1,0 +1,47 @@
+name: PlusVibe positive-reply phone lookup
+
+# Finds a phone number for each new positive PlusVibe reply and adds it to the call-list sheet.
+# Starts the instant a real reply arrives (repository_dispatch from the Apps Script relay) and four times a day as a safety net.
+# What was already handled is remembered in the Google Sheet itself, so a repeat run never double-posts.
+on:
+  repository_dispatch:
+    types: [plusvibe_reply]
+  schedule:
+    - cron: "17 7,11,15,19 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true = look things up but write nothing and post nothing"
+        default: "true"
+
+permissions: {}
+
+concurrency:
+  group: plusvibe-phone-lookup
+  cancel-in-progress: false
+
+jobs:
+  lookup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install gspread google-auth requests
+      - name: Run phone lookup
+        env:
+          PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}
+          PROSPEO_API_KEY: ${{ secrets.PROSPEO_API_KEY }}
+          AI_ARK_KEY_2: ${{ secrets.AI_ARK_KEY_2 }}
+          SALES_QL_API_KEY: ${{ secrets.SALES_QL_API_KEY }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.PHONE_BOT_WEBHOOK_URL }}
+          CALLLIST_SHEET_ID: ${{ secrets.CALLLIST_SHEET_ID }}
+          DRY: ${{ github.event.inputs.dry_run }}
+        run: |
+          if [ "$DRY" = "true" ]; then python automation/plusvibe_auto_phone_lookup.py --dry-run; else python automation/plusvibe_auto_phone_lookup.py; fi

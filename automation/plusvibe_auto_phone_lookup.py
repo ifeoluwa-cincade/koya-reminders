@@ -1,0 +1,306 @@
+"""
+Runs on a GitHub Actions schedule (see .github/workflows/plusvibe_phone_lookup.yml).
+No Mac, no local session needed.
+
+What it does, every run:
+  1. Reads every PlusVibe campaign that has leads, pulls REPLIED leads.
+  2. Flags a lead "positive" if its current label OR any past label in its
+     history is CYCLE_1 / CYCLE_2 / MEETING_BOOKED / INTERESTED — PlusVibe's
+     live `label` field alone is unreliable (an AI-tagged INTERESTED lead can
+     get manually downgraded later; still wanted on the call list).
+  3. Skips anyone whose email is already in the "Positive Reply Call List"
+     tab — so re-runs only ever process genuinely new leads.
+  4. For each new positive lead: Prospeo first (verified mobile), AI Ark
+     second, SalesQL third as an unverified hint only (never written to the
+     sheet on its own — SalesQL numbers only matched already-verified ones
+     1/8 times in testing 2026-09-09, see feedback_salesql_unverified.md).
+  5. Appends one row to "Positive Reply Call List" (phone or not — this is
+     the single destination for everything this automation finds; it does
+     NOT touch "PlusVibe Positive Replies" or "Call List - All Enriched",
+     which stay as the manually-built historical record).
+  6. Posts one Discord message per new lead, into the same channel the
+     PlusVibe reply-agent already posts to, with what it found.
+
+All secrets come from environment variables (GitHub Actions secrets) — never
+hardcoded, never read from a local .env.
+"""
+from __future__ import annotations
+
+import argparse, json, os, re, sys, time
+from urllib.parse import urlparse
+
+import gspread
+import requests
+from google.oauth2.service_account import Credentials
+
+SHEET_ID = os.environ.get("CALLLIST_SHEET_ID", "")  # the call-list Google Sheet; set as a repository secret
+OUT_TAB = "Positive Reply Call List"
+WORKSPACE_ID = "6a6e634971ad0f0e174a5471"
+PV_BASE = "https://api.plusvibe.ai/api/v1"
+POSITIVE_LABELS = {"CYCLE_1", "CYCLE_2", "MEETING_BOOKED", "INTERESTED"}
+
+ARK_URL = "https://api.ai-ark.com/api/developer-portal/v2/people/mobile-phone-finder"
+PROSPEO_URL = "https://api.prospeo.io/enrich-person"
+SALESQL_URL = "https://api-public.salesql.com/v1/persons/enrich"
+
+
+def env(name: str) -> str:
+    v = os.environ.get(name, "")
+    if not v:
+        raise SystemExit(f"Missing required env var {name}")
+    return v
+
+
+def get_sheet():
+    creds = Credentials.from_service_account_info(
+        json.loads(env("GOOGLE_SERVICE_ACCOUNT_JSON")),
+        scopes=["https://www.googleapis.com/auth/spreadsheets"],
+    )
+    return gspread.authorize(creds).open_by_key(SHEET_ID)
+
+
+def raw_values_update(worksheet, cell_range: str, values: list):
+    """Direct Sheets API call, bypassing gspread's Worksheet.update() — that
+    path silently converts a Python bool into the literal text "FALSE"/"TRUE"
+    instead of preserving it as a real boolean, which breaks checkbox cells."""
+    from urllib.parse import quote
+    full_range = quote(f"{worksheet.title}!{cell_range}", safe="")
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{worksheet.spreadsheet_id}/values/{full_range}"
+    worksheet.client.session.put(url, params={"valueInputOption": "RAW"}, json={"values": values}).raise_for_status()
+
+
+def pv_headers():
+    return {"x-api-key": env("PLUS_VIBE_API_KEY")}
+
+
+def fetch_new_positive_leads(already_seen: set[str]) -> list[dict]:
+    r = requests.get(f"{PV_BASE}/campaign/list-all", headers=pv_headers(),
+                      params={"workspace_id": WORKSPACE_ID}, timeout=30)
+    r.raise_for_status()
+    camps = r.json()
+
+    found = []
+    for c in camps:
+        if not c.get("lead_count"):
+            continue
+        cid, cname = c["id"], c["camp_name"]
+        r2 = requests.get(f"{PV_BASE}/lead/workspace-leads", headers=pv_headers(),
+                           params={"workspace_id": WORKSPACE_ID, "campaign_id": cid,
+                                   "limit": 1000, "status": "REPLIED"}, timeout=30)
+        if r2.status_code != 200:
+            print(f"  WARN: {cname} REPLIED fetch failed ({r2.status_code})", file=sys.stderr)
+            continue
+        for lead in r2.json():
+            email = lead.get("email", "")
+            if not email or email in already_seen:
+                continue
+            is_positive = lead.get("label") in POSITIVE_LABELS
+            if not is_positive:
+                r3 = requests.get(f"{PV_BASE}/lead/get", headers=pv_headers(),
+                                   params={"workspace_id": WORKSPACE_ID, "email": email}, timeout=30)
+                time.sleep(0.15)
+                if r3.status_code == 200:
+                    detail = (r3.json() or [{}])[0]
+                    history = (detail.get("lead_data") or {}).get("label_history") or []
+                    is_positive = any(h.get("label") in POSITIVE_LABELS for h in history)
+            if is_positive:
+                lead["_campaign_name"] = cname
+                found.append(lead)
+        time.sleep(0.2)
+    return found
+
+
+def extract_domain(url: str) -> str:
+    try:
+        netloc = urlparse(url).netloc or url
+        return re.sub(r"^www\.", "", netloc.lower().strip())
+    except Exception:
+        return ""
+
+
+def prospeo_lookup(linkedin: str = "", full_name: str = "", company_name: str = "",
+                    company_website: str = "") -> tuple[str, str]:
+    """Returns (phone, resolved_website). Empty phone means no verified mobile."""
+    data = {}
+    if linkedin:
+        data["linkedin_url"] = linkedin
+    else:
+        if not (full_name and (company_name or company_website)):
+            return "", ""
+        data["full_name"] = full_name
+        if company_name:
+            data["company_name"] = company_name
+        if company_website:
+            data["company_website"] = company_website
+    try:
+        r = requests.post(PROSPEO_URL, headers={"X-KEY": env("PROSPEO_API_KEY"), "Content-Type": "application/json"},
+                           json={"enrich_mobile": True, "data": data}, timeout=30)
+        d = r.json()
+    except Exception:
+        return "", ""
+    if d.get("error"):
+        return "", ""
+    person = d.get("person") or {}
+    mobile = person.get("mobile") or {}
+    phone = mobile.get("mobile_international", "") if mobile.get("status") == "VERIFIED" else ""
+    website = (d.get("company") or {}).get("website", "")
+    return phone.replace(" ", "") if phone else "", website
+
+
+def aiark_lookup(linkedin: str) -> str:
+    if not linkedin:
+        return ""
+    try:
+        r = requests.post(ARK_URL, headers={"Content-Type": "application/json", "X-TOKEN": env("AI_ARK_KEY_2")},
+                           json={"linkedin": linkedin}, timeout=30)
+        body = r.json()
+    except Exception:
+        return ""
+    if body.get("status") != 200:
+        return ""
+    nested = (body.get("data") or {}).get("data") or []
+    return nested[0][0] if nested and nested[0] else ""
+
+
+def salesql_hint(linkedin: str) -> str:
+    """Unverified-only signal — never written to the sheet directly."""
+    if not linkedin:
+        return ""
+    try:
+        r = requests.get(SALESQL_URL, headers={"Authorization": f"Bearer {env('SALES_QL_API_KEY')}"},
+                          params={"linkedin_url": linkedin}, timeout=30)
+        if r.status_code != 200:
+            return ""
+        phones = r.json().get("phones") or []
+        return phones[0].get("phone", "") if phones else ""
+    except Exception:
+        return ""
+
+
+def post_discord(text: str):
+    try:
+        requests.post(env("DISCORD_WEBHOOK_URL"), json={"content": text}, timeout=15)
+    except Exception as e:
+        print(f"  WARN: Discord post failed: {e}", file=sys.stderr)
+
+
+REQUIRED_ENV_VARS = [
+    "PLUS_VIBE_API_KEY", "PROSPEO_API_KEY", "AI_ARK_KEY_2", "SALES_QL_API_KEY",
+    "GOOGLE_SERVICE_ACCOUNT_JSON", "DISCORD_WEBHOOK_URL",
+    "CALLLIST_SHEET_ID",
+]
+
+
+def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
+    missing = [v for v in REQUIRED_ENV_VARS if not os.environ.get(v)]
+    if missing:
+        raise SystemExit(f"Missing required env var(s), refusing to start: {', '.join(missing)}")
+
+    out_ws = None
+    already_seen = set()
+    next_row = 2  # first data row, right after the header
+    if dry_run:
+        print("[DRY RUN] Not touching the sheet or Discord — printing what would happen.")
+    else:
+        sh = get_sheet()
+        out_ws = sh.worksheet(OUT_TAB)
+        out_rows = out_ws.get_all_values()
+        # Real data rows are the ones with a FirstName (col A) — never trust append_row's
+        # own table-detection here: the checkbox-validated Outreached column (J) reads back
+        # as "FALSE" for every row in its validated range even when nothing was ever
+        # written there, which fooled append_row into inserting at the very bottom of the
+        # sheet instead of right after the header (real incident, 2026-09-13).
+        data_rows = [r for r in out_rows[1:] if len(r) > 0 and r[0]]
+        already_seen = {row[6] for row in data_rows if len(row) > 6 and row[6]}  # Email is col G (index 6)
+        next_row = len(data_rows) + 2
+    print(f"Already tracked: {len(already_seen)} leads")
+
+    new_leads = fetch_new_positive_leads(already_seen)
+    print(f"New positive leads this run: {len(new_leads)}")
+    if not new_leads:
+        return
+    if limit:
+        # Process oldest-first so a big backlog drains in order across runs,
+        # rather than the same handful of newest leads winning every time.
+        new_leads.sort(key=lambda l: l.get("last_sent_at") or l.get("modified_at") or "")
+        if len(new_leads) > limit:
+            print(f"Capping this run to {limit} of {len(new_leads)} — the rest will be picked up on later runs.")
+        new_leads = new_leads[:limit]
+
+    for lead in new_leads:
+        first_name = lead.get("first_name", "")
+        company = lead.get("company_name", "")
+        email = lead.get("email", "")
+        linkedin = lead.get("linkedin_person_url", "")
+        website = lead.get("company_website", "")
+        campaign = lead.get("_campaign_name", "")
+        replied = (lead.get("last_sent_at") or lead.get("modified_at") or "")[:10]
+
+        phone, source = "", ""
+        p_phone, p_website = prospeo_lookup(linkedin=linkedin, full_name=first_name,
+                                             company_name=company, company_website=website)
+        if p_phone:
+            phone, source = p_phone, "Prospeo (verified)"
+        if not website and p_website:
+            website = p_website
+
+        if not phone:
+            a_phone = aiark_lookup(linkedin)
+            if a_phone:
+                phone, source = a_phone, "AI Ark"
+
+        hint = "" if phone else salesql_hint(linkedin)
+
+        msg = f"**New positive reply** — {first_name} @ {company}\n{campaign}\n{email}"
+        if phone:
+            msg += f"\n📞 {phone} ({source}) — added to Positive Reply Call List"
+        elif hint:
+            msg += f"\n⚠️ No verified number. SalesQL has an unconfirmed candidate: {hint} — verify before calling."
+        else:
+            msg += "\n No phone number found (Prospeo, AI Ark, SalesQL all checked)."
+
+        if dry_run:
+            print(f"  [DRY RUN] lead -> phone {'found' if phone else 'none'}, hint {'yes' if hint else 'no'}")
+            print("  Would post one message to Discord")
+        else:
+            row_range = f"A{next_row}:I{next_row}"
+            out_ws.update([[first_name, company, campaign, replied, phone, source, email, linkedin, website]],
+                          row_range, value_input_option="RAW")
+            # Outreached (col J) written via a raw API call, not gspread's
+            # ws.update(): passing a Python False through ws.update() silently
+            # stringifies it to the TEXT "FALSE" instead of a real boolean, which
+            # breaks the checkbox — it shows literal text instead of an unchecked
+            # box even with BOOLEAN validation applied (real incident, 2026-09-13).
+            raw_values_update(out_ws, f"J{next_row}", [[False]])
+            # Re-write just LinkedIn/Website with USER_ENTERED so they're actually
+            # clickable (RAW never makes a URL clickable, even styled — see the
+            # clay-style-sheet-formatting skill). Phone must stay RAW: USER_ENTERED
+            # parses a leading "+" as a math sign and strips it from the number.
+            out_ws.update([[linkedin]], f"H{next_row}", value_input_option="USER_ENTERED")
+            out_ws.update([[website]], f"I{next_row}", value_input_option="USER_ENTERED")
+            # Checkbox validation applied to exactly this one row, never a range
+            # ahead of real data — Sheets silently writes a literal FALSE into
+            # every cell a BOOLEAN validation rule touches, so pre-applying it to
+            # hundreds of empty rows is what caused the "ghost rows" bug.
+            sh.batch_update({"requests": [{"setDataValidation": {
+                "range": {"sheetId": out_ws.id, "startRowIndex": next_row - 1, "endRowIndex": next_row,
+                          "startColumnIndex": 9, "endColumnIndex": 10},
+                "rule": {"condition": {"type": "BOOLEAN"}, "strict": True},
+            }}]})
+            next_row += 1
+            if no_discord:
+                print(f"  lead -> phone {'found' if phone else 'none'} (seeded, no Discord post)")
+            else:
+                post_discord(msg)
+                print(f"  lead -> phone {'found' if phone else 'none'}")
+        time.sleep(1)
+
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser(description="Auto-lookup phones for new PlusVibe positive replies")
+    p.add_argument("--dry-run", action="store_true", help="Don't write to the sheet or post to Discord, just print")
+    p.add_argument("--limit", type=int, default=5, help="Max leads to process this run (default 5, keeps Discord from flooding)")
+    p.add_argument("--no-discord", action="store_true",
+                    help="Write to the sheet but skip Discord — for one-time backlog seeding so old replies don't trigger notifications")
+    args = p.parse_args()
+    main(dry_run=args.dry_run, limit=args.limit, no_discord=args.no_discord)
