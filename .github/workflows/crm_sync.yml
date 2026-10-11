@@ -1,0 +1,79 @@
+name: CRM sync
+
+# 1. Every positive AI-agency reply gets a deal in the CRM.
+# 2. Every cold-email deal follows its lead's PlusVibe label.
+# 3. Interested people with a phone number join the call queue.
+# Starts the moment the relay reports a real reply, and once an hour as a safety net.
+# All three scripts are safe to run twice: they check what already exists before writing.
+# workflow_dispatch defaults to a DRY RUN that changes nothing.
+on:
+  repository_dispatch:
+    types: [plusvibe_reply]
+  schedule:
+    - cron: "11 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true = show what would change, write nothing"
+        default: "true"
+
+permissions: {}
+
+concurrency:
+  group: crm-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ATTIO_KEY_VAR: ATTIO_API_KEY_2
+      ATTIO_API_KEY_2: ${{ secrets.ATTIO_API_KEY_2 }}
+      PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}
+      AI_ARK_KEY_2: ${{ secrets.AI_ARK_KEY_2 }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      CLOUD_TALK_API_KEY_ID: ${{ secrets.CLOUD_TALK_API_KEY_ID }}
+      CLOUD_TALK_API_KEY: ${{ secrets.CLOUD_TALK_API_KEY }}
+      CALLLIST_SHEET_ID: ${{ secrets.CALLLIST_SHEET_ID }}
+      ENC_CACHE_KEY: ${{ secrets.ENC_CACHE_KEY }}
+      DRY: ${{ github.event.inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install requests pyyaml gspread google-auth
+      - name: Decide dry run or real run
+        run: |
+          # a manual run with dry_run=true changes nothing; every automatic run (reply, hourly) is real
+          if [ "$DRY" = "true" ]; then echo "COMMIT=" >> "$GITHUB_ENV"; echo "DRY RUN: nothing will be written"; else echo "COMMIT=--commit" >> "$GITHUB_ENV"; echo "REAL RUN"; fi
+      - name: Positive replies become deals
+        run: python crm/scripts/positive_replies_to_deals.py $COMMIT
+      - name: Deals follow PlusVibe labels
+        run: python crm/scripts/deals_follow_labels.py $COMMIT
+      # The phone lookup memory holds phone numbers, so it is encrypted before GitHub stores it. A stranger can see the file but not read it.
+      - name: Restore the encrypted phone lookup memory
+        uses: actions/cache@v4
+        with:
+          path: data/caches/aiark_phone_finder_cache.json.enc
+          key: aiark-phone-enc-${{ github.run_id }}
+          restore-keys: aiark-phone-enc-
+      - name: Decrypt it
+        run: |
+          if [ -f data/caches/aiark_phone_finder_cache.json.enc ]; then
+            openssl enc -d -aes-256-cbc -pbkdf2 -in data/caches/aiark_phone_finder_cache.json.enc -out data/caches/aiark_phone_finder_cache.json -pass env:ENC_CACHE_KEY || rm -f data/caches/aiark_phone_finder_cache.json
+          fi
+      - name: Interested people with a number go into the call queue
+        run: python crm/scripts/positive_replies_to_call_queue.py $COMMIT
+      - name: Encrypt the phone lookup memory again
+        if: ${{ always() }}
+        run: |
+          mkdir -p data/caches
+          if [ -f data/caches/aiark_phone_finder_cache.json ]; then
+            openssl enc -aes-256-cbc -pbkdf2 -salt -in data/caches/aiark_phone_finder_cache.json -out data/caches/aiark_phone_finder_cache.json.enc -pass env:ENC_CACHE_KEY
+            rm -f data/caches/aiark_phone_finder_cache.json
+          fi

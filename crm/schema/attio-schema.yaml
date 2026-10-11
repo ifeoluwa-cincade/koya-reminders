@@ -1,0 +1,33 @@
+# Only the part the CRM sync needs: which call lists exist and which CloudTalk tag each one uses.
+call_lists:
+- name: AI Agencies | NA | A+B
+  cloudtalk_campaign_id: 361447
+  cloudtalk_tag: Attio | NA | A+B
+  region: NA
+  tiers:
+  - A
+  - B
+- name: AI Agencies | EU | A+B
+  cloudtalk_campaign_id: 361449
+  cloudtalk_tag: Attio | EU | A+B
+  region: EU
+  tiers:
+  - A
+  - B
+- name: AI Agencies | NA | C
+  cloudtalk_campaign_id: 362297
+  cloudtalk_tag: Attio | NA | C
+  region: NA
+  tiers:
+  - C
+- name: AI Agencies | EU | C
+  cloudtalk_campaign_id: 362301
+  cloudtalk_tag: Attio | EU | C
+  region: EU
+  tiers:
+  - C
+- name: AI Agency Positive Replies
+  cloudtalk_campaign_id: 360114
+  cloudtalk_tag: Attio | Positive Replies
+  region: ANY
+  tiers: []
