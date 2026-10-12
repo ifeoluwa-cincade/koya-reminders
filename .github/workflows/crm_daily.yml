@@ -1,0 +1,42 @@
+name: CRM daily
+
+# Once a day: make sure everyone on a CRM call list carries the matching tag in the dialler, which is what puts them in its campaign.
+# Writes are read back and retried, because the dialler's tag endpoint answers OK and sometimes does not save.
+# A manual run defaults to a DRY RUN.
+on:
+  schedule:
+    - cron: "13 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true = report only, change nothing"
+        default: "true"
+
+permissions: {}
+
+concurrency:
+  group: crm-daily
+  cancel-in-progress: false
+
+jobs:
+  queues:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ATTIO_KEY_VAR: ATTIO_API_KEY_2
+      ATTIO_API_KEY_2: ${{ secrets.ATTIO_API_KEY_2 }}
+      CLOUD_TALK_API_KEY_ID: ${{ secrets.CLOUD_TALK_API_KEY_ID }}
+      CLOUD_TALK_API_KEY: ${{ secrets.CLOUD_TALK_API_KEY }}
+      DRY: ${{ github.event.inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install requests pyyaml
+      - name: Call lists to dialler tags
+        run: |
+          if [ "$DRY" = "true" ]; then python crm/scripts/verify_cloudtalk_tags.py; else python crm/scripts/verify_cloudtalk_tags.py --commit; fi

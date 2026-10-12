@@ -1,0 +1,47 @@
+{
+ "through": "2026-10-10",
+ "days": {
+  "2026-10-02": {
+   "calls": 19,
+   "conversations": 0,
+   "booked": 0,
+   "pending": 0
+  },
+  "2026-10-03": {
+   "calls": 7,
+   "conversations": 0,
+   "booked": 0,
+   "pending": 0
+  },
+  "2026-10-06": {
+   "calls": 2,
+   "conversations": 0,
+   "booked": 0,
+   "pending": 0
+  },
+  "2026-10-07": {
+   "calls": 4,
+   "conversations": 1,
+   "booked": 1,
+   "pending": 0
+  },
+  "2026-10-08": {
+   "calls": 493,
+   "conversations": 12,
+   "booked": 1,
+   "pending": 0
+  },
+  "2026-10-09": {
+   "calls": 111,
+   "conversations": 3,
+   "booked": 0,
+   "pending": 0
+  },
+  "2026-10-10": {
+   "calls": 2,
+   "conversations": 1,
+   "booked": 0,
+   "pending": 0
+  }
+ }
+}

@@ -1,0 +1,108 @@
+name: Dashboard build
+
+# Builds the Koya Outbound dashboard page: email numbers, call counts, opportunities, email threads and the health checks of every automation.
+# The page contains real lead details, so it is NEVER stored in this public repository. It is pushed to a separate PRIVATE repository
+# (the "dashboard-build" branch there) with a key that can write to that one repository only. A routine in claude.ai then publishes it.
+# Runs hourly through the day, and can be started by hand. A manual run with test=true writes to a test branch and leaves the live page alone.
+on:
+  schedule:
+    - cron: "41 6-22 * * *"
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "true = save to a test branch in the private repository, not the live one"
+        default: "true"
+
+permissions:
+  actions: read
+
+concurrency:
+  group: dashboard-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}
+      CLOUD_TALK_API_KEY_ID: ${{ secrets.CLOUD_TALK_API_KEY_ID }}
+      CLOUD_TALK_API_KEY: ${{ secrets.CLOUD_TALK_API_KEY }}
+      ATTIO_KEY_VAR: ATTIO_API_KEY_2
+      ATTIO_API_KEY_2: ${{ secrets.ATTIO_API_KEY_2 }}
+      LEAD_ACTIONS_URL: ${{ secrets.LEAD_ACTIONS_URL }}
+      LEAD_ACTIONS_HOOK: ${{ secrets.LEAD_ACTIONS_HOOK }}
+      OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
+      ENC_CACHE_KEY: ${{ secrets.ENC_CACHE_KEY }}
+      CALL_DATA_DIR: data/working/live
+      GH_TOKEN: ${{ github.token }}
+      PRIVATE_STORE_REPO: ${{ secrets.PRIVATE_STORE_REPO }}
+      TEST: ${{ github.event.inputs.test }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install requests pyyaml
+      - name: Set up the key for the private repository
+        env:
+          DEPLOY_KEY: ${{ secrets.DASHBOARD_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/store_key && chmod 600 ~/.ssh/store_key
+          ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
+          echo "GIT_SSH_COMMAND=ssh -i $HOME/.ssh/store_key -o IdentitiesOnly=yes" >> "$GITHUB_ENV"
+          if [ "$TEST" = "true" ]; then echo "TARGET_BRANCH=dashboard-build-test" >> "$GITHUB_ENV"; else echo "TARGET_BRANCH=dashboard-build" >> "$GITHUB_ENV"; fi
+      # The memory of finished calls is encrypted. It is only read here, to count calls and to see which are still waiting.
+      - name: Restore the encrypted memory of finished calls (read only)
+        uses: actions/cache/restore@v4
+        with:
+          path: data/working/live/live_state.json.enc
+          key: call-state-enc-none
+          restore-keys: call-state-enc-
+      - name: Decrypt it
+        run: |
+          mkdir -p data/working/live
+          if [ -f data/working/live/live_state.json.enc ]; then
+            openssl enc -d -aes-256-cbc -pbkdf2 -in data/working/live/live_state.json.enc -out data/working/live/live_state.json -pass env:ENC_CACHE_KEY || rm -f data/working/live/live_state.json
+          fi
+      - name: Count the calls for the dashboard
+        continue-on-error: true
+        run: python crm/dashboard/export_call_outcomes.py
+      - name: Pull PlusVibe numbers
+        run: python crm/scripts/collect_metrics.py --days 40 --plusvibe-only
+      - name: Restore the health-check history from the private repository
+        continue-on-error: true
+        run: |
+          rm -rf /tmp/store && mkdir /tmp/store && cd /tmp/store && git init -q
+          git remote add origin "git@github.com:${PRIVATE_STORE_REPO}.git"
+          git fetch -q --depth 1 origin dashboard-build
+          mkdir -p "$GITHUB_WORKSPACE/data/working"
+          git show FETCH_HEAD:check_history.json > "$GITHUB_WORKSPACE/data/working/check_history.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/check_history.json"
+      - name: Collect opportunities and system checks
+        continue-on-error: true
+        run: python crm/dashboard/collect_ops.py
+      - name: Build the page
+        run: python crm/dashboard/build_cold_email.py
+      - name: Save the built page in the private repository
+        run: |
+          set -e
+          rm -rf /tmp/out && mkdir /tmp/out
+          cp data/working/koya_cold_email.html /tmp/out/koya_cold_email.html
+          [ -f data/working/check_history.json ] && cp data/working/check_history.json /tmp/out/check_history.json || true
+          date -u +%Y-%m-%dT%H:%M:%SZ > /tmp/out/built_at.txt
+          cd /tmp/out
+          git init -q -b "$TARGET_BRANCH"
+          git config user.name "dashboard-bot"
+          git config user.email "dashboard-bot@users.noreply.github.com"
+          git add .
+          git commit -q -m "Dashboard build $(cat built_at.txt)"
+          git push -q --force "git@github.com:${PRIVATE_STORE_REPO}.git" "$TARGET_BRANCH"
+          echo "saved to branch $TARGET_BRANCH in the private repository"
+      - name: Remove everything that held lead details
+        if: ${{ always() }}
+        run: |
+          rm -rf /tmp/out /tmp/store data/working ~/.ssh/store_key
