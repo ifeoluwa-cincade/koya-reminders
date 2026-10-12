@@ -1302,8 +1302,9 @@
           interested:{label:"Interested",deal:"Interested",stop:false},
           multitouch:{label:"Multi-touch",deal:"Multi-touch",stop:false},
           later:{label:"Later",deal:"Later",stop:true},                                   // Later also stops the emails in PlusVibe, including a subsequence they were moved into (Ife, 2026-10-12)
-          profiles:{label:"Profiles sent",deal:"Profiles Sent",stop:false},
-          trial:{label:"Trial",deal:"Trial",stop:false}};
+          profiles:{label:"Profiles sent",deal:"Profiles Sent",stop:true},
+          trial:{label:"Trial",deal:"Trial",stop:true}};
+  var RZTAG={later:"LATER",booked:"MEETING_BOOKED",won:"CLOSED",notint:"NOT_INTERESTED"};      // the PlusVibe tag each stage sets (Lost: NOT_INTERESTED only when that is the reason). Applied by the server within a minute, see crm/scripts/stage_to_plusvibe.py
   var RZORDER=["interested","multitouch","later","booked","profiles","trial","won","lost","notint"];
   var RZEMO={booked:"📅",won:"🎉",lost:"❌",later:"⏳",multitouch:"🔁"};                 // a few relevant ones, not all
   var REASONS=["NOT_INTERESTED","NO_RESPONSE","BAD_FIT","TIMING","PRICE","COMPETITOR","OTHER"];
@@ -1532,7 +1533,8 @@
   }
   var RZSTATE=null;
   function rzOpen(act){
-    var o=oppById(openId), z=document.getElementById("rzone"); if(!o||!z||!MCP) return;
+    var o=oppById(openId), z=document.getElementById("rzone"); if(!o||!z) return;
+    if(!MCP){ z.innerHTML='<p class="tnote" style="color:var(--down)">Live access is off, so nothing can be changed from here yet. Tap the Live pill at the bottom left, then Allow live access.</p>'; return; }
     z.innerHTML='<p class="tnote">Checking the live state in Attio and PlusVibe…</p>';
     Promise.all([attioNow(o), o.email?pvRowsAll(o):Promise.resolve([])]).then(function(rs){
       var cur=rs[0], pv=rs[1], a=RZ[act], rows=[], did=dealIdOf(o);
@@ -1544,6 +1546,8 @@
       if (a.entry && (o.lists||[]).length) rows.push(["Attio call lists",(o.lists||[]).length+" list"+((o.lists||[]).length>1?"s":"")+" marked "+a.entry]);
       var html='<div class="rzbox"><div class="rzh">'+esc(a.label)+': what will change</div>'+rows.map(function(r){ return '<div class="rzr"><span>'+esc(r[0])+'</span><span>'+esc(r[1])+'</span></div>'; }).join("");
       if (a.stop){ html+= pv.length ? pv.map(function(x){ return '<div class="rzr"><span>PlusVibe emails</span><span>'+esc(x.campaign.slice(-6))+': '+esc(x.status)+' → COMPLETED</span></div>'; }).join("") : '<div class="rzr"><span>PlusVibe emails</span><span>not in any campaign, nothing to stop</span></div>'; }
+      if (a.stop){ var curLab=((pv||[]).filter(function(x){ return x.label; })[0]||{}).label||"none", newTag=RZTAG[act]||(act==="lost"?"NOT_INTERESTED if the reason is Not interested":"");
+        html+='<div class="rzr"><span>PlusVibe tag</span><span>'+esc(curLab)+' → '+esc(newTag||"unchanged")+' (set within a minute)</span></div>'; }
       if (a.reason===true) html+='<label class="rzl">Why lost <select id="rzreason">'+REASONS.map(function(r){ return '<option>'+r+'</option>'; }).join("")+'</select></label>';
       if (a.date) html+='<div class="fup"><div class="fqs"><button type="button" class="schip" data-q="15m">In 15 min</button><button type="button" class="schip" data-q="1h">In 1 hour</button><button type="button" class="schip" data-q="tom">Tomorrow 9:00</button><button type="button" class="schip" data-q="mon">Next Monday 9:00</button></div><div class="fcal" id="fcal"></div><div class="ftime"><span>Time</span><button type="button" class="tbtn" id="ftbtn" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><b id="ftlab">09:00</b><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button><span class="tnote">Lagos time</span></div><input type="hidden" id="rztime" value="09:00"><div class="tpick" id="tpick" hidden><div class="clk" id="clk"></div></div><input type="hidden" id="rzdate"><div class="fsum" id="fsum">Pick a day</div></div>';
       if (a.date) html+='<label class="rzl planl" for="rzplan">Note for this follow-up <span class="tnote">(optional, it is shown in the reminder)</span></label><textarea id="rzplan" class="rnote" rows="2" maxlength="500" placeholder="For example: check if he accepted the connection request, or call him again"></textarea>';
