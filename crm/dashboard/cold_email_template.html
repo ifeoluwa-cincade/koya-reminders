@@ -1021,8 +1021,7 @@
       if (fStatus==="today" && d.cls!=="today") return false;
       if (["meeting","followup","chasing","callback","later"].indexOf(fStatus)>=0 && o.bucket!==fStatus) return false;
       if (fSource!=="all" && o.source.indexOf(fSource)<0) return false;
-      if (fReview==="open" && REV[o.id]==="done") return false;
-      if (fReview==="done" && REV[o.id]!=="done") return false;
+      if (fReview!=="all" && revState(o.id)!==fReview) return false;
       if (fNotes==="has" && !teamNotes(o)) return false;
       if (fNotes==="none" && teamNotes(o)) return false;
       return true; }).sort(SORTS[fSort]||SORTS.recent);
@@ -1047,11 +1046,12 @@
     var lostN=CLOSED.filter(function(o){ return o.bucket==="lost"; }).length, wonN=CLOSED.filter(function(o){ return o.bucket==="won"; }).length;
     var vsw='<div class="seg" id="oview" role="group" aria-label="Which leads">'+[["open","Open",OPPS.length],["lost","Lost",lostN],["won","Won",wonN]].map(function(v){ return '<button type="button" class="segb" data-view="'+v[0]+'" aria-pressed="'+(fView===v[0])+'">'+v[1]+' <b>'+v[2]+'</b></button>'; }).join("")+'</div>';
     if (fView!=="open"){ document.getElementById("otools").innerHTML=vsw; return; }
-    document.getElementById("otools").innerHTML=vsw+menuHTML("status",st,fStatus,"Status","filter",fStatus!=="all")+menuHTML("source",so,fSource,"Source","layers",fSource!=="all")+menuHTML("review",[{k:"all",l:"All leads",n:OPPS.length},{k:"open",l:"Open",n:countWhere(function(o){ return REV[o.id]!=="done"; }),hot:true},{k:"done",l:"Resolved",n:countWhere(function(o){ return REV[o.id]==="done"; })}],fReview,"Open or resolved","layers",fReview!=="all")+menuHTML("notes",[{k:"all",l:"All leads",n:OPPS.length},{k:"has",l:"Has notes",n:countWhere(function(o){ return teamNotes(o)>0; })},{k:"none",l:"No notes",n:countWhere(function(o){ return teamNotes(o)===0; })}],fNotes,"Notes","note",fNotes!=="all")+menuHTML("sort",sr,fSort,"Sort","sort",false)+
+    document.getElementById("otools").innerHTML=vsw+menuHTML("status",st,fStatus,"Status","filter",fStatus!=="all")+menuHTML("source",so,fSource,"Source","layers",fSource!=="all")+menuHTML("review",[{k:"all",l:"All leads",n:OPPS.length},{k:"open",l:"Open",n:countWhere(function(o){ return revState(o.id)==="open"; }),hot:true},{k:"ongoing",l:"Ongoing",n:countWhere(function(o){ return revState(o.id)==="ongoing"; })},{k:"done",l:"Resolved",n:countWhere(function(o){ return revState(o.id)==="done"; })}],fReview,"Open, ongoing or resolved","layers",fReview!=="all")+menuHTML("notes",[{k:"all",l:"All leads",n:OPPS.length},{k:"has",l:"Has notes",n:countWhere(function(o){ return teamNotes(o)>0; })},{k:"none",l:"No notes",n:countWhere(function(o){ return teamNotes(o)===0; })}],fNotes,"Notes","note",fNotes!=="all")+menuHTML("sort",sr,fSort,"Sort","sort",false)+
       '<button class="tbtn icon" type="button" id="sortdir" aria-label="'+(fDir==="asc"?"Ascending":"Descending")+'" title="'+(fDir==="asc"?"Ascending, click for descending":"Descending, click for ascending")+'"><span class="dirarrow'+(fDir==="asc"?"":" down")+'">'+svg("arrow")+'</span></button>';
   }
   function reviewMark(o){
     if (REV[o.id]==="done") return '<span class="orv" data-tip="Resolved"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="#2e9d62"/><path d="M4.6 8.3l2.3 2.3 4.5-4.8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+    if (REV[o.id]==="ongoing") return '<span class="orv" data-tip="Ongoing"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="#eaf1fe" stroke="#3b82f6" stroke-width="1.6"/><path d="M8 4.2a3.8 3.8 0 0 1 0 7.6z" fill="#3b82f6"/></svg></span>';
     return '<span class="orv" data-tip="Open"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="#fff3e0" stroke="#e08a3c" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="#e08a3c"/></svg></span>';
   }
   function noteIcon(o){
@@ -1362,12 +1362,13 @@
   }
   // review queue: each lead is untouched, queued for review, or reviewed. Shared through the db (collection review, one doc per lead)
   var REV={};
+  function revState(id){ return REV[id]==='done'?'done':REV[id]==='ongoing'?'ongoing':'open'; }
   function setReview(o,state){
     if (!db) return;
-    var next=state==="done"?"done":null;                                    // two states only: Open (nothing saved) or Resolved
+    var next=(state==="done"||state==="ongoing")?state:null;               // three states: Open (nothing saved, not touched yet), Ongoing, Resolved
     if (next) REV[o.id]=next; else delete REV[o.id];
     try{ if (next) db.doc("review/"+o.id).set({state:next,name:o.name||"",t:new Date().toISOString()}).catch(function(){}); else db.doc("review/"+o.id).delete().catch(function(){}); }catch(e){}
-    if (openId===o.id){ [].forEach.call(document.querySelectorAll("#rrev .schip"),function(b){ b.setAttribute("aria-pressed",String((REV[o.id]==="done")===(b.dataset.rev==="done"))); }); }
+    if (openId===o.id){ [].forEach.call(document.querySelectorAll("#rrev .schip"),function(b){ b.setAttribute("aria-pressed",String(revState(o.id)===b.dataset.rev)); }); }
     if (tab==="opps") renderOpps();
   }
   function seqHTML(o){
@@ -1394,7 +1395,7 @@
   }
   function seqAll(o){ return seqHTML(o)+seqNowHTML(o); }
   function reviewHTML(o){
-    return '<h4>Open or resolved</h4><div class="stagechips" id="rrev" role="group" aria-label="Open or resolved">'+[["open","Open"],["done","Resolved"]].map(function(x){ return '<button type="button" class="schip" data-rev="'+x[0]+'" aria-pressed="'+((REV[o.id]==="done")===(x[0]==="done"))+'"'+(db?'':' disabled')+'>'+x[1]+'</button>'; }).join("")+'</div>';
+    return '<h4>Open, ongoing or resolved</h4><div class="stagechips" id="rrev" role="group" aria-label="Open, ongoing or resolved">'+[["open","Open"],["ongoing","Ongoing"],["done","Resolved"]].map(function(x){ return '<button type="button" class="schip" data-rev="'+x[0]+'" aria-pressed="'+(revState(o.id)===x[0])+'"'+(db?'':' disabled')+'>'+x[1]+'</button>'; }).join("")+'</div><p class="tnote">Open: not looked at yet. Ongoing: being worked. Resolved: checked, notes written, follow-up set, nothing left to do.</p>';
   }
   function toClosed(o){
     o.bucket=o.closedAs==="won"?"won":"lost"; o.status=o.bucket==="won"?"Won":"Lost"; o.stage=o.bucket==="won"?"Won 🎉":"Lost"; o.closed_at=o.closed_at||new Date().toISOString(); o.resolved=false;
@@ -2339,7 +2340,7 @@
       function(){ dbState="off"; render(); });
     try{ db.doc("prefs/opps_order").onSnapshot(function(snap){ var v=snap&&snap.data&&snap.data(); if(v&&v.ids&&JSON.stringify(v.ids)!==JSON.stringify(ORDER)){ ORDER=v.ids.slice(); try{ localStorage.setItem("koya-opps-order",JSON.stringify(ORDER)); }catch(e){} if(fSort==="mine"&&tab==="opps") renderOpps(); } },function(){}); }catch(e){}
     try{ db.collection("closed").onSnapshot(function(snap){ snap.docs.forEach(function(d){ var v=d.data()||{}, o=null; try{ o=JSON.parse(v.snap); }catch(e){} if(!o||!o.id) return; if (OPPS.some(function(x){ return x.id===o.id; })||CLOSED.some(function(x){ return x.id===o.id; })) return; o.notes=o.notes||[]; CLOSED.push(o); }); mergeNotes(); if(tab==="opps") renderOpps(); },function(){}); }catch(e){}
-    try{ db.collection("review").onSnapshot(function(snap){ REV={}; snap.docs.forEach(function(d){ var v=d.data()||{}; if(v.state) REV[d.id]=v.state; }); if(tab==="opps") renderOpps(); var oo=openId&&oppById(openId); if(oo){ [].forEach.call(document.querySelectorAll("#rrev .schip"),function(b){ b.setAttribute("aria-pressed",String(REV[oo.id]===b.dataset.rev)); }); } },function(){}); }catch(e){}
+    try{ db.collection("review").onSnapshot(function(snap){ REV={}; snap.docs.forEach(function(d){ var v=d.data()||{}; if(v.state) REV[d.id]=v.state; }); if(tab==="opps") renderOpps(); var oo=openId&&oppById(openId); if(oo){ [].forEach.call(document.querySelectorAll("#rrev .schip"),function(b){ b.setAttribute("aria-pressed",String(revState(oo.id)===b.dataset.rev)); }); } },function(){}); }catch(e){}
     try{ db.collection("hidden").onSnapshot(function(snap){ HIDDEN=snap.docs.map(function(d){ return Object.assign({id:d.id},d.data()); }); redrawNotes(); if(tab==="opps") renderOpps(); },function(){}); }catch(e){}
     try{ db.collection("notes").onSnapshot(function(snap){ NOTESDB=snap.docs.map(function(d){ return Object.assign({id:d.id},d.data()); }); mergeNotes(); if(tab==="opps") renderOpps(); redrawNotes(); },function(){}); }catch(e){}
     try{ db.collection("activity").orderBy("t","desc").limit(200).onSnapshot(function(snap){ ACT_DB=snap.docs.map(function(d){ return Object.assign({},d.data()); }); renderActivity(); },function(){}); }catch(e){}
