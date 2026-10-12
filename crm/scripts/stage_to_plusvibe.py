@@ -13,7 +13,7 @@ stage is never one-sided.
     Profiles Sent      all stopped                                 untouched
     Trial              all stopped                                 untouched
     Won                all stopped                                 CLOSED
-    Lost               all stopped                                 by lost reason: Not interested -> NOT_INTERESTED, Bad fit -> WRONG_PERSON, anything else -> CLOSED
+    Lost               all stopped                                 NOT_INTERESTED, or WRONG_PERSON when the reason is Bad fit (never CLOSED: that tag means a meeting was booked and closed)
 
 It acts on the stage the deal has NOW, once per request (a webhook names the deal), and only changes what does not
 already match, so running it twice does nothing the second time. Every change is read back from PlusVibe.
@@ -64,6 +64,11 @@ def stage_of(d) -> str:
     return "Won" if t.startswith("Won") else t
 
 
+def chosen_tag(d) -> str:
+    v = (d.get("values") or {}).get("plusvibe_tag") or []
+    return (v[0].get("value") if v else "") or ""
+
+
 def lost_reason(d) -> str:
     v = (d.get("values") or {}).get("lost_reason") or []
     return ((v[0].get("option") or {}).get("title") if v else "") or ""
@@ -92,14 +97,18 @@ def pv_post(path, body, hdr):
     return r
 
 
-def apply(stage: str, reason: str, email: str, hdr, camps, commit: bool) -> tuple[int, int]:
+def apply(stage: str, reason: str, email: str, hdr, camps, commit: bool, chosen: str = "") -> tuple[int, int]:
     """Returns (changes made or planned, problems)."""
     rule = RULES.get(stage)
     if not rule or not email:
         return 0, 0
     stop, tag = rule
     if stage == "Lost":                                        # the tag follows the lost reason, and a lost lead always gets one
-        tag = {"NOT_INTERESTED": "NOT_INTERESTED", "BAD_FIT": "WRONG_PERSON"}.get(reason.replace(" ", "_").upper(), "CLOSED")
+        tag = "WRONG_PERSON" if reason.replace(" ", "_").upper() == "BAD_FIT" else "NOT_INTERESTED"
+    if chosen == "KEEP":                                        # the dashboard said: leave the tag as it is
+        tag = None
+    elif chosen:                                                # the tag picked on the dashboard wins over the default
+        tag = chosen
     rows = CO.pv_sequence(email, hdr, camps)
     todo, bad = 0, 0
     for x in rows:
@@ -168,8 +177,11 @@ def main() -> int:
         em = email_of(c, d)
         if not em:
             print(f"   {st}: no email on the person, skipped"); continue
-        t, b = apply(st, lost_reason(d), em, hdr, camps, a.commit)
+        ch = chosen_tag(d)
+        t, b = apply(st, lost_reason(d), em, hdr, camps, a.commit, ch)
         total += t; bad += b
+        if a.commit and ch and not b and d.get("id", {}).get("record_id"):     # one-shot: the choice is used once, then cleared
+            c.req("PATCH", f"/objects/deals/records/{d['id']['record_id']}", json={"data": {"values": {"plusvibe_tag": [{"value": ""}]}}})
     print(f"{total} change(s) {'made' if a.commit else 'planned'}, {bad} problem(s)")
     return 1 if bad else 0
 
