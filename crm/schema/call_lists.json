@@ -1,11 +1,84 @@
 {
- "_readme": "Attio call lists that feed CloudTalk campaigns. Membership of a list = the CloudTalk contact carries the tag. Positive Replies has its own job (positive_replies_to_call_queue.py).",
+ "_readme": "Attio call lists that feed CloudTalk campaigns. Membership of a list = the CloudTalk contact carries the tag. Positive Replies has its own job (positive_replies_to_call_queue.py). 'campaigns' = the CloudTalk campaigns that serve the tag (legacy = my.cloudtalk.io/api, dialer = api.cloudtalk.io/v1). The job needs at least ONE of them active; it never switches an inactive one on (Ife 2026-10-12). A list with no campaign (and no dialer campaign named exactly like its tag) gets a new dialer campaign created from the template.",
  "lists": [
-  {"slug": "call_ai_agencies_na_a_b", "tag": "Attio | NA | A+B", "region": "NA"},
-  {"slug": "call_ai_agencies_eu_a_b", "tag": "Attio | EU | A+B", "region": "EU"},
-  {"slug": "call_ai_agencies_na_c",   "tag": "Attio | NA | C",   "region": "NA"},
-  {"slug": "call_ai_agencies_eu_c",   "tag": "Attio | EU | C",   "region": "EU"},
-  {"slug": "call_ai_agencies_na_d",   "tag": "Attio | NA | D",   "region": "NA"},
-  {"slug": "call_ai_agencies_eu_d",   "tag": "Attio | EU | D",   "region": "EU"}
- ]
+  {
+   "slug": "call_ai_agencies_na_a_b",
+   "tag": "Attio | NA | A+B",
+   "region": "NA",
+   "campaigns": [
+    {
+     "id": 361447,
+     "kind": "legacy"
+    }
+   ]
+  },
+  {
+   "slug": "call_ai_agencies_eu_a_b",
+   "tag": "Attio | EU | A+B",
+   "region": "EU",
+   "campaigns": [
+    {
+     "id": 370764,
+     "kind": "legacy"
+    },
+    {
+     "id": 361449,
+     "kind": "legacy"
+    }
+   ]
+  },
+  {
+   "slug": "call_ai_agencies_na_c",
+   "tag": "Attio | NA | C",
+   "region": "NA",
+   "campaigns": [
+    {
+     "id": 1853,
+     "kind": "dialer"
+    },
+    {
+     "id": 362297,
+     "kind": "legacy"
+    }
+   ]
+  },
+  {
+   "slug": "call_ai_agencies_eu_c",
+   "tag": "Attio | EU | C",
+   "region": "EU",
+   "campaigns": [
+    {
+     "id": 370765,
+     "kind": "legacy"
+    },
+    {
+     "id": 362301,
+     "kind": "legacy"
+    }
+   ]
+  },
+  {
+   "slug": "call_ai_agencies_na_d",
+   "tag": "Attio | NA | D",
+   "region": "NA",
+   "campaigns": [
+    {
+     "id": 2088,
+     "kind": "dialer"
+    }
+   ]
+  },
+  {
+   "slug": "call_ai_agencies_eu_d",
+   "tag": "Attio | EU | D",
+   "region": "EU",
+   "campaigns": [
+    {
+     "id": 2089,
+     "kind": "dialer"
+    }
+   ]
+  }
+ ],
+ "template_dialer_campaign_id": 2088
 }

@@ -29,6 +29,7 @@ jobs:
       ATTIO_API_KEY_2: ${{ secrets.ATTIO_API_KEY_2 }}
       CLOUD_TALK_API_KEY_ID: ${{ secrets.CLOUD_TALK_API_KEY_ID }}
       CLOUD_TALK_API_KEY: ${{ secrets.CLOUD_TALK_API_KEY }}
+      TEST_WEBHOOK_URL: ${{ secrets.TEST_WEBHOOK_URL }}   # Captain Hook TEST channel: alerts go here for now
       DRY: ${{ github.event.inputs.dry_run }}
     steps:
       - uses: actions/checkout@v4
