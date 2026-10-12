@@ -910,7 +910,7 @@
   var ALLOPPS=(DATA.opps||[]).slice(), CLOSED=ALLOPPS.filter(function(o){ return o.bucket==="lost"||o.bucket==="won"; }), OPPS=ALLOPPS.filter(function(o){ return o.bucket!=="lost"&&o.bucket!=="won"; }), fView="open", CHECKS=(DATA.checks||[]).slice(), OPS_AT=DATA.ops_at||null;
   var HASH={dash:"", opps:"opps", plan:"plan", sys:"systems"}, TABKEYS=["dash","opps","plan","sys"], tab="dash";
   var RULE={meeting:3, followup:2, chasing:2, callback:1, later:30};
-  var BUCKET_NAME={meeting:"Meeting booked", followup:"Follow up", chasing:"Multi-touch", callback:"Callback", later:"Not now", lost:"Lost", won:"Won"};
+  var BUCKET_NAME={meeting:"Meeting booked", followup:"Follow up", chasing:"Multi-touch", callback:"Callback", later:"Later", lost:"Lost", won:"Won"};
   var PVWS="6a6e634971ad0f0e174a5471";
   var ACTIONS_URL="__LEAD_ACTIONS_URL__";   // the Lead Actions web app address; empty = the Resolve section stays hidden
   var fStatus="all", fSource="all", fNotes="all", fReview="all", fSort="recent", fNode=null, openId=null, qsSel=0, qsHits=[];
@@ -1237,6 +1237,21 @@
     }).catch(function(e){ LIVE_CALL_ERR=errText(e); if(tab==="sys") renderSys(); });
   }
   (function(){ try{ if (window.claude && window.claude.use){ window.claude.use("mcp").then(function(m){ MCP=m; if(m){ if(openId && oppById(openId)) openPanel(openId); if(PENDING_LEAD){ var pl=PENDING_LEAD; PENDING_LEAD=null; if(oppById(pl)) openPanel(pl); else loadLeadLive(pl); } liveSync(); liveNumbers(); liveDials(); setInterval(function(){ if(!document.hidden){ liveSync(); liveNumbers(); liveDials(); } },300000); document.addEventListener("visibilitychange",function(){ if(!document.hidden){ liveSync(); liveNumbers(); liveDials(); } }); } },function(){}); } }catch(e){} })();
+
+  // When the live connection is off, say so on the page and offer one tap to allow it (the page asks the viewer for access to Attio, PlusVibe and CloudTalk).
+  setTimeout(function(){
+    if (MCP) return; var n=document.getElementById("liveNote"); if(!n) return;
+    n.innerHTML='Live connection is off, so this page is showing the hourly data. <button type="button" class="pbtn ghost" id="allowLive" style="padding:3px 10px; font-size:12.5px; margin-left:6px">Allow live access</button>';
+    var b=document.getElementById("allowLive");
+    b.addEventListener("click",function(){
+      b.disabled=true; b.textContent="Asking…";
+      var P=window.claude && window.claude.use ? window.claude.use("permissions") : Promise.resolve(null);
+      P.then(function(p){ return p && p.request ? p.request() : null; }).then(function(){ return window.claude.use("mcp"); }).then(function(m){
+        if (m) { MCP=m; n.textContent="Live connection is on."; liveSync(); liveNumbers(); liveDials(); }
+        else { n.innerHTML='Still off. Please check that Attio, PlusVibe and CloudTalk are connected in claude.ai Settings, then Connectors, and open this page again.'; }
+      }).catch(function(){ n.textContent="Could not turn the live connection on from here. Check Settings, then Connectors in claude.ai."; });
+    });
+  }, 5000);
 
   // ----- resolve a lead from the panel: show what will change, then change it, then read every system back
   var RZ={won:{label:"Won",deal:"Won 🎉",rel:"CUSTOMER",entry:"MEETING_BOOKED",stop:true},
@@ -1720,7 +1735,7 @@
     if (MCP) out.push({id:"livecalls",node:"cloudtalk",name:"Live dials (this page to CloudTalk)",status:LIVE_CALL_ERR?"warn":LIVE_CALL_AT?(LIVE_CALL_DIFF&&LIVE_CALL_DIFF.diffs?"warn":"ok"):"info",
       detail:LIVE_CALL_ERR?("could not read live: "+LIVE_CALL_ERR):LIVE_CALL_AT?(LIVE_CALL_DIFF.days+" days counted live, "+(LIVE_CALL_DIFF.diffs?LIVE_CALL_DIFF.diffs+" differ from the hourly build by more than 2 (largest gap "+LIVE_CALL_DIFF.worst+")":"all agree with the hourly build")):"waiting for the first live read",at:LIVE_CALL_AT?new Date(LIVE_CALL_AT).toISOString():null});
     if (MCP) out.push({id:"live",node:"attio",name:"Live connection (this page to Attio and PlusVibe)",status:LIVE_ERR?"warn":LIVE_AT?"ok":"info",detail:LIVE_ERR?("could not read live: "+LIVE_ERR):LIVE_AT?"read live "+relAgo(new Date(LIVE_AT).toISOString())+", checks again every 5 minutes":"waiting for the first live read",at:LIVE_AT?new Date(LIVE_AT).toISOString():null});
-    else out.push({id:"live",node:"attio",name:"Live connection (this page to Attio and PlusVibe)",status:"info",detail:"not connected in this view, showing the hourly data. Connect Attio and PlusVibe in claude.ai Settings, Connectors."});
+    else out.push({id:"live",node:"attio",name:"Live connection (this page to Attio and PlusVibe)",status:"info",detail:"not connected in this view, showing the hourly data. Tap Allow live access under the Opportunities heading, or connect Attio, PlusVibe and CloudTalk in claude.ai Settings, Connectors."});
     var oage=OPS_AT?Math.round((Date.now()-new Date(OPS_AT).getTime())/6e4):null;
     out.push({id:"opsage",node:"page",name:"System checks collected",status:oage==null?"warn":!working?"info":oage<=150?"ok":"bad",detail:oage==null?"no check data on this page":"these checks were collected "+relAgo(OPS_AT)+(working?"":" (the hourly build only runs on weekdays, so an older time is normal now)"),at:OPS_AT});
     return out;
