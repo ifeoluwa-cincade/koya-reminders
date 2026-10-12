@@ -190,9 +190,40 @@ def main() -> int:
             body += "\n\nTranscript:\n" + x["text"][:18000]
         return head, body
 
+    # A booked meeting from a call opens a deal (Source channel = Cold call). Until 2026-10-12 only cold-email
+    # replies made deals, so Charlie Lefever booked on the phone and never reached the pipeline. One deal per
+    # person, ever: anyone who already has a deal of any stage (including Lost) is left alone so a manual close sticks.
+    owner = c.req("GET", "/workspace_members").json()["data"][0]["id"]["workspace_member_id"]
+    has_deal = {x.get("target_record_id") for d in c.query_all("deals")
+                for x in (d["values"].get("associated_people") or [])}
+    comp_name = {}
+    deals_made = 0
+
     written = skipped = moved = 0
     for p, calls, best, cur in plan:
         rid = p["id"]["record_id"]
+        if best and best["verdict"] == "MEETING_BOOKED" and cur not in PROTECTED and rid not in has_deal:
+            cr = p["values"].get("company") or []
+            cn = ""
+            if cr:
+                cid_ = cr[0]["target_record_id"]
+                if cid_ not in comp_name:
+                    rc = c.req("GET", f"/objects/companies/records/{cid_}")
+                    comp_name[cid_] = ((rc.json()["data"]["values"].get("name") or [{}])[0].get("value") or "") if rc.status_code < 300 else ""
+                cn = comp_name[cid_]
+            pn = ((p["values"].get("name") or [{}])[0].get("full_name") or "").strip() or "Unknown"
+            rd = c.req("PUT", "/objects/deals/records?matching_attribute=external_opportunity_id", json={"data": {"values": {
+                "name": [{"value": f"{pn} / {cn}".strip(" /")}],
+                "stage": [{"status": "Meeting Booked"}],
+                "owner": [{"referenced_actor_type": "workspace-member", "referenced_actor_id": owner}],
+                "external_opportunity_id": [{"value": "call-" + rid}],
+                "source_channel": [{"option": "Cold call"}],
+                "associated_people": [{"target_object": "people", "target_record_id": rid}]}}})
+            if rd.status_code >= 300:
+                print(f"   DEAL FAIL: {rd.status_code}")
+            else:
+                deals_made += 1
+                has_deal.add(rid)
         have = {n.get("title") for n in c.req("GET", "/notes", params={
             "parent_object": "people", "parent_record_id": rid, "limit": 50}).json().get("data", [])}
         fresh = 0                       # calls that had no note yet: only a NEW call may change the person's state (a manual change made after the last call must stick)
@@ -231,7 +262,7 @@ def main() -> int:
             print(f"   FAIL: {rr.status_code}")
         else:
             moved += 1
-    print(f"\n{written} notes written, {skipped} already there, {moved} people updated")
+    print(f"\n{written} notes written, {skipped} already there, {moved} people updated, {deals_made} deals opened from booked calls")
     return 0
 
 
