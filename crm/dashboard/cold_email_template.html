@@ -298,7 +298,7 @@
   .ostage small{font-size:11.5px; color:var(--ink-3); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .osrc{display:flex; gap:7px; justify-content:center; color:var(--ink-3); line-height:0;}
   .livebanner{background:#fff4d6; border-bottom:1px solid #ecd28a; color:#5c4a12; font-size:13.5px; padding:9px 0; position:sticky; top:0; z-index:40;} .livebanner .wrap{display:flex; align-items:center; gap:14px; flex-wrap:wrap;} .livebanner .pbtn{padding:5px 14px; font-size:13px;}
-  .orv{cursor:pointer; padding:4px; margin:-4px;}
+  
   .omarks{display:flex; gap:9px; justify-content:flex-end; align-items:center; line-height:0;} .oli,.orv{line-height:0;}
   .tag{font-size:11.5px; border-radius:999px; padding:2px 10px; background:var(--bg-tint); color:var(--ink-2); white-space:nowrap;}
   .tag.meeting{background:var(--up-bg); color:var(--up);} .tag.followup{background:var(--band); color:#4a3cc4;} .tag.lost{background:#fbe9e7; color:#a3382c;} .tag.won{background:var(--up-bg); color:var(--up);} .tag.chasing{background:#fdebdc; color:#b4531a;} .tag.callback{background:#fdf2dc; color:var(--amber);} .tag.later{background:var(--bg-tint); color:var(--ink-3);}
@@ -1048,8 +1048,8 @@
       '<button class="tbtn icon" type="button" id="sortdir" aria-label="'+(fDir==="asc"?"Ascending":"Descending")+'" title="'+(fDir==="asc"?"Ascending, click for descending":"Descending, click for ascending")+'"><span class="dirarrow'+(fDir==="asc"?"":" down")+'">'+svg("arrow")+'</span></button>';
   }
   function reviewMark(o){
-    if (REV[o.id]==="done") return '<span class="orv" data-rv="1" data-tip="Resolved. Tap to open it again"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="#2e9d62"/><path d="M4.6 8.3l2.3 2.3 4.5-4.8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
-    return '<span class="orv" data-rv="1" data-tip="Open. Tap to mark it resolved"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="#b9c0c7" stroke-width="1.6"/></svg></span>';
+    if (REV[o.id]==="done") return '<span class="orv" data-tip="Resolved"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="#2e9d62"/><path d="M4.6 8.3l2.3 2.3 4.5-4.8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+    return "";
   }
   function noteIcon(o){
     var n=teamNotes(o); if(!n) return "";
@@ -1088,7 +1088,7 @@
     var b=e.target.closest("[data-menu]"); if(b){ OPEN_MENU=OPEN_MENU===b.dataset.menu?null:b.dataset.menu; renderTools(); }
   });
   document.addEventListener("click",function(){ if(OPEN_MENU){ OPEN_MENU=null; renderTools(); } });
-  document.getElementById("olist").addEventListener("click",function(e){ var rvm=e.target.closest(".orv"); if(rvm){ var rr=rvm.closest("[data-id]"); var oo=rr&&oppById(rr.dataset.id); if(oo) setReview(oo, REV[oo.id]==="done"?"open":"done"); return; } var hs=e.target.closest("[data-hs]"); if(hs){ var k=hs.dataset.hs; if(fSort===k) fDir=fDir==="asc"?"desc":"asc"; else { fSort=k; fDir=SDEF[k]; } renderOpps(); return; } var b=e.target.closest("[data-id]"); if(b) openPanel(b.dataset.id); });
+  document.getElementById("olist").addEventListener("click",function(e){ var hs=e.target.closest("[data-hs]"); if(hs){ var k=hs.dataset.hs; if(fSort===k) fDir=fDir==="asc"?"desc":"asc"; else { fSort=k; fDir=SDEF[k]; } renderOpps(); return; } var b=e.target.closest("[data-id]"); if(b) openPanel(b.dataset.id); });
   // drag a lead to where you want it: the first drag switches Sort to "My order" and keeps the list as it looks now
   var DRAG=null;
   (function(){ var ol=document.getElementById("olist");
