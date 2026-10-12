@@ -1,0 +1,54 @@
+name: Deal stage to PlusVibe
+
+# When a deal's stage is set (dashboard, a call outcome, or Attio itself), PlusVibe is made to match: Later / Meeting Booked / Profiles Sent / Trial / Won / Lost
+# stop every sequence the lead is in (the subsequence too) and set the matching tag. See crm/scripts/stage_to_plusvibe.py for the rule table.
+# Started by an Attio deal webhook through the relay (event deal_stage, client_payload.deals = deal record ids). A manual run defaults to a DRY RUN.
+on:
+  repository_dispatch:
+    types: [deal_stage]
+  workflow_dispatch:
+    inputs:
+      deal:
+        description: "deal record id (leave empty with sweep = true)"
+        default: ""
+      sweep:
+        description: "true = every deal already in a closed stage: stop sequences still running"
+        default: "false"
+      dry_run:
+        description: "true = report only"
+        default: "true"
+
+permissions: {}
+
+concurrency:
+  group: stage-sync
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ATTIO_KEY_VAR: ATTIO_API_KEY_2
+      ATTIO_API_KEY_2: ${{ secrets.ATTIO_API_KEY_2 }}
+      PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}
+      DEALS: ${{ github.event.client_payload.deals }}
+      DEAL_IN: ${{ github.event.inputs.deal }}
+      SWEEP: ${{ github.event.inputs.sweep }}
+      DRY: ${{ github.event.inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install requests pyyaml
+      - name: Make PlusVibe match the stage
+        run: |
+          ARGS=""
+          for d in $(echo "$DEALS $DEAL_IN" | tr ',' ' '); do ARGS="$ARGS --deal $d"; done
+          if [ "$SWEEP" = "true" ]; then ARGS="$ARGS --sweep-closed"; fi
+          if [ -z "$ARGS" ]; then echo "nothing to do"; exit 0; fi
+          if [ "$DRY" = "true" ]; then python crm/scripts/stage_to_plusvibe.py $ARGS; else python crm/scripts/stage_to_plusvibe.py $ARGS --commit; fi
