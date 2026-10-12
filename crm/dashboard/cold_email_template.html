@@ -330,6 +330,7 @@
   .pclose{border:1px solid var(--line); background:#fff; border-radius:9px; width:32px; height:32px; cursor:pointer; color:var(--ink-2); font-size:15px; flex:none;}
   .pclose:hover{background:var(--ink); color:#fff; border-color:var(--ink);}
   .ptags{display:flex; gap:6px; flex-wrap:wrap; margin:12px 0 4px;}
+  .seqnow{border-color:var(--line); background:var(--bg-soft,#f3f5f3);} .seqnow.stopped .seqs{color:var(--ink-2);} button.cplink{font:inherit; cursor:pointer; background:none;}
   .plinks{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 4px;}
   .plink{border:1px solid var(--line); border-radius:9px; padding:6px 11px; font-size:13px; color:var(--ink); text-decoration:none; background:#fff; display:inline-flex; align-items:center; gap:6px;}
   .plink:hover{border-color:var(--ink); background:var(--bg-soft);}
@@ -1072,7 +1073,7 @@
     function srcIcons(o){ var t=String(o.source||""), r=""; if(t.indexOf("Email")>=0) r+='<span data-tip="Email">'+IC.Email+'</span>'; if(t.indexOf("Call")>=0) r+='<span data-tip="Cold call">'+IC.Call+'</span>'; return r||'<span class="oseen">'+esc(t)+'</span>'; }
     var h=list.map(function(o){ var d=dueInfo(o);
       return '<button class="orow ogrid" draggable="true" data-id="'+esc(o.id)+'"><span class="olead"><span class="odot '+d.cls+'"></span><span class="omain"><b>'+esc(o.name||o.email)+'</b><span class="ocomp">'+esc(o.company||o.email||"")+'</span></span></span>'+
-        '<span class="ostage"><span class="tag '+o.bucket+'">'+esc(o.status)+'</span>'+(o.reason?'<small>'+esc(String(o.reason).replace(/_/g," ").toLowerCase())+'</small>':'')+'</span>'+
+        '<span class="ostage"><span class="tag '+o.bucket+'">'+esc(o.status)+'</span>'+'</span>'+
         '<span class="osrc">'+srcIcons(o)+'</span>'+
         '<span class="oseen">'+esc(relAgo(o.last_touch))+'</span><span class="odue '+d.cls+'">'+esc(d.label)+'</span>'+
         '<span class="omarks">'+noteIcon(o)+liMark(o)+reviewMark(o)+'</span></button>'; }).join("");
@@ -1130,7 +1131,7 @@
     if (nolink) rows.push(["LinkedIn",'<span class="tnote">no LinkedIn address is saved for this person in Attio or PlusVibe, so the button searches their name and company</span>']);
     var html='<div class="phd"><div class="phead"><div><div class="ptitle">'+esc(o.name||o.email)+'</div><div class="psub">'+esc(o.company||"")+'</div></div><button class="pclose" id="pclose" type="button" aria-label="Close">✕</button></div>'+
       '<div class="ptags">'+(o.resolved?'<span class="tag closedtag">Closed</span>':'')+'<span class="tag '+o.bucket+'">'+esc(o.status)+'</span><span class="tag src">'+esc(o.source)+'</span><span class="tag">'+esc(d.label)+'</span></div>'+
-      '<div class="plinks">'+link(pv,L.plusvibe?"Open conversation":"PlusVibe")+link(li,liLabel)+link(L.website,"Website")+link(L.attio,"Attio")+link(L.deal,"Deal")+link(L.cloudtalk,"CloudTalk")+'</div></div>'+
+      '<div class="plinks">'+link(pv,L.plusvibe?"Open conversation":"PlusVibe")+link(li,liLabel)+link(L.website,"Website")+link(L.attio,"Attio")+link(L.deal,"Deal")+link(L.cloudtalk,"CloudTalk")+(ARTIFACT_URL?'<button type="button" class="plink cplink" id="copyLeadLink">Copy link to this lead</button>':'')+'</div></div>'+
       '<div class="pgrid"><div class="pcol pleft">'+
       reviewHTML(o)+((o.bucket==="lost"||o.bucket==="won")?closedHTML(o):resolveHTML(o))+editHTML(o)+liConnHTML(o)+
       '<h4>Properties</h4><dl class="props">'+rows.map(function(r){ return '<dt>'+r[0]+'</dt><dd'+'>'+r[1]+'</dd>'; }).join("")+'</dl>'+
@@ -1139,7 +1140,7 @@
       (MCP?'<h4>Calls in CloudTalk</h4><div id="ctcalls">'+callsHTML(o)+'</div>':"")+
       '<h4>Notes in Attio</h4><div id="nlist">'+notesHTML(o)+'</div>'+
       (o.summary?'<h4>'+(o.call_at?"Call summary":"Latest reply")+'</h4><p class="ptext">'+esc(o.summary)+'</p>':"")+
-      '<div id="seqwrap">'+seqHTML(o)+'</div>'+
+      '<div id="seqwrap">'+seqAll(o)+'</div>'+
       (thread?'<h4>Email thread in PlusVibe, newest first</h4><ol class="thread">'+thread+'</ol>':(o.email?'<h4>Email thread in PlusVibe</h4><p class="tnote">No messages were found in PlusVibe for this address.</p>':""))+
       (MCP&&o.email?'<h4>Emails in Attio</h4><p class="tnote">Sent from your own inbox, including anything outside PlusVibe.</p><div id="aemails" class="aemails">'+attioEmailsHTML(o)+'</div>':"")+
       '</div></div>';
@@ -1364,6 +1365,16 @@
         '<div class="seqs '+m[2]+'">'+esc(line)+(x.label?" · tag "+esc(x.label):"")+'</div>'+
         (x.sent&&x.sent.length?'<div class="seqm">'+x.sent.map(function(e){ return '<span data-tip="'+esc(e.subject||"")+'">Step '+esc(e.step)+' · '+d(e.t)+'</span>'; }).join("")+'</div>':'')+'</div>'; }).join("");
   }
+  // the box under the history: where the lead stands RIGHT NOW (the cards above are what happened; this is the present)
+  function seqNowHTML(o){
+    var q=o.sequence||[]; if(!q.length) return "";
+    var live=q.filter(function(x){ return x.status && DONE_ST.indexOf(x.status)<0; }), tag=(q.filter(function(x){ return x.label; })[0]||{}).label||"";
+    var parts=q.filter(function(x){ return x.status; }).map(function(x){ return (x.sub?"Subsequence":"Main")+": "+(PVSTATUS[x.status]||x.status.toLowerCase()); });
+    var head=live.length?"Still in "+live.length+" sequence"+(live.length>1?"s":""):"No longer in any sequence";
+    var line=live.length?"PlusVibe is still sending to them.":"Nothing more will be sent from PlusVibe.";
+    return '<div class="seqbox seqnow'+(live.length?"":" stopped")+'"><div class="seqh"><b>Now</b>'+(tag?'<span class="tag">'+esc(tagName(tag))+'</span>':'')+'</div><div class="seqs">'+esc(head+". "+line)+'</div><div class="seqm">'+parts.map(function(t){ return '<span>'+esc(t)+'</span>'; }).join("")+'</div></div>';
+  }
+  function seqAll(o){ return seqHTML(o)+seqNowHTML(o); }
   function reviewHTML(o){
     return '<h4>Open or resolved</h4><div class="stagechips" id="rrev" role="group" aria-label="Open or resolved">'+[["open","Open"],["done","Resolved"]].map(function(x){ return '<button type="button" class="schip" data-rev="'+x[0]+'" aria-pressed="'+((REV[o.id]==="done")===(x[0]==="done"))+'"'+(db?'':' disabled')+'>'+x[1]+'</button>'; }).join("")+'</div>';
   }
@@ -1445,6 +1456,7 @@
   }
   function guessStage(o){ var t=(o.status||"").toLowerCase(); return /meeting/.test(t)?"Meeting Booked":/not now|later/.test(t)?"Later":"Interested"; }
   var OWNER_EMAIL="__OWNER_EMAIL__";
+  var ARTIFACT_URL="__ARTIFACT_URL__";   // the dashboard's own address, filled in at build time (kept out of the public code)
   function createDeal(){
     var o=oppById(openId), sel=document.querySelector("#rnewchips [aria-pressed=\"true\"]"); if(!o||!sel||!MCP||dealIdOf(o)) return;
     var st=sel.dataset.newstage, name=(o.name||"Lead")+(o.company?" / "+o.company:"");
@@ -1504,7 +1516,7 @@
         var j=pvJson(r), row=Array.isArray(j)?j.filter(function(x){ return (x.campaign||(x.lead_data||{}).campaign_id)===q.id; })[0]:null;
         if (row){ q.status=row.status||q.status; q.label=row.label||(row.lead_data||{}).label||""; if (DONE_ST.indexOf(q.status)>=0) q.next=null; }
       }).catch(function(){});
-    })).then(function(){ var w=document.getElementById("seqwrap"); if (w && openId===o.id) w.innerHTML=seqHTML(o); return true; });
+    })).then(function(){ var w=document.getElementById("seqwrap"); if (w && openId===o.id) w.innerHTML=seqAll(o); return true; });
   }
   // after a stage change: keep re-reading for up to a minute until PlusVibe shows the new tag and the sequences stopped
   function watchSeq(o,tag,stop){
@@ -1533,6 +1545,8 @@
     if(a.stop) h+='<div class="tnote" id="rztagnote">The tag is put on them within a minute of confirming.</div>';
     return h;
   }
+  document.addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest("#copyLeadLink"); if(!b||!openId) return; var u=ARTIFACT_URL+"#lead-"+openId; function ok(){ b.textContent="Link copied"; setTimeout(function(){ b.textContent="Copy link to this lead"; },1800); }
+    try{ navigator.clipboard.writeText(u).then(ok,function(){ window.prompt&&0; b.textContent=u; }); }catch(x){ b.textContent=u; } });
   var RZSTATE=null;
   function rzOpen(act){
     var o=oppById(openId), z=document.getElementById("rzone"); if(!o||!z) return;

@@ -64,7 +64,7 @@ def main() -> int:
     t = SRC.read_text()
     assert "__DATA__" in t
     page = t.replace("__DATA__", payload)
-    page = page.replace("__LEAD_ACTIONS_URL__", os.environ.get("LEAD_ACTIONS_URL", "")).replace("__OWNER_EMAIL__", os.environ.get("OWNER_EMAIL", ""))   # kept out of the public code; set as a secret
+    page = page.replace("__LEAD_ACTIONS_URL__", os.environ.get("LEAD_ACTIONS_URL", "")).replace("__OWNER_EMAIL__", os.environ.get("OWNER_EMAIL", "")).replace("__ARTIFACT_URL__", os.environ.get("ARTIFACT_URL", ""))   # kept out of the public code; set as a secret
     # Since 2026-10-04 the page uses the db capability (pipeline numbers are typed in). Publish with capabilities={"db":{}}.
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(page)

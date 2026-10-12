@@ -35,6 +35,7 @@ jobs:
       LEAD_ACTIONS_URL: ${{ secrets.LEAD_ACTIONS_URL }}
       LEAD_ACTIONS_HOOK: ${{ secrets.LEAD_ACTIONS_HOOK }}
       OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
+      ARTIFACT_URL: ${{ secrets.ARTIFACT_URL }}
       ENC_CACHE_KEY: ${{ secrets.ENC_CACHE_KEY }}
       CALL_DATA_DIR: data/working/live
       GH_TOKEN: ${{ github.token }}
