@@ -41,9 +41,6 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: pip install requests pyyaml
-      - name: TEMPORARY show which fields the signal carries (names only)
-        run: |
-          python3 -c "import json,os; e=json.load(open(os.environ['GITHUB_EVENT_PATH'])); print('event keys:', sorted(e.keys())); print('payload keys:', sorted((e.get('client_payload') or {}).keys()))"
       - name: Keep the address out of the log
         run: |
           E="$(python3 -c "import json,os; e=json.load(open(os.environ['GITHUB_EVENT_PATH'])); print((e.get('client_payload') or {}).get('email') or (e.get('inputs') or {}).get('email') or '')")"
