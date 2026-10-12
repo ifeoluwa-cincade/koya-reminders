@@ -987,11 +987,8 @@
     if(n===0) return {n:0,label:"Due today",cls:"today"};
     if(n===1) return {n:1,label:"Tomorrow",cls:"soon"};
     return {n:n,label:"In "+n+"d",cls:n<=3?"soon":"later"}; }
-  // the night glow follows what matters: red when something is overdue, amber when something is due today, green when the day is clear
-  function setGlow(){ var r=document.documentElement, over=0, today=0;
-    OPPS.forEach(function(o){ if(o.bucket==="lost"||o.bucket==="won") return; var c=dueInfo(o).cls; if(c==="over") over++; else if(c==="today") today++; });
-    var a=over?"rgba(236,60,50,.95)":today?"rgba(236,150,24,.92)":"rgba(23,160,96,.75)";
-    r.style.setProperty("--ga",a); r.style.setProperty("--gb","rgba(110,86,240,.85)"); }
+  // the night glow keeps its original colours (green top left, violet top right); Ife did not like it turning red when leads are overdue
+  function setGlow(){ var r=document.documentElement; r.style.setProperty("--ga","rgba(23,160,96,.75)"); r.style.setProperty("--gb","rgba(110,86,240,.85)"); }
   function oppById(id){ for (var i=0;i<OPPS.length;i++) if (OPPS[i].id===id) return OPPS[i]; for (var j=0;j<CLOSED.length;j++) if (CLOSED[j].id===id) return CLOSED[j]; return null; }
 
   // ----- tabs
