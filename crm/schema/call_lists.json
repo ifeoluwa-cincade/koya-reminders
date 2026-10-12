@@ -1,0 +1,11 @@
+{
+ "_readme": "Attio call lists that feed CloudTalk campaigns. Membership of a list = the CloudTalk contact carries the tag. Positive Replies has its own job (positive_replies_to_call_queue.py).",
+ "lists": [
+  {"slug": "call_ai_agencies_na_a_b", "tag": "Attio | NA | A+B", "region": "NA"},
+  {"slug": "call_ai_agencies_eu_a_b", "tag": "Attio | EU | A+B", "region": "EU"},
+  {"slug": "call_ai_agencies_na_c",   "tag": "Attio | NA | C",   "region": "NA"},
+  {"slug": "call_ai_agencies_eu_c",   "tag": "Attio | EU | C",   "region": "EU"},
+  {"slug": "call_ai_agencies_na_d",   "tag": "Attio | NA | D",   "region": "NA"},
+  {"slug": "call_ai_agencies_eu_d",   "tag": "Attio | EU | D",   "region": "EU"}
+ ]
+}

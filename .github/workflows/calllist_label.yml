@@ -1,0 +1,49 @@
+name: Call list labels
+
+# A person added to (or removed from) an Attio call list gets (or loses) the matching CloudTalk tag, which fills (or empties) the dialler campaign.
+# Starts the moment the Attio webhook reports a change (via the Apps Script relay), and once an hour from the routine push as a safety net.
+# workflow_dispatch defaults to a DRY RUN that changes nothing. The script prints COUNTS ONLY (public repo).
+on:
+  push:
+    branches: [crm-trigger]
+  repository_dispatch:
+    types: [calllist_changed]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true = show counts, write nothing"
+        default: "true"
+
+permissions: {}
+
+concurrency:
+  group: calllist-label
+  cancel-in-progress: false
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ATTIO_KEY_VAR: ATTIO_API_KEY_2
+      ATTIO_API_KEY_2: ${{ secrets.ATTIO_API_KEY_2 }}
+      CLOUD_TALK_API_KEY_ID: ${{ secrets.CLOUD_TALK_API_KEY_ID }}
+      CLOUD_TALK_API_KEY: ${{ secrets.CLOUD_TALK_API_KEY }}
+      DRY: ${{ github.event.inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install requests phonenumbers
+      - name: Give a burst of list changes a moment to settle
+        if: ${{ github.event_name == 'repository_dispatch' }}
+        run: sleep 45
+      - name: Label the call list people in CloudTalk
+        run: |
+          # a manual run with dry_run=true changes nothing; every automatic run is real
+          if [ "$DRY" = "true" ]; then FLAG=""; echo "DRY RUN: nothing will be written"; else FLAG="--commit"; echo "REAL RUN"; fi
+          python crm/scripts/calllist_to_cloudtalk.py $FLAG
