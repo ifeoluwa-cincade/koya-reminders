@@ -224,8 +224,9 @@ def main() -> int:
             else:
                 deals_made += 1
                 has_deal.add(rid)
-        have = {n.get("title") for n in c.req("GET", "/notes", params={
-            "parent_object": "people", "parent_record_id": rid, "limit": 50}).json().get("data", [])}
+        notes_now = c.req("GET", "/notes", params={
+            "parent_object": "people", "parent_record_id": rid, "limit": 50}).json().get("data", [])
+        have = {n.get("title") for n in notes_now}
         fresh = 0                       # calls that had no note yet: only a NEW call may change the person's state (a manual change made after the last call must stick)
         for x in calls:
             head, body = fmt(x)
@@ -234,6 +235,14 @@ def main() -> int:
             if title in have:
                 skipped += 1
                 continue
+            # a corrected result for the SAME call (the caller's note arrived or changed): replace the old note instead of leaving two that disagree
+            prefix = title.rsplit(" · ", 1)[0] + " · "
+            for n in notes_now:
+                t_old = n.get("title") or ""
+                nid = (n.get("id") or {}).get("note_id")
+                if nid and t_old.startswith(prefix) and t_old != title and t_old.startswith("Call · "):
+                    c.req("DELETE", f"/notes/{nid}")
+                    have.discard(t_old)
             r = c.req("POST", "/notes", json={"data": {
                 "parent_object": "people", "parent_record_id": rid,
                 "title": title, "format": "plaintext", "content": head + "\n\n" + body}})

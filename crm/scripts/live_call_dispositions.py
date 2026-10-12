@@ -101,6 +101,43 @@ SCREEN = re.compile(r"record your name|reason for calling|call assist|recording 
 REFUSAL = re.compile(r"not interested|no thanks|no thank you|don'?t call|do not call|stop calling|remove me|wrong number|not (the|him|her)|who is this", re.I)
 
 
+# The CALLER'S OWN NOTE (CloudTalk "Notes" on the call) is the first-class disposition (Ife, 2026-10-12): a person who just spoke to the lead wrote it,
+# it exists the moment the call ends, and it needs no recording or AI. Only when there is no usable note does the recording decide.
+_DNC = re.compile(r"\b(do not call|don'?t call|dnc|stop calling|never call|remove (me|him|her|them) from)\b", re.I)
+_WRONG = re.compile(r"\b(wrong (number|person|contact)|left the company|no longer (works|there|with))\b", re.I)
+_CALLBACK = re.compile(r"\b(call (him |her |them )?(back|again)|callback|ring (him |her |them )?(back|again)|try (him |her |them )?again|phone (him |her |them )?(back|again))\b", re.I)
+_FOLLOW = re.compile(r"\b(follow[- ]?up|send (an? |the |some )?(email|e-mail|mail|profile|profiles|info|information|details|deck|pitch|link|samples?)|email (him|her|them|me)|to send em|will send)\b", re.I)
+_NOFOLLOW = re.compile(r"\b(no|don'?t|do not|no need to|not worth)\s+(follow|send|call|email)", re.I)
+_NOTINT = re.compile(r"\b(not interested|no interest|declined|said no|hard no|uninterested)\b", re.I)
+_MEET = re.compile(r"\b(booked|scheduled|meeting (set|booked)|demo (set|booked)|call (set|booked) for)\b", re.I)
+
+
+def agent_verdict(note: str) -> dict | None:
+    """What the caller said to do next, in their own words. None = no clear instruction (the recording decides)."""
+    n = (note or "").strip()
+    if len(n) < 3:
+        return None
+    if _DNC.search(n):
+        v = "DO_NOT_CALL"
+    elif _WRONG.search(n):
+        v = "WRONG_PERSON"
+    elif _NOFOLLOW.search(n) or (_NOTINT.search(n) and not (_FOLLOW.search(n) or _CALLBACK.search(n))):
+        v = "NOT_INTERESTED"
+    elif _MEET.search(n):
+        v = "MEETING_BOOKED"
+    elif _CALLBACK.search(n):
+        v = "CALLBACK"
+    elif _FOLLOW.search(n):
+        v = "SEND_FOLLOW_UP"
+    else:
+        return None
+    return {"verdict": v, "summary": "Caller's note: " + n[:300], "objection": None, "judged_by": "agent"}
+
+
+def call_note(row: dict) -> str:
+    return " ".join((x.get("note") or "").strip() for x in (row.get("Notes") or []) if isinstance(x, dict)).strip()
+
+
 def rule_verdict(text: str) -> dict | None:
     words = text.split()
     opening = " ".join(words[:35])
@@ -239,12 +276,14 @@ def main() -> int:
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     rows = fetch_calls(H, since)
     byid = {str((r.get("Cdr") or {}).get("id")): r for r in rows}
-    todo = [cid for cid in byid if cid not in state or state[cid].get("retry")]
+    agent = {cid: av for cid, r in byid.items() for av in [agent_verdict(call_note(r))] if av}
+    todo = [cid for cid in byid if cid not in state or state[cid].get("retry")
+            or (cid in agent and state[cid].get("agent_note") != call_note(byid[cid]))]      # a note added or changed after the call is picked up too
     if a.limit:
         todo = todo[:a.limit]
     print(f"{len(rows)} calls since {since}  |  already done {len(byid) - len(todo)}  |  to do {len(todo)}")
-    mech = sum(1 for cid in todo if int(byid[cid]["Cdr"].get("talking_time") or 0) < MIN_TALK)
-    print(f"   {mech} need no AI (no answer / under {MIN_TALK}s), {len(todo) - mech} get a transcript")
+    mech = sum(1 for cid in todo if cid in agent or int(byid[cid]["Cdr"].get("talking_time") or 0) < MIN_TALK)
+    print(f"   {sum(1 for cid in todo if cid in agent)} decided by the caller's own note, {mech - sum(1 for cid in todo if cid in agent)} need no AI (no answer / under {MIN_TALK}s), {len(todo) - mech} get a transcript")
     if not a.commit:
         print("\nDRY RUN — nothing transcribed or written.")
         return 0
@@ -259,7 +298,7 @@ def main() -> int:
     for cid in todo:
         cdr = byid[cid].get("Cdr") or {}
         talk = int(cdr.get("talking_time") or 0)
-        if talk >= MIN_TALK and cdr.get("recorded"):
+        if cid not in agent and talk >= MIN_TALK and cdr.get("recorded"):
             if day_used + talk > DAILY_BUDGET or hour_used + talk > HOURLY_BUDGET:
                 held += 1            # not lost: it stays out of state and is picked up next run
                 continue
@@ -269,6 +308,8 @@ def main() -> int:
     # 2. do them in parallel (CloudTalk 429s above ~3 downloads at once), saving after every call
     def one(cid):
         row = byid[cid]; cdr = row.get("Cdr") or {}
+        if cid in agent:
+            return cid, dict(agent[cid])
         try:
             return cid, decide(cdr, cid, H, G)
         except Exception as ex:      # a dropped connection or timeout: leave it for the next run, never crash the batch
@@ -288,7 +329,7 @@ def main() -> int:
             state[cid] = {"name": ctc.get("name"), "company": ctc.get("company"),
                           "talk": int(cdr.get("talking_time") or 0), "started": cdr.get("started_at"),
                           "agent": (row.get("Agent") or {}).get("fullname"), "emails": emails,
-                          "type": cdr.get("type"), **v}
+                          "type": cdr.get("type"), "agent_note": call_note(row), **v}
             STATE.write_text(json.dumps(state, indent=1))        # save after every call
             done += 1
             if v["verdict"] not in ("VOICEMAIL", "NO_ANSWER", "NO_CONVERSATION"):

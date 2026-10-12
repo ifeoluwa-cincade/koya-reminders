@@ -39,7 +39,9 @@ CT = "https://my.cloudtalk.io/api"
 REPO = os.environ.get("GITHUB_REPOSITORY") or "ifeoluwa-cincade/koya-reminders"
 CALLS_FROM = "2026-10-11"   # the call job on the public repo starts here; older calls were handled by the old job and are already in the CRM
 OPEN_STAGES = {"Interested", "Multi-touch", "Meeting Booked", "Later", "Profiles Sent", "Trial"}
-REAL_CALL = {"MEETING_BOOKED": "meeting", "SEND_FOLLOW_UP": "followup", "CALLBACK": "callback", "NOT_NOW": "later"}
+# A call is an opportunity only when something was agreed or asked for. "Not now" (a polite decline with no current need) is NOT one (Ife, 2026-10-12);
+# the caller's own note decides first, so "send email" / "follow up" on a call makes it SEND_FOLLOW_UP and it appears here.
+REAL_CALL = {"MEETING_BOOKED": "meeting", "SEND_FOLLOW_UP": "followup", "CALLBACK": "callback"}
 # days after the last touch before the lead is due again
 DUE_DAYS = {"meeting": 3, "followup": 2, "callback": 1, "later": 30, "chasing": 2, "lost": 0, "won": 0}
 BUCKET_LABEL = {"meeting": "Meeting booked", "followup": "Follow up", "chasing": "Multi-touch", "callback": "Callback", "later": "Not now", "lost": "Lost", "won": "Won"}
