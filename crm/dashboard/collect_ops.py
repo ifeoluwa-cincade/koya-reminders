@@ -324,7 +324,7 @@ def pv_campaigns(hdr: dict) -> dict:
     out = {}
     for c in items:
         seq = c.get("sequences")
-        out[c.get("id")] = {"name": c.get("camp_name") or "", "parent": c.get("parent_camp_id") or "",
+        out[c.get("id")] = {"name": c.get("camp_name") or "", "parent": c.get("parent_camp_id") or "", "status": c.get("status") or "",
                             "steps": len(seq) if isinstance(seq, list) else (c.get("sequence_steps") or 0)}
     return out
 
@@ -349,11 +349,12 @@ def pv_sequence(email: str, hdr: dict, camps: dict) -> list[dict]:
         c = camps.get(cid, {})
         if not row and not mails:
             return
-        out.append({"id": cid, "name": c.get("name") or "", "sub": is_sub, "status": (row or {}).get("status") or "",
+        out.append({"id": cid, "name": c.get("name") or "", "sub": is_sub, "status": (row or {}).get("status") or "", "camp": c.get("status") or "",
                     "label": ld.get("label") or "", "step": int(ld.get("sent_step") or (mails[-1].get("current_step") if mails else 0) or 0),
                     "steps": c.get("steps") or 0, "last": ld.get("last_sent_at") or (mails[-1].get("sent_on") if mails else None),
                     "next": ld.get("next_email_time") if (row or {}).get("status") not in ("REPLIED", "COMPLETED", "BOUNCED", "UNSUBSCRIBED") else None,
-                    "sent": [{"step": m.get("current_step"), "t": m.get("sent_on"), "subject": m.get("subject")} for m in mails]})
+                    "sent": [{"step": m.get("current_step"), "t": m.get("sent_on"), "subject": m.get("subject"),
+                                  "text": re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", as_text(m.get("body")))).strip()[:340]} for m in mails]})
 
     for row in rows:
         add(row.get("campaign"), row, bool((camps.get(row.get("campaign")) or {}).get("parent")))
@@ -622,6 +623,12 @@ def main() -> int:
                                                        if pv_ids.get("campaign_id") else None)
                 except Exception as ex:               # one odd message must never stop the run
                     res["errors"].append(f"thread {o['email']}: {type(ex).__name__}: {ex}")
+                if not o["thread"]:                   # never replied: the inbox has nothing, but the emails we SENT are in the campaign history
+                    sent = [{"t": m.get("t"), "from_lead": False, "subject": m.get("subject"), "text": m.get("text") or ""}
+                            for q in o.get("sequence") or [] for m in q.get("sent") or []]
+                    sent.sort(key=lambda m: m.get("t") or "", reverse=True)
+                    o["thread"] = sent[:5]
+                    o["thread_sent_only"] = bool(sent)
                 time.sleep(0.4)
         print(f"  threads read for {sum(1 for o in res['opps'] if o['thread'])} of {len(res['opps'])}")
     print("notes...")

@@ -333,6 +333,7 @@
   .seqnow{border-color:var(--line); background:var(--bg-soft,#f3f5f3);} .seqnow.stopped .seqs{color:var(--ink-2);} button.cplink{font:inherit; cursor:pointer; background:none;}
   .plinks{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 4px;}
   .plink{border:1px solid var(--line); border-radius:9px; padding:6px 11px; font-size:13px; color:var(--ink); text-decoration:none; background:#fff; display:inline-flex; align-items:center; gap:6px;}
+  .plink.ico{padding:0; width:38px; height:38px; justify-content:center; cursor:pointer;} .vh{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap;}
   .plink:hover{border-color:var(--ink); background:var(--bg-soft);}
   .rzx{margin-top:8px;}
   .rbtn.s-interested{background:#f1ecff; border-color:#d9cdfb; color:#4a3cc4;} .rbtn.s-multitouch{background:#fff1e3; border-color:#f6d3ae; color:#a85a00;} .rbtn.s-later{background:#eef1f5; border-color:#d3dae4; color:#4b5565;} .rbtn.s-booked{background:#e6f6ec; border-color:#bfe3cc; color:#1d6b40;} .rbtn.s-profiles{background:#e3f5f8; border-color:#b8e0e8; color:#17707f;} .rbtn.s-trial{background:#e8f1fb; border-color:#bfd6ee; color:#2a63a0;} .rbtn.s-won{background:#d9f2e3; border-color:#9fd6b6; color:#14693b;} .rbtn.s-lost,.rbtn.s-notint{background:#fde8e5; border-color:#f3bdb6; color:#a3382c;}
@@ -1110,10 +1111,13 @@
 
   // ----- the lead panel (opens like a note: tags, links, properties, the call and the email thread)
   function copyBtn(text){ return ' <button class="cp" type="button" data-copy="'+esc(text)+'">Copy</button>'; }
+  var ICSVG={mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',li:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 10.5V17M8 7.5v.01M12 17v-6.5m0 3c0-2 1.4-3 3-3s2 1 2 3V17"/>',globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',deal:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>',phone:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',link:'<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',check:'<path d="M5 12l5 5L20 7"/>'};
+  function svgIcon(k){ return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+ICSVG[k]+'</svg>'; }
+  function LINKICON(label){ return svgIcon(/conversation|PlusVibe/i.test(label)?"mail":/LinkedIn/i.test(label)?"li":/Website/i.test(label)?"globe":/^Attio/.test(label)?"user":/^Deal/.test(label)?"deal":/CloudTalk/i.test(label)?"phone":"link"); }
   function openPanel(id,keepScroll){
     var o=oppById(id); if(!o) return; mergeNotes(); openId=id; var prevScroll=keepScroll?[].map.call(document.querySelectorAll("#panel .pcol"),function(c){ return c.scrollTop; }):[], prevOuter=keepScroll?document.getElementById("panel").scrollTop:0;
     var d=dueInfo(o), L=o.links||{};
-    function link(href,label){ return href ? '<a class="plink" href="'+esc(href)+'" target="_blank" rel="noopener noreferrer">'+label+' ↗</a>' : '<span class="plink off">'+label+'</span>'; }
+    function link(href,label){ var ic=LINKICON(label); return href ? '<a class="plink ico" href="'+esc(href)+'" target="_blank" rel="noopener noreferrer" data-tip="'+esc(label)+'" aria-label="'+esc(label)+'">'+ic+'<span class="vh">'+label+'</span></a>' : '<span class="plink ico off" data-tip="'+esc(label)+' (nothing to open yet)">'+ic+'<span class="vh">'+label+'</span></span>'; }
     var li=L.linkedin, liLabel="LinkedIn", nolink=false;
     if (!li){ li="https://www.linkedin.com/search/results/people/?keywords="+encodeURIComponent((o.name||"")+" "+(o.company||"")); liLabel="Find on LinkedIn"; nolink=true; }
     var pv=L.plusvibe || L.plusvibe_campaign || (o.email ? "https://app.plusvibe.ai/v2/campaigns/?workspace_id="+PVWS : null);
@@ -1131,7 +1135,7 @@
     if (nolink) rows.push(["LinkedIn",'<span class="tnote">no LinkedIn address is saved for this person in Attio or PlusVibe, so the button searches their name and company</span>']);
     var html='<div class="phd"><div class="phead"><div><div class="ptitle">'+esc(o.name||o.email)+'</div><div class="psub">'+esc(o.company||"")+'</div></div><button class="pclose" id="pclose" type="button" aria-label="Close">✕</button></div>'+
       '<div class="ptags">'+(o.resolved?'<span class="tag closedtag">Closed</span>':'')+'<span class="tag '+o.bucket+'">'+esc(o.status)+'</span><span class="tag src">'+esc(o.source)+'</span><span class="tag">'+esc(d.label)+'</span></div>'+
-      '<div class="plinks">'+link(pv,L.plusvibe?"Open conversation":"PlusVibe")+link(li,liLabel)+link(L.website,"Website")+link(L.attio,"Attio")+link(L.deal,"Deal")+link(L.cloudtalk,"CloudTalk")+(ARTIFACT_URL?'<button type="button" class="plink cplink" id="copyLeadLink">Copy link to this lead</button>':'')+'</div></div>'+
+      '<div class="plinks">'+link(pv,L.plusvibe?"Open conversation":"PlusVibe")+link(li,liLabel)+link(L.website,"Website")+link(L.attio,"Attio")+link(L.deal,"Deal")+link(L.cloudtalk,"CloudTalk")+(ARTIFACT_URL?'<button type="button" class="plink ico cplink" id="copyLeadLink" data-tip="Copy link to this lead" aria-label="Copy link to this lead">'+svgIcon("link")+'</button>':'')+'</div></div>'+
       '<div class="pgrid"><div class="pcol pleft">'+
       reviewHTML(o)+((o.bucket==="lost"||o.bucket==="won")?closedHTML(o):resolveHTML(o))+editHTML(o)+liConnHTML(o)+
       '<h4>Properties</h4><dl class="props">'+rows.map(function(r){ return '<dt>'+r[0]+'</dt><dd'+'>'+r[1]+'</dd>'; }).join("")+'</dl>'+
@@ -1141,7 +1145,7 @@
       '<h4>Notes in Attio</h4><div id="nlist">'+notesHTML(o)+'</div>'+
       (o.summary?'<h4>'+(o.call_at?"Call summary":"Latest reply")+'</h4><p class="ptext">'+esc(o.summary)+'</p>':"")+
       '<div id="seqwrap">'+seqAll(o)+'</div>'+
-      (thread?'<h4>Email thread in PlusVibe, newest first</h4><ol class="thread">'+thread+'</ol>':(o.email?'<h4>Email thread in PlusVibe</h4><p class="tnote">No messages were found in PlusVibe for this address.</p>':""))+
+      (thread?'<h4>Email thread in PlusVibe, newest first</h4>'+(o.thread_sent_only?'<p class="tnote">No reply yet. These are the emails we sent.</p>':'')+'<ol class="thread">'+thread+'</ol>':(o.email?'<h4>Email thread in PlusVibe</h4><p class="tnote">'+((o.sequence||[]).length?'Nothing has been sent or received yet.':'This lead is not in any PlusVibe campaign (it came from a call or was added by hand), so there is no email history.')+'</p>':""))+
       (MCP&&o.email?'<h4>Emails in Attio</h4><p class="tnote">Sent from your own inbox, including anything outside PlusVibe.</p><div id="aemails" class="aemails">'+attioEmailsHTML(o)+'</div>':"")+
       '</div></div>';
     var p=document.getElementById("panel"); p.innerHTML=html; if(MCP && !keepScroll) setTimeout(function(){ refreshSeq(o); },300); p.scrollTop=prevOuter; [].forEach.call(p.querySelectorAll(".pcol"),function(c,i){ c.scrollTop=prevScroll[i]||0; });
@@ -1220,6 +1224,17 @@
     }).catch(function(e){ LIVE_NUM_ERR=errText(e); if(tab==="sys") renderSys(); });
   }
 
+  // the pull-to-refresh gesture lives in a separate block at the end of the page and cannot see MCP, so it calls this
+  window.koyaLive={
+    on:function(){ return !!MCP; },
+    ask:function(){ var ab=document.getElementById("allowLive"); if(ab && !ab.disabled) ab.click(); },
+    refresh:function(){
+      var inv; try{ inv=(typeof MCP.invalidate==="function")?MCP.invalidate():null; }catch(e){ inv=null; }
+      return Promise.resolve(inv).catch(function(){}).then(function(){
+        return Promise.all([liveSync,liveNumbers,liveDials].map(function(f){ try{ return Promise.resolve(f()).then(function(){ return true; },function(){ return false; }); }catch(e){ return Promise.resolve(false); } }));
+      }).then(function(rs){ var o=openId?oppById(openId):null; if(o) refreshSeq(o); return rs.some(Boolean); });
+    }
+  };
   // Dials read straight from CloudTalk: every outgoing call for each day since 8 Oct (cloudtalk_search_calls, newest first, 200 a page)
   var LIVE_CALL_AT=null, LIVE_CALL_ERR=null, LIVE_CALL_DIFF=null;
   function ctDay(d,page,acc){
@@ -1361,6 +1376,7 @@
       var m=ST[x.status]||[x.status?x.status.toLowerCase():"No record","",""], n=x.step+(x.steps?" of "+x.steps:"")+" email"+(x.step===1&&!x.steps?"":"s")+" sent";
       var line=m[0]+(x.step?". "+n:"")+(x.last?", last on "+d(x.last):"")+(x.next&&!m[2]?". Next email "+fmtWhen(x.next):"")+(m[1]&&!x.step?" "+m[1]:(m[1]&&x.status!=="COMPLETED"&&x.status!=="REPLIED"?" "+m[1]:""));
       if (x.status==="REPLIED") line+=". Sending stopped when they replied.";
+      if (x.camp && x.camp!=="ACTIVE" && DONE_ST.indexOf(x.status)<0) line+=". The campaign is "+x.camp.toLowerCase()+", so nothing is being sent.";
       return '<div class="seqbox'+(x.sub?" sq":"")+'"><div class="seqh"><b>'+esc(x.name||"Campaign")+'</b>'+(x.sub?'<span class="tag">Subsequence</span>':'<span class="tag src">Main</span>')+'</div>'+
         '<div class="seqs '+m[2]+'">'+esc(line)+(x.label?" · tag "+esc(x.label):"")+'</div>'+
         (x.sent&&x.sent.length?'<div class="seqm">'+x.sent.map(function(e){ return '<span data-tip="'+esc(e.subject||"")+'">Step '+esc(e.step)+' · '+d(e.t)+'</span>'; }).join("")+'</div>':'')+'</div>'; }).join("");
@@ -1368,10 +1384,10 @@
   // the box under the history: where the lead stands RIGHT NOW (the cards above are what happened; this is the present)
   function seqNowHTML(o){
     var q=o.sequence||[]; if(!q.length) return "";
-    var live=q.filter(function(x){ return x.status && DONE_ST.indexOf(x.status)<0; }), tag=(q.filter(function(x){ return x.label; })[0]||{}).label||"";
-    var parts=q.filter(function(x){ return x.status; }).map(function(x){ return (x.sub?"Subsequence":"Main")+": "+(PVSTATUS[x.status]||x.status.toLowerCase()); });
-    var head=live.length?"Still in "+live.length+" sequence"+(live.length>1?"s":""):"No longer in any sequence";
-    var line=live.length?"PlusVibe is still sending to them.":"Nothing more will be sent from PlusVibe.";
+    var live=q.filter(function(x){ return x.status && DONE_ST.indexOf(x.status)<0 && (!x.camp||x.camp==="ACTIVE"); }), idle=q.filter(function(x){ return x.status && DONE_ST.indexOf(x.status)<0 && x.camp && x.camp!=="ACTIVE"; }), tag=(q.filter(function(x){ return x.label; })[0]||{}).label||"";
+    var parts=q.filter(function(x){ return x.status; }).map(function(x){ return (x.sub?"Subsequence":"Main")+": "+((x.camp&&x.camp!=="ACTIVE"&&DONE_ST.indexOf(x.status)<0)?"in a "+x.camp.toLowerCase()+" campaign, nothing is sent":(PVSTATUS[x.status]||x.status.toLowerCase())); });
+    var head=live.length?"Still in "+live.length+" sequence"+(live.length>1?"s":""):(idle.length?"Not being emailed":"No longer in any sequence");
+    var line=live.length?"PlusVibe is still sending to them.":(idle.length?"The campaign they are in is "+idle[0].camp.toLowerCase()+", so PlusVibe sends nothing.":"Nothing more will be sent from PlusVibe.");
     return '<div class="seqbox seqnow'+(live.length?"":" stopped")+'"><div class="seqh"><b>Now</b>'+(tag?'<span class="tag">'+esc(tagName(tag))+'</span>':'')+'</div><div class="seqs">'+esc(head+". "+line)+'</div><div class="seqm">'+parts.map(function(t){ return '<span>'+esc(t)+'</span>'; }).join("")+'</div></div>';
   }
   function seqAll(o){ return seqHTML(o)+seqNowHTML(o); }
@@ -1545,8 +1561,8 @@
     if(a.stop) h+='<div class="tnote" id="rztagnote">The tag is put on them within a minute of confirming.</div>';
     return h;
   }
-  document.addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest("#copyLeadLink"); if(!b||!openId) return; var u=ARTIFACT_URL+"#lead-"+openId; function ok(){ b.textContent="Link copied"; setTimeout(function(){ b.textContent="Copy link to this lead"; },1800); }
-    try{ navigator.clipboard.writeText(u).then(ok,function(){ window.prompt&&0; b.textContent=u; }); }catch(x){ b.textContent=u; } });
+  document.addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest("#copyLeadLink"); if(!b||!openId) return; var u=ARTIFACT_URL+"#lead-"+openId; function ok(){ b.innerHTML=svgIcon("check"); b.setAttribute("data-tip","Link copied"); setTimeout(function(){ b.innerHTML=svgIcon("link"); b.setAttribute("data-tip","Copy link to this lead"); },1800); }
+    try{ navigator.clipboard.writeText(u).then(ok,function(){ b.setAttribute("data-tip",u); }); }catch(x){ b.setAttribute("data-tip",u); } });
   var RZSTATE=null;
   function rzOpen(act){
     var o=oppById(openId), z=document.getElementById("rzone"); if(!o||!z) return;
@@ -1740,7 +1756,7 @@
     if (e.target.closest("#rzcancel")){ var zz=document.getElementById("rzone"); if(zz) zz.innerHTML=""; return; }
     var a=e.target.closest("a.plink");
     if (a){ e.preventDefault(); var w=null; try{ w=window.open(a.href,"_blank"); }catch(err){}
-      if (!w){ try{ navigator.clipboard.writeText(a.href); }catch(err2){} var t0=a.textContent; a.textContent="Link copied, paste it in a tab"; setTimeout(function(){ a.textContent=t0; },2500); }
+      if (!w){ try{ navigator.clipboard.writeText(a.href); }catch(err2){} var t0=a.getAttribute("data-tip"); a.setAttribute("data-tip","Link copied, paste it in a tab"); setTimeout(function(){ a.setAttribute("data-tip",t0); },2500); }
       return; }
     var c=e.target.closest("[data-copy]");
     if (c){ var t=c.dataset.copy; try{ navigator.clipboard.writeText(t).then(function(){ c.textContent="Copied"; },function(){ c.textContent="Select it"; }); }catch(err){ c.textContent="Select it"; } return; }
@@ -2341,12 +2357,10 @@
   function run(){
     if (busy || Date.now()-lastRun<COOL_MS) { reset(); return; }
     busy=true; lastRun=Date.now(); reset(); el.classList.add("show","busy"); setTxt("Refreshing…");
-    var jobs=[];
-    if (typeof MCP!=="undefined" && !MCP){ var ab=document.getElementById("allowLive"); if(ab && !ab.disabled) ab.click(); }   // live access is off: a pull asks for it
-    try{ if (typeof MCP!=="undefined" && MCP){ jobs.push(MCP.invalidate().catch(function(){}).then(function(){ return Promise.all([ liveSync(), liveNumbers() ]); })); } }catch(e){}
-    var done=function(ok){ el.classList.remove("busy"); setTxt(ok?"Updated just now":"Could not refresh. Try again in a moment."); setTimeout(function(){ el.classList.remove("show"); busy=false; if(!ok) lastRun=0; }, ok?1400:2600); };
-    if (!jobs.length) { setTimeout(function(){ done(false); }, 400); return; }
-    Promise.all(jobs).then(function(){ done(true); },function(){ done(false); });
+    var done=function(ok,msg){ el.classList.remove("busy"); setTxt(ok?"Updated just now":(msg||"Could not refresh. Try again in a moment.")); setTimeout(function(){ el.classList.remove("show"); busy=false; if(!ok) lastRun=0; }, ok?1400:2600); };
+    var K=window.koyaLive;
+    if (!K || !K.on()){ if(K) K.ask(); setTimeout(function(){ done(false,"Live access is off. Tap Allow live access at the top."); },300); return; }
+    K.refresh().then(function(ok){ done(ok); },function(){ done(false); });
   }
   window.koyaRefresh=run;
   window.addEventListener("scroll",function(){ if (window.scrollY<=0) { if (topSince===null) topSince=Date.now(); } else topSince=null; },{passive:true});
