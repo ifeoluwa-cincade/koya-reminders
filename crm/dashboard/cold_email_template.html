@@ -163,6 +163,18 @@
   @media (max-width:600px){ .pop{flex-direction:column;}
     .presets{flex-direction:row; flex-wrap:wrap; border-right:0; border-bottom:1px solid var(--line-2); min-width:0;} }
 
+  .plannote{font-size:14px; color:var(--ink-2); line-height:1.55; margin:0 0 14px; max-width:78ch;} .plannote.small{font-size:12.5px; color:var(--ink-3); margin-top:14px;}
+  .plancards{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px;}
+  .plancard{background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px 16px;} .plancard .pl{font-family:var(--mono); font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3);} .plancard .pv{font-size:28px; font-weight:600; letter-spacing:-.02em; margin-top:6px; font-variant-numeric:tabular-nums;} .plancard .ps{font-size:12.5px; color:var(--ink-3); margin-top:2px;}
+  .plancard.hot{border-color:#e9d2a6; background:#fffaf1;} .plancard.hot .pv{color:var(--amber);}
+  .planchart{padding:18px 18px 12px;} .plangrid{display:grid; grid-template-columns:1fr 1fr; gap:14px;} @media (max-width:860px){ .plangrid{grid-template-columns:1fr;} }
+  .pbars{display:flex; align-items:flex-end; gap:6px; height:170px;} .pbar{flex:1; min-width:0; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%; gap:5px;}
+  .pbar i{display:block; width:100%; max-width:46px; border-radius:6px 6px 2px 2px; background:var(--violet); min-height:2px;} .pbar.zero i{background:var(--line); min-height:2px;} .pbar.now i{background:var(--amber);} .pbar.past i{background:#9aa3ad;}
+  .pbar b{font-size:11.5px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--ink-2);} .pbar.zero b{color:var(--ink-3); font-weight:500;}
+  .plabels{display:flex; gap:6px; margin-top:8px;} .plabels span{flex:1; min-width:0; text-align:center; font-family:var(--mono); font-size:10px; color:var(--ink-3); white-space:nowrap;}
+  .prow{display:grid; grid-template-columns:78px minmax(0,1fr) 64px; align-items:center; gap:10px; padding:5px 0; font-size:13px;} .prow .pm{color:var(--ink-2);} .prow .pt{height:10px; background:var(--bg-soft); border-radius:6px; overflow:hidden;} .prow .pt i{display:block; height:100%; background:var(--violet); border-radius:6px;} .prow .pn{text-align:right; font-variant-numeric:tabular-nums; font-weight:600;}
+  @media (max-width:640px){ .plabels span{font-size:9px;} .plabels span:nth-child(even){visibility:hidden;} }
+  .plantable{padding:6px 16px;} .ptr{display:grid; grid-template-columns:minmax(0,1fr) 90px 110px; gap:12px; padding:9px 0; border-top:1px solid var(--line-2); font-size:13px; align-items:center;} .ptr:first-child{border-top:0;} .ptr.h{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3);} .ptr .n{text-align:right; font-variant-numeric:tabular-nums; font-weight:600;} .ptr .d{text-align:right; color:var(--ink-2);}
   .sect{display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin:28px 0 12px;}
   .sect h2{font-size:16px; font-weight:600; letter-spacing:-.01em; margin:0;}
   .sect span{font-size:13px; color:var(--ink-3);}
@@ -456,6 +468,7 @@
   <nav class="tabs" role="tablist" aria-label="Pages">
     <button class="tab" id="tabbtn-dash" role="tab" type="button" aria-selected="true">Dashboard</button>
     <button class="tab" id="tabbtn-opps" role="tab" type="button" aria-selected="false">Opportunities <span class="cnt" id="tabcnt-opps">0</span></button>
+    <button class="tab" id="tabbtn-plan" role="tab" type="button" aria-selected="false">Outreach plan</button>
     <button class="tab" id="tabbtn-sys" role="tab" type="button" aria-selected="false"><span class="sdot" id="tabdot-sys"></span>Systems &amp; operations</button>
   </nav>
   <div class="picker" id="pickerWrap">
@@ -500,6 +513,28 @@
 </div>
 </div>
 
+<div id="tab-plan" class="tabpanel" hidden>
+<div class="wrap">
+  <div class="sect"><h2>Outreach plan</h2><span id="planAge"></span></div>
+  <p class="plannote" id="planNote"></p>
+  <div class="plancards" id="planCards"></div>
+  <div class="sect"><h2>Due again, week by week</h2><span>the next 13 weeks</span></div>
+  <div class="card planchart" id="planWeeks"></div>
+  <div class="plangrid">
+    <div>
+      <div class="sect"><h2>Due again, month by month</h2></div>
+      <div class="card planchart" id="planMonths"></div>
+    </div>
+    <div>
+      <div class="sect"><h2>Sequences finished each week</h2><span>last 12 weeks</span></div>
+      <div class="card planchart" id="planFinished"></div>
+    </div>
+  </div>
+  <div class="sect"><h2>By campaign</h2><span>finished, no reply</span></div>
+  <div class="card plantable" id="planCamps"></div>
+  <p class="plannote small" id="planRules"></p>
+</div>
+</div>
 <div id="tab-sys" class="tabpanel" hidden>
 <div class="wrap">
   <div class="sect"><h2>Systems &amp; operations</h2><span id="sysAge"></span></div>
@@ -865,7 +900,7 @@
   // The data below is baked into the page by the hourly build (collect_ops.py). The page cannot call Attio, PlusVibe or
   // CloudTalk itself, so everything here is read-only for now and says how old it is.
   var ALLOPPS=(DATA.opps||[]).slice(), CLOSED=ALLOPPS.filter(function(o){ return o.bucket==="lost"||o.bucket==="won"; }), OPPS=ALLOPPS.filter(function(o){ return o.bucket!=="lost"&&o.bucket!=="won"; }), fView="open", CHECKS=(DATA.checks||[]).slice(), OPS_AT=DATA.ops_at||null;
-  var HASH={dash:"", opps:"opps", sys:"systems"}, TABKEYS=["dash","opps","sys"], tab="dash";
+  var HASH={dash:"", opps:"opps", plan:"plan", sys:"systems"}, TABKEYS=["dash","opps","plan","sys"], tab="dash";
   var RULE={meeting:3, followup:2, chasing:2, callback:1, later:30};
   var BUCKET_NAME={meeting:"Meeting booked", followup:"Follow up", chasing:"Multi-touch", callback:"Callback", later:"Not now", lost:"Lost", won:"Won"};
   var PVWS="6a6e634971ad0f0e174a5471";
@@ -895,10 +930,12 @@
     tab=t;
     document.getElementById("tab-dash").hidden = t!=="dash";
     document.getElementById("tab-opps").hidden = t!=="opps";
+    document.getElementById("tab-plan").hidden = t!=="plan";
     document.getElementById("tab-sys").hidden = t!=="sys";
     document.getElementById("pickerWrap").hidden = t!=="dash";
     TABKEYS.forEach(function(k){ var b=document.getElementById("tabbtn-"+k); b.setAttribute("aria-selected", String(k===t)); });
     if (t==="opps") renderOpps();
+    if (t==="plan") renderPlan();
     if (t==="sys") renderSys();
     if (!fromHash){ try{ history.replaceState(null,"", HASH[t]?("#"+HASH[t]):location.pathname+location.search); }catch(e){ try{ location.hash=HASH[t]; }catch(e2){} } }
     try{ localStorage.setItem("koya-tab", t); }catch(e){}
@@ -939,7 +976,7 @@
       });
     }).catch(function(e){ if(note) note.textContent="Could not open that lead: "+errText(e); });
   }
-  function tabFromHash(){ var h=(location.hash||"").replace("#",""); if(h==="opps") return "opps"; if(h==="systems") return "sys"; return null; }
+  function tabFromHash(){ var h=(location.hash||"").replace("#",""); if(h==="opps") return "opps"; if(h==="plan") return "plan"; if(h==="systems") return "sys"; return null; }
 
   // ----- opportunities
   function T(v){ return v?new Date(v).getTime():null; }
@@ -1681,6 +1718,36 @@
   }
   function nodeStatus(id,checks){ var worst=-1,n=0,k="info"; checks.forEach(function(c){ if(c.node!==id) return; n++; if(SEV[c.status]>worst){ worst=SEV[c.status]; k=c.status; } }); return {status:n?k:"info",n:n,
     issues:checks.filter(function(c){ return c.node===id && (c.status==="bad"||c.status==="warn"); }).length}; }
+  // ----- outreach plan: counts only, built once a day (collect_outreach_plan.py)
+  function renderPlan(){
+    var P=(typeof DATA!=="undefined"&&DATA.outreach)||null;
+    var note=document.getElementById("planNote"), cards=document.getElementById("planCards");
+    if(!P){ note.textContent="The first plan is built overnight. Come back tomorrow."; cards.innerHTML=""; ["planWeeks","planMonths","planFinished","planCamps"].forEach(function(i){ document.getElementById(i).innerHTML=""; }); return; }
+    var N=function(n){ return Number(n||0).toLocaleString("en-GB"); };
+    var MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    var D=function(iso){ var d=new Date(iso+"T12:00:00Z"); return d.getUTCDate()+" "+MON[d.getUTCMonth()]; };
+    var MN=function(m){ var d=new Date(m+"-15T12:00:00Z"); return MON[d.getUTCMonth()]+" "+d.getUTCFullYear(); };
+    document.getElementById("planAge").textContent="built "+relAgo(P.generated_at);
+    var wk=P.due_by_week||[], first=wk.filter(function(w){ return w.count>0; })[0], big=wk.slice().sort(function(a,b){ return b.count-a.count; })[0];
+    var txt=[];
+    if(P.overdue_now>0) txt.push(N(P.overdue_now)+" leads are already past "+P.gap_days+" days and can be contacted again now.");
+    else txt.push("Nobody has reached "+P.gap_days+" days yet.");
+    if(first) txt.push("The first wave is "+N(first.count)+" leads in the week of "+D(first.week_start)+".");
+    if(big&&big.count>0&&(!first||big.week_start!==first.week_start)) txt.push("The biggest week is the week of "+D(big.week_start)+" with "+N(big.count)+".");
+    note.textContent=txt.join(" ");
+    var months=P.due_by_month||[], thisM=months[0]||{count:0};
+    function card(l,v,s,hot){ return '<div class="plancard'+(hot?" hot":"")+'"><div class="pl">'+l+'</div><div class="pv">'+v+'</div><div class="ps">'+s+'</div></div>'; }
+    cards.innerHTML=card("Due again now",N(P.overdue_now),"past "+P.gap_days+" days, ready",P.overdue_now>0)+card("This month",N(thisM.count),MN(thisM.month||"2026-10"))+card("Next 30 days",N(P.due_next_30_days),"becoming due")+card("Finished, no reply",N(P.eligible_total),"waiting out the "+P.gap_days+" days")+card("Never contacted",N(P.never_contacted),"queued, not emailed yet")+card("In a sequence now",N(P.in_sequence_now),"still being emailed");
+    function bars(el,rows,cls){ var max=Math.max.apply(null,rows.map(function(r){ return r.count; }).concat([1]));
+      document.getElementById(el).innerHTML='<div class="pbars">'+rows.map(function(r,i){ var h=Math.max(2,Math.round(r.count/max*140)); return '<div class="pbar'+(r.count?"":" zero")+(cls==="past"?" past":(i===0&&cls==="now"?" now":""))+'"><b>'+(r.count?N(r.count):"0")+'</b><i style="height:'+h+'px"></i></div>'; }).join("")+'</div><div class="plabels">'+rows.map(function(r){ return '<span>'+D(r.week_start)+'</span>'; }).join("")+'</div>'; }
+    bars("planWeeks",wk,"now");
+    var mmax=Math.max.apply(null,months.map(function(m){ return m.count; }).concat([1]));
+    document.getElementById("planMonths").innerHTML=months.map(function(m){ return '<div class="prow"><span class="pm">'+MN(m.month)+'</span><span class="pt"><i style="width:'+Math.round(m.count/mmax*100)+'%"></i></span><span class="pn">'+N(m.count)+'</span></div>'; }).join("");
+    bars("planFinished",P.finished_by_week||[],"past");
+    var cs=P.eligible_by_campaign||[];
+    document.getElementById("planCamps").innerHTML='<div class="ptr h"><span>Campaign</span><span class="n">Leads</span><span class="d">First due</span></div>'+cs.map(function(c){ return '<div class="ptr"><span>'+esc(c.campaign)+'</span><span class="n">'+N(c.count)+'</span><span class="d">'+D(c.first_due)+'</span></div>'; }).join("");
+    document.getElementById("planRules").textContent="A lead counts here when its sequence has finished and it has not replied in any campaign, active or paused. It is due again "+P.gap_days+" days after the last email was sent. Bounced and unsubscribed leads, customers, lost deals, do-not-contact, nurture and paused people are left out. Numbers only: no names are stored here.";
+  }
   function renderSys(){
     var checks=liveChecks(), byId={}; NODES.forEach(function(n){ byId[n.id]=n; });
     var bad=checks.filter(function(c){ return c.status==="bad"; }).length, warn=checks.filter(function(c){ return c.status==="warn"; }).length;

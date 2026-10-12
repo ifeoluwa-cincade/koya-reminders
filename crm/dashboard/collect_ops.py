@@ -395,6 +395,7 @@ def github_checks() -> list[dict]:
              ("plusvibe_phone_lookup.yml", "github", "Phone lookup for interested leads", 540, None),
              ("call_dispositions.yml", "github", "Call outcomes into Attio", 800, None),
              ("discord_reminder.yml", "discord", "Discord reminders", 10080, None),
+             ("sync_plusvibe.yml", "github", "PlusVibe dates into Attio", 27 * 60, None),
              ("crm_daily.yml", "cloudtalk", "Daily check of dialler tags", 27 * 60, None)]
     out = []
     for fname, node, name, limit, window in flows:

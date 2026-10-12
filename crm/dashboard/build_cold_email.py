@@ -42,10 +42,12 @@ def main() -> int:
     if not hp.exists():
         hp = ROOT / "crm/dashboard/check_history_seed.json"
     history = json.loads(hp.read_text()) if hp.exists() else {"runs": [], "names": {}}
+    op = ROOT / "data/working/outreach_plan.json"           # counts only, built once a day by collect_outreach_plan.py
+    outreach = json.loads(op.read_text()) if op.exists() else None
     npath = ROOT / "crm/dashboard/incident_notes.json"
     notes = json.loads(npath.read_text()) if npath.exists() else []
     payload = json.dumps({"days": days, "calls_through": through,
-                          "opps": ops.get("opps", []), "checks": ops.get("checks", []), "history": history, "notes": notes, "activity": ops.get("activity", []), "ops_at": ops.get("generated_at", ""),
+                          "opps": ops.get("opps", []), "checks": ops.get("checks", []), "history": history, "outreach": outreach, "notes": notes, "activity": ops.get("activity", []), "ops_at": ops.get("generated_at", ""),
                           "generated_at": m["snapshot"].get("generated_at", ""), "built_by": "auto" if os.environ.get("GITHUB_ACTIONS") else "manual",
                           "outreach_start": m.get("outreach_start", "")},
                          separators=(",", ":"))

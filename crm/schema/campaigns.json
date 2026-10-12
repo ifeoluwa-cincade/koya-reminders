@@ -1,0 +1,42 @@
+{
+ "_readme": "Every PlusVibe campaign the CRM is allowed to feed, and the copy it carries. push_to_plusvibe.py refuses a TAM push into a campaign that is not listed here. A person is never pushed into a campaign whose copy they have already been sent: 'also_sent_in' names the older Attio lists that carried the same copy.",
+ "copies": {
+  "JOHN": {
+   "title": "You might know John",
+   "also_sent_in": [
+    "camp_ai_agency_owners_variations_free_build_chri"
+   ]
+  },
+  "ORIGINAL": {
+   "title": "Spintax original: 'came across {company} and saw you build AI systems... are you still the one personally building out the automation?' (3 steps, read off PlusVibe 2026-10-06)",
+   "also_sent_in": []
+  }
+ },
+ "campaigns": {
+  "6ac27fc5844af07903887edb": {
+   "name": "Q4 TAM Re-outreach",
+   "list_slug": "camp_q4_tam_re_outreach",
+   "copy": "JOHN",
+   "cycle": "2026Q4",
+   "daily_new": 165,
+   "daily_sends": 500
+  },
+  "6ac253f5a0a271f0f442d96d": {
+   "name": "Q4 AI Agency Owners",
+   "list_slug": "camp_q4_ai_agency_owners",
+   "copy": "JOHN",
+   "cycle": "2026Q4",
+   "daily_new": 233,
+   "daily_sends": 700
+  },
+  "6ac425b8844af0790389ae2b": {
+   "name": "Q4 AI Agency Owners (Original Copy)",
+   "list_slug": "camp_q4_ai_agency_owners_original_copy",
+   "copy": "ORIGINAL",
+   "cycle": "2026Q4",
+   "daily_new": 117,
+   "daily_sends": 350
+  }
+ },
+ "_split": "Agreed with Ife 2026-10-05 from 1,275 sends/day (85 inboxes x 15): Main 700 / TAM 500 / Nurture 75. daily_new = sends / 3 (3-step sequence). Review Mondays."
+}

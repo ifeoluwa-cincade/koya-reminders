@@ -1,0 +1,48 @@
+name: Sync PlusVibe to the CRM
+
+# Once a day: copy what PlusVibe knows into the CRM, so the "last emailed" date and the 90-day "due again" date are right.
+# It sets the last-contact date and campaign for everyone emailed, holds bounced addresses, moves people to Lost or Engaged from
+# their reply label, and updates each campaign list. It never creates a person, and it never overwrites customers, lost deals
+# or people already in conversation. A manual run defaults to a DRY RUN that changes nothing.
+on:
+  schedule:
+    - cron: "30 5 * * *"
+  push:
+    branches: [crm-trigger]      # the hourly routine push; only the 05 UTC hour counts (see the job condition)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true = report only, change nothing"
+        default: "true"
+
+permissions: {}
+
+concurrency:
+  group: sync-plusvibe
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.timestamp, 'T05:') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ATTIO_KEY_VAR: ATTIO_API_KEY_2
+      ATTIO_API_KEY_2: ${{ secrets.ATTIO_API_KEY_2 }}
+      PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}
+      DRY: ${{ github.event.inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install requests pyyaml
+      - name: Sync
+        run: |
+          if [ "$DRY" = "true" ]; then python crm/scripts/sync_plusvibe.py; else python crm/scripts/sync_plusvibe.py --commit; fi
+      - name: Remove the temporary file that held lead details
+        if: ${{ always() }}
+        run: rm -rf data
