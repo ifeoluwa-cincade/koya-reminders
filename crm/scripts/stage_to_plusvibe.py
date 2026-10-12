@@ -13,7 +13,7 @@ stage is never one-sided.
     Profiles Sent      all stopped                                 untouched
     Trial              all stopped                                 untouched
     Won                all stopped                                 CLOSED
-    Lost               all stopped                                 NOT_INTERESTED only when the lost reason is Not interested
+    Lost               all stopped                                 by lost reason: Not interested -> NOT_INTERESTED, Bad fit -> WRONG_PERSON, anything else -> CLOSED
 
 It acts on the stage the deal has NOW, once per request (a webhook names the deal), and only changes what does not
 already match, so running it twice does nothing the second time. Every change is read back from PlusVibe.
@@ -98,8 +98,8 @@ def apply(stage: str, reason: str, email: str, hdr, camps, commit: bool) -> tupl
     if not rule or not email:
         return 0, 0
     stop, tag = rule
-    if stage == "Lost" and reason.replace(" ", "_").upper() == "NOT_INTERESTED":
-        tag = "NOT_INTERESTED"
+    if stage == "Lost":                                        # the tag follows the lost reason, and a lost lead always gets one
+        tag = {"NOT_INTERESTED": "NOT_INTERESTED", "BAD_FIT": "WRONG_PERSON"}.get(reason.replace(" ", "_").upper(), "CLOSED")
     rows = CO.pv_sequence(email, hdr, camps)
     todo, bad = 0, 0
     for x in rows:
