@@ -103,6 +103,36 @@ def _why(r):
         return ''
 
 
+_ASKS = ("send me", "send over", "send us", "more info", "more detail", "details", "information", "profile", "pricing", "price", "rates", "how much", "sample",
+         "deck", "case stud", "interested", "tell me more", "would like", "love to", "let's talk", "lets talk", "call me", "book", "schedule", "available")
+
+
+def stage_for(H, e: str, label: str) -> str:
+    """The deal stage for a NEW deal (Ife, 2026-10-12). Cycle 1 / Cycle 2 mean we have already sent a response, so Multi-touch. For LATER the email decides:
+    we already replied -> Multi-touch; they ask for details or a follow-up -> Interested; otherwise Later."""
+    if label == "MEETING_BOOKED":
+        return "Meeting Booked"
+    if label in ("CYCLE_1", "CYCLE_2"):
+        return "Multi-touch"
+    if label != "LATER":
+        return "Interested"
+    try:
+        r = pv_get("/unibox/emails", {"workspace_id": WS, "lead": e, "preview_only": "false"}, H)
+        items = (r.json().get("data") or []) if r.status_code == 200 else []
+    except Exception:
+        items = []
+    mine = [x for x in items if (x.get("from_address_email") or "").lower() == e.lower()]
+    if not mine:
+        return "Later"
+    last_in = max(x.get("timestamp_created") or "" for x in mine)
+    if any((x.get("from_address_email") or "").lower() != e.lower() and (x.get("timestamp_created") or "") > last_in for x in items):
+        return "Multi-touch"                                   # we have already answered them
+    newest = max(mine, key=lambda x: x.get("timestamp_created") or "")
+    text = (newest.get("content_preview") or newest.get("body") or "")
+    text = " ".join(str(text).replace("<", " <").split()).lower()
+    return "Interested" if any(w in text for w in _ASKS) else "Later"
+
+
 def create_for(c, owner, e, l, rid):
     """Create the person (when missing) and the deal for one positive reply. Returns (person_record_id, ok).
     Shared by the full sync and the one-reply fast path, so both behave identically. The deal is an upsert on its external id,
@@ -130,7 +160,7 @@ def create_for(c, owner, e, l, rid):
     title = f"{full or e} / {l.get('company_name') or ''}".strip(" /")
     r = c.req("PUT", "/objects/deals/records?matching_attribute=external_opportunity_id", json={"data": {"values": {
         "name": [{"value": title}],
-        "stage": [{"status": "Meeting Booked" if l["label"] == "MEETING_BOOKED" else "Later" if l["label"] == "LATER" else "Interested"}],
+        "stage": [{"status": l.get("stage") or ("Meeting Booked" if l["label"] == "MEETING_BOOKED" else "Interested")}],
         "owner": [{"referenced_actor_type": "workspace-member", "referenced_actor_id": owner}],
         "external_opportunity_id": [{"value": "pv-" + hashlib.sha1(e.encode()).hexdigest()[:16]}],
         "source_channel": [{"option": "Cold email"}],
@@ -178,7 +208,8 @@ def fast(email: str, commit: bool) -> int:
     mine = c.req("POST", "/objects/deals/records/query", json={"filter": {"associated_people": {"target_object": "people", "target_record_id": rid}}, "limit": 50}).json().get("data", [])
     if any(one(d, "stage") != "Lost" for d in mine):
         print("this person already has a deal; nothing to do"); return 0
-    print(f"positive reply ({lead['label']}), exact match, no deal yet -> {'creating the deal' if commit else 'DRY RUN, nothing created'}")
+    lead["stage"] = stage_for(H, e, lead["label"])
+    print(f"positive reply ({lead['label']}), exact match, no deal yet -> stage {lead['stage']}; {'creating the deal' if commit else 'DRY RUN, nothing created'}")
     if not commit:
         return 0
     owner = c.req("GET", "/workspace_members").json()["data"][0]["id"]["workspace_member_id"]
@@ -269,6 +300,7 @@ def main() -> int:
 
     made = fail = 0
     for e, l, rid in todo:
+        l["stage"] = stage_for(H, e, l["label"])
         _, ok = create_for(c, owner, e, l, rid)
         made += ok; fail += (not ok)
     print(f"\n{made} deals created, {fail} failed")
