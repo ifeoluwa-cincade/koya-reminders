@@ -14,19 +14,23 @@
   }
   /* dark mode: the whole page is inverted, then the dark header, logos and status marks are inverted back so they keep their own colours */
   html[data-koya-theme="light"]{filter:brightness(var(--kb,1));}
-  html[data-koya-theme="dark"]{filter:invert(1) hue-rotate(180deg) brightness(var(--kb,1)); background:#fff;}
+  html[data-koya-theme="dark"]{filter:invert(1) hue-rotate(180deg) contrast(.95) brightness(var(--kb,1)); background:#fff;}
   #themeVeil{position:fixed; inset:0; z-index:9999; pointer-events:none; opacity:0; background:#000; transition:opacity .7s ease;}
   html[data-koya-theme="dark"] header, html[data-koya-theme="dark"] img, html[data-koya-theme="dark"] .orv, html[data-koya-theme="dark"] .oli{filter:invert(1) hue-rotate(180deg);}
   /* night glow: slow drifting violet and green light from the top corners, only in dark mode (the same colours as the header) */
-  #nightglow{display:none;}
+  @property --ga{syntax:'<color>'; inherits:true; initial-value:rgba(23,160,96,.75);}
+  @property --gb{syntax:'<color>'; inherits:true; initial-value:rgba(110,86,240,.85);}
+  #nightglow{display:none; transition:--ga 2.5s ease, --gb 2.5s ease;}
   html[data-koya-theme="dark"] #nightglow{display:block; position:fixed; inset:0; pointer-events:none; z-index:2; filter:invert(1) hue-rotate(180deg); opacity:calc(.68*var(--kg,1));
-    background:radial-gradient(55% 42% at 12% -8%,rgba(23,160,96,.75),transparent 70%),radial-gradient(52% 40% at 92% -6%,rgba(110,86,240,.85),transparent 70%),radial-gradient(60% 36% at 50% 112%,rgba(110,86,240,.38),transparent 70%);
+    background:radial-gradient(55% 42% at 12% -8%,var(--ga),transparent 70%),radial-gradient(52% 40% at 92% -6%,var(--gb),transparent 70%),radial-gradient(60% 36% at 50% 112%,rgba(110,86,240,.38),transparent 70%);
     background-size:130% 130%; animation:koyaGlow 16s ease-in-out infinite alternate;}
   @keyframes koyaGlow{0%{background-position:0% 0%,100% 0%,50% 100%; opacity:calc(.45*var(--kg,1));} 50%{opacity:calc(.72*var(--kg,1));} 100%{background-position:18% 8%,82% 10%,40% 88%; opacity:calc(.52*var(--kg,1));}}
   @media (prefers-reduced-motion:reduce){ html[data-koya-theme="dark"] #nightglow{animation:none;} }
   /* dark mode pop-up: a dark scrim behind it, and a card a touch lighter than the page with a thin edge, so it does not read as a black hole */
   html[data-koya-theme="dark"] .pscrim{background:rgba(245,245,247,.62);}
   html[data-koya-theme="dark"] .panel{background:#e4e7ea; box-shadow:0 0 0 1px rgba(0,0,0,.10), 0 40px 90px -30px rgba(0,0,0,.7);}
+  html[data-koya-theme="dark"] .card:hover, html[data-koya-theme="dark"] .orow:hover{box-shadow:0 0 0 1px rgba(161,137,255,.5), 0 0 26px -6px rgba(161,137,255,.4); transition:box-shadow .25s ease;}
+  html[data-koya-theme="dark"] .card{transition:box-shadow .25s ease;}
   #themeBtn svg{display:block;}
   *{box-sizing:border-box;}
   html{scrollbar-gutter:stable; overflow-y:scroll;}
@@ -983,6 +987,11 @@
     if(n===0) return {n:0,label:"Due today",cls:"today"};
     if(n===1) return {n:1,label:"Tomorrow",cls:"soon"};
     return {n:n,label:"In "+n+"d",cls:n<=3?"soon":"later"}; }
+  // the night glow follows what matters: red when something is overdue, amber when something is due today, green when the day is clear
+  function setGlow(){ var r=document.documentElement, over=0, today=0;
+    OPPS.forEach(function(o){ if(o.bucket==="lost"||o.bucket==="won") return; var c=dueInfo(o).cls; if(c==="over") over++; else if(c==="today") today++; });
+    var a=over?"rgba(236,60,50,.95)":today?"rgba(236,150,24,.92)":"rgba(23,160,96,.75)";
+    r.style.setProperty("--ga",a); r.style.setProperty("--gb","rgba(110,86,240,.85)"); }
   function oppById(id){ for (var i=0;i<OPPS.length;i++) if (OPPS[i].id===id) return OPPS[i]; for (var j=0;j<CLOSED.length;j++) if (CLOSED[j].id===id) return CLOSED[j]; return null; }
 
   // ----- tabs
@@ -1112,6 +1121,7 @@
     return '<span class="oli" data-tip="Not connected on LinkedIn yet"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="#8d96a0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.6"/><path d="M1.4 13.4c.3-2.6 2.2-4 4.6-4s4.3 1.4 4.6 4"/><path d="M13 4.2v4M11 6.2h4"/></svg></span>';
   }
   function renderOpps(){
+    try{ setGlow(); }catch(e){}
     var over=countWhere(function(o){ return dueInfo(o).cls==="over"; }), today=countWhere(function(o){ return dueInfo(o).cls==="today"; });
     renderTools();
     var list=filtered();
