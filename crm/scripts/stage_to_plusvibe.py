@@ -48,7 +48,7 @@ RULES = {
     "Lost": (True, None),            # NOT_INTERESTED is added below when that is the lost reason
 }
 CLOSED_STAGES = ("Meeting Booked", "Profiles Sent", "Trial", "Won", "Lost")
-DONE = {"COMPLETED", "REPLIED", "BOUNCED", "UNSUBSCRIBED"}      # nothing left to stop
+DONE = {"COMPLETED", "REPLIED", "BOUNCED", "UNSUBSCRIBED", "SKIPPED"}      # nothing left to stop
 
 
 def _why(r):
@@ -103,7 +103,7 @@ def apply(stage: str, reason: str, email: str, hdr, camps, commit: bool) -> tupl
     rows = CO.pv_sequence(email, hdr, camps)
     todo, bad = 0, 0
     for x in rows:
-        if not x.get("id"):
+        if not x.get("id") or not x.get("status"):      # no lead record in that campaign (mail history only): nothing to stop or tag
             continue
         if stop and x["status"] not in DONE:
             todo += 1
@@ -127,6 +127,8 @@ def apply(stage: str, reason: str, email: str, hdr, camps, commit: bool) -> tupl
         time.sleep(3)
         after = CO.pv_sequence(email, hdr, camps)
         for x in after:
+            if not x.get("status"):
+                continue
             if stop and x["status"] not in DONE:
                 bad += 1; print(f"   READBACK: a {'subsequence' if x['sub'] else 'main'} sequence is still {x['status']}")
             if tag and x["label"] != tag:
