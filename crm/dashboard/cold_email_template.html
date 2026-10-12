@@ -163,6 +163,13 @@
   @media (max-width:600px){ .pop{flex-direction:column;}
     .presets{flex-direction:row; flex-wrap:wrap; border-right:0; border-bottom:1px solid var(--line-2); min-width:0;} }
 
+  /* pull to refresh: drag the page down at the top (phone), or scroll up past the top (trackpad). No Chrome reload: it re-reads the live parts. */
+  #ptr{position:fixed; left:50%; top:0; transform:translate(-50%,-70px); z-index:70; display:flex; align-items:center; gap:9px; background:var(--ink); color:#fff; border-radius:999px; padding:9px 16px; font-size:13px; font-weight:500; box-shadow:0 6px 24px rgba(11,17,32,.25); opacity:0; pointer-events:none; transition:transform .22s var(--ease), opacity .2s var(--ease);}
+  #ptr.pull{opacity:1; transition:none;} #ptr.show{transform:translate(-50%,calc(env(safe-area-inset-top,0px) + 14px)); opacity:1;}
+  #ptr .pa{display:inline-block; transition:transform .15s var(--ease);} #ptr.ready .pa{transform:rotate(180deg);}
+  #ptr .psp{width:14px; height:14px; border:2px solid rgba(255,255,255,.35); border-top-color:#fff; border-radius:50%; animation:ptrspin .7s linear infinite; display:none;} #ptr.busy .psp{display:inline-block;} #ptr.busy .pa{display:none;}
+  @keyframes ptrspin{to{transform:rotate(360deg);}}
+  html,body{overscroll-behavior-y:contain;}
   .plannote{font-size:14px; color:var(--ink-2); line-height:1.55; margin:0 0 14px; max-width:78ch;} .plannote.small{font-size:12.5px; color:var(--ink-3); margin-top:14px;}
   .plancards{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px;}
   .plancard{background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px 16px;} .plancard .pl{font-family:var(--mono); font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3);} .plancard .pv{font-size:28px; font-weight:600; letter-spacing:-.02em; margin-top:6px; font-variant-numeric:tabular-nums;} .plancard .ps{font-size:12.5px; color:var(--ink-3); margin-top:2px;}
@@ -485,6 +492,7 @@
   <button class="qsbtn" id="qsbtn" type="button" aria-label="Search leads"><span class="lbl">Search leads</span><kbd>Ctrl K</kbd></button>
 </div></div>
 
+<div id="ptr" role="status" aria-live="polite"><span class="pa" aria-hidden="true">↓</span><span class="psp" aria-hidden="true"></span><span id="ptrtxt">Pull to refresh</span></div>
 <div id="tab-dash" class="tabpanel">
 <div class="wrap">
   <div class="sect"><h2>Email outreach</h2><span id="outNote">from PlusVibe</span></div>
@@ -2235,5 +2243,39 @@
     try{ db.collection("notes").onSnapshot(function(snap){ NOTESDB=snap.docs.map(function(d){ return Object.assign({id:d.id},d.data()); }); mergeNotes(); if(tab==="opps") renderOpps(); redrawNotes(); },function(){}); }catch(e){}
     try{ db.collection("activity").orderBy("t","desc").limit(200).onSnapshot(function(snap){ ACT_DB=snap.docs.map(function(d){ return Object.assign({},d.data()); }); renderActivity(); },function(){}); }catch(e){}
   },function(){ dbState="off"; render(); });
+})();
+
+// ----- pull to refresh: re-reads everything that is live (stages, dates, calls, notes, email numbers) without reloading the page
+(function(){
+  var el=document.getElementById("ptr"), tx=document.getElementById("ptrtxt"), TH=70, startY=null, dy=0, busy=false, wheelAcc=0, wheelT=null;
+  function setTxt(t){ tx.textContent=t; }
+  function reset(){ el.classList.remove("pull","ready"); el.style.transform=""; el.style.opacity=""; }
+  function run(){
+    if (busy) return; busy=true; reset(); el.classList.add("show","busy"); setTxt("Refreshing…");
+    var jobs=[];
+    try{ if (typeof MCP!=="undefined" && MCP){ jobs.push(MCP.invalidate().catch(function(){}).then(function(){ return Promise.all([ liveSync(), liveNumbers() ]); })); } }catch(e){}
+    var done=function(ok){ el.classList.remove("busy"); setTxt(ok?"Updated just now":"Live connection is not available right now"); setTimeout(function(){ el.classList.remove("show"); busy=false; }, 1400); };
+    if (!jobs.length) { setTimeout(function(){ done(false); }, 500); return; }
+    Promise.all(jobs).then(function(){ done(true); },function(){ done(false); });
+  }
+  window.koyaRefresh=run;
+  // phone / touch: drag down while at the very top
+  window.addEventListener("touchstart",function(e){ if (window.scrollY<=0 && e.touches.length===1) { startY=e.touches[0].clientY; dy=0; } else startY=null; },{passive:true});
+  window.addEventListener("touchmove",function(e){
+    if (startY===null || busy) return;
+    dy=e.touches[0].clientY-startY;
+    if (dy>6 && window.scrollY<=0) {
+      var d=Math.min(dy*0.5,110); el.classList.add("pull"); el.style.transform="translate(-50%,"+(d-56)+"px)"; el.style.opacity=String(Math.min(1,d/50));
+      var ready=dy*0.5>=TH*0.6; el.classList.toggle("ready",ready); setTxt(ready?"Release to refresh":"Pull to refresh");
+    }
+  },{passive:true});
+  window.addEventListener("touchend",function(){ if (startY===null) return; var go=dy*0.5>=TH*0.6; startY=null; dy=0; if (go) run(); else reset(); },{passive:true});
+  // trackpad / mouse wheel: scrolling up past the top
+  window.addEventListener("wheel",function(e){
+    if (busy || window.scrollY>0 || e.deltaY>=0 || (e.target.closest&&e.target.closest("#panelwrap"))) { wheelAcc=0; return; }
+    wheelAcc+=-e.deltaY; clearTimeout(wheelT); wheelT=setTimeout(function(){ wheelAcc=0; reset(); },260);
+    var r=Math.min(wheelAcc/220,1); el.classList.add("pull"); el.style.transform="translate(-50%,"+(r*56-56)+"px)"; el.style.opacity=String(r); el.classList.toggle("ready",r>=1); setTxt(r>=1?"Release to refresh":"Pull to refresh");
+    if (wheelAcc>=260) { wheelAcc=0; clearTimeout(wheelT); run(); }
+  },{passive:true});
 })();
 </script>
