@@ -3,10 +3,10 @@ name: Dashboard build
 # Builds the Koya Outbound dashboard page: email numbers, call counts, opportunities, email threads and the health checks of every automation.
 # The page contains real lead details, so it is NEVER stored in this public repository. It is pushed to a separate PRIVATE repository
 # (the "dashboard-build" branch there) with a key that can write to that one repository only. A routine in claude.ai then publishes it.
-# Runs hourly through the day, and can be started by hand. A manual run with test=true writes to a test branch and leaves the live page alone.
+# Runs every hour at 5 minutes past, so a fresh page is ready before the publishing routine runs at 20 past. It can also be started by hand. A manual run with test=true writes to a test branch and leaves the live page alone.
 on:
   schedule:
-    - cron: "41 6-22 * * *"
+    - cron: "5 * * * *"
   workflow_dispatch:
     inputs:
       test:
