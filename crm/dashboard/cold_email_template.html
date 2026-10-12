@@ -949,6 +949,7 @@
     var open=false; try{ open=localStorage.getItem("koya-targets")==="1"; }catch(e){}
     set(open); b.addEventListener("click",function(){ set(t.hidden); }); })();
   TABKEYS.forEach(function(k){ document.getElementById("tabbtn-"+k).addEventListener("click",function(){ setTab(k); }); });
+  (function(){ var b=document.getElementById("tabbtn-plan"); if (b && !(typeof DATA!=="undefined" && DATA.outreach)) b.hidden=true; })();   // the Outreach plan tab only appears once it has real numbers
   // a link like ...#lead-<person id> opens that lead's panel straight away (the Discord nudges and calendar events use it)
   function leadFromHash(){ var m=(location.hash||"").match(/^#lead-([0-9a-f-]{36})$/i); return m?m[1].toLowerCase():null; }
   var PENDING_LEAD=null;
