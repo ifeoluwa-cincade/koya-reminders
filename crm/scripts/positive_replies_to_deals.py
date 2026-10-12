@@ -38,7 +38,8 @@ from normalize import clean_email, first_name, linkedin_slug
 
 PV = "https://api.plusvibe.ai/api/v1"
 WS = "6a6e634971ad0f0e174a5471"
-POSITIVE = {"INTERESTED", "MEETING_BOOKED", "CYCLE_1", "CYCLE_2"}
+# LATER is included (Ife, 2026-10-12): a lead labelled Later is an opportunity too, as a deal in the Later stage. Before, a LATER lead who never had a deal never appeared.
+POSITIVE = {"INTERESTED", "MEETING_BOOKED", "CYCLE_1", "CYCLE_2", "LATER"}
 CACHE = ROOT / "data/caches/plusvibe_positive_for_deals.json"
 
 
@@ -109,7 +110,7 @@ def create_for(c, owner, e, l, rid):
     full = " ".join(x for x in (l.get("first_name"), l.get("last_name")) if x).strip()
     if not rid:
         vals = {"email_addresses": [{"email_address": e}],
-                "relationship_stage": [{"option": "INTERESTED"}],
+                "relationship_stage": [{"option": "ENGAGED" if l["label"] == "LATER" else "INTERESTED"}],
                 "current_campaign": [{"value": l["campaign"]}],
                 "legacy_source": [{"value": f"PlusVibe positive reply — {l['campaign']}"}]}
         if full:
@@ -129,7 +130,7 @@ def create_for(c, owner, e, l, rid):
     title = f"{full or e} / {l.get('company_name') or ''}".strip(" /")
     r = c.req("PUT", "/objects/deals/records?matching_attribute=external_opportunity_id", json={"data": {"values": {
         "name": [{"value": title}],
-        "stage": [{"status": "Meeting Booked" if l["label"] == "MEETING_BOOKED" else "Interested"}],
+        "stage": [{"status": "Meeting Booked" if l["label"] == "MEETING_BOOKED" else "Later" if l["label"] == "LATER" else "Interested"}],
         "owner": [{"referenced_actor_type": "workspace-member", "referenced_actor_id": owner}],
         "external_opportunity_id": [{"value": "pv-" + hashlib.sha1(e.encode()).hexdigest()[:16]}],
         "source_channel": [{"option": "Cold email"}],
