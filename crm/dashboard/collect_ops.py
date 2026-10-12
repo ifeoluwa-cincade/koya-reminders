@@ -404,7 +404,7 @@ def github_checks() -> list[dict]:
                              headers=hdr, params={"per_page": 20, "status": "completed"}, timeout=30)
             runs = r.json().get("workflow_runs") or [] if r.status_code == 200 else None
             if runs is not None:        # a run the job skipped on purpose (it only runs at set hours to save minutes) is not a run
-                runs = [z for z in runs if z.get("conclusion") != "skipped"]
+                runs = [z for z in runs if z.get("conclusion") not in ("skipped", "cancelled")]
         except Exception:
             runs = None
         if runs is None:

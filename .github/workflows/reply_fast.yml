@@ -1,0 +1,50 @@
+name: Reply fast path
+
+# A positive PlusVibe reply arrives -> the deal is created in the CRM within seconds, for the common case only:
+# an AI-agency reply with a positive label, an exact email match in the CRM, and no deal yet. Anything else is left to the full CRM sync
+# (it also matches by name and company), which runs at the same moment and once an hour. The deal is created with the same code and the
+# same external id as the full sync, so running both can never make two deals.
+# The replier's email is read from the event file and masked: it must never appear in this public log.
+# A manual run defaults to a DRY RUN that changes nothing.
+on:
+  repository_dispatch:
+    types: [plusvibe_reply]
+  workflow_dispatch:
+    inputs:
+      email:
+        description: "Test only: the replier's email"
+        default: ""
+      dry_run:
+        description: "true = report only, change nothing"
+        default: "true"
+
+permissions: {}
+
+concurrency:
+  group: reply-fast-${{ github.run_id }}
+
+jobs:
+  deal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ATTIO_KEY_VAR: ATTIO_API_KEY_2
+      ATTIO_API_KEY_2: ${{ secrets.ATTIO_API_KEY_2 }}
+      PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}
+      DRY: ${{ github.event.inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install requests pyyaml
+      - name: Keep the address out of the log
+        run: |
+          E="$(python3 -c "import json,os; e=json.load(open(os.environ['GITHUB_EVENT_PATH'])); print((e.get('client_payload') or {}).get('email') or (e.get('inputs') or {}).get('email') or '')")"
+          [ -n "$E" ] && echo "::add-mask::$E" || true
+      - name: Create the deal for this reply
+        run: |
+          if [ "$DRY" = "true" ]; then python crm/scripts/positive_replies_to_deals.py --from-event; else python crm/scripts/positive_replies_to_deals.py --from-event --commit; fi

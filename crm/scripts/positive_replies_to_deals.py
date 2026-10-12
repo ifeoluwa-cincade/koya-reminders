@@ -102,11 +102,107 @@ def _why(r):
         return ''
 
 
+def create_for(c, owner, e, l, rid):
+    """Create the person (when missing) and the deal for one positive reply. Returns (person_record_id, ok).
+    Shared by the full sync and the one-reply fast path, so both behave identically. The deal is an upsert on its external id,
+    so running it twice never makes two deals."""
+    full = " ".join(x for x in (l.get("first_name"), l.get("last_name")) if x).strip()
+    if not rid:
+        vals = {"email_addresses": [{"email_address": e}],
+                "relationship_stage": [{"option": "INTERESTED"}],
+                "current_campaign": [{"value": l["campaign"]}],
+                "legacy_source": [{"value": f"PlusVibe positive reply — {l['campaign']}"}]}
+        if full:
+            parts = full.split()
+            vals["name"] = [{"first_name": first_name(full), "last_name": " ".join(parts[1:]), "full_name": full}]
+        sl, st = linkedin_slug(l.get("linkedin_person_url") or "")
+        if st == "VALID_PROFILE":
+            vals["linkedin_slug"] = [{"value": sl}]
+            _li = (l.get("linkedin_person_url") or "").strip()
+            if _li.startswith("http") and _li.isascii():
+                vals["linkedin"] = [{"value": _li}]
+        r = c.req("POST", "/objects/people/records", json={"data": {"values": vals}})
+        if r.status_code >= 300:
+            print(f"   PERSON FAIL {r.status_code} {_why(r)}")
+            return None, False
+        rid = r.json()["data"]["id"]["record_id"]
+    title = f"{full or e} / {l.get('company_name') or ''}".strip(" /")
+    r = c.req("PUT", "/objects/deals/records?matching_attribute=external_opportunity_id", json={"data": {"values": {
+        "name": [{"value": title}],
+        "stage": [{"status": "Meeting Booked" if l["label"] == "MEETING_BOOKED" else "Interested"}],
+        "owner": [{"referenced_actor_type": "workspace-member", "referenced_actor_id": owner}],
+        "external_opportunity_id": [{"value": "pv-" + hashlib.sha1(e.encode()).hexdigest()[:16]}],
+        "source_channel": [{"option": "Cold email"}],
+        "source_campaign": [{"value": l["campaign"]}],
+        "associated_people": [{"target_object": "people", "target_record_id": rid}]}}})
+    if r.status_code >= 300:
+        print(f"   DEAL FAIL {r.status_code} {_why(r)}")
+        return rid, False
+    return rid, True
+
+
+def fast(email: str, commit: bool) -> int:
+    """ONE reply, handled in seconds. Looks up just this person instead of reading all 16,000. Anything unusual (no exact match in
+    the CRM, no positive label yet, already has a deal, closed) is left to the full hourly sync, which uses the same rules."""
+    H = {"x-api-key": env()["PLUS_VIBE_API_KEY"]}
+    e, _ = clean_email(email)
+    if not e:
+        print("no usable email in the signal; the full sync will handle it"); return 0
+    r = pv_get("/lead/get", {"workspace_id": WS, "email": e}, H)
+    rows = r.json() if r.status_code == 200 and isinstance(r.json(), list) else []
+    lead = None
+    for x in rows:
+        ld = x.get("lead_data") or {}
+        name = x.get("campaign_name") or ""
+        label = ld.get("label") or x.get("label") or ""
+        if label in POSITIVE and "ai agency" in name.lower() and (x.get("status") or ld.get("status")) == "REPLIED":
+            lead = {"email": e, "first_name": ld.get("first_name"), "last_name": ld.get("last_name"), "company_name": ld.get("company_name"),
+                    "company_website": ld.get("company_website"), "linkedin_person_url": ld.get("linkedin_person_url"),
+                    "label": label, "campaign": name}
+            if label == "MEETING_BOOKED":
+                break
+    if not lead:
+        print("no positive label in an AI-agency campaign yet; the hourly sync will catch it"); return 0
+    c = AttioClient(workers=2)
+    ppl = c.req("POST", "/objects/people/records/query", json={"filter": {"email_addresses": e}, "limit": 5}).json().get("data", [])
+    if len(ppl) != 1:
+        print(f"{len(ppl)} exact matches in the CRM; the full sync decides (it also matches by name and company)"); return 0
+    p = ppl[0]; rid = p["id"]["record_id"]
+    if one(p, "relationship_stage") in ("LOST", "CUSTOMER"):
+        print("closed person; nothing to do"); return 0
+    ext = "pv-" + hashlib.sha1(e.encode()).hexdigest()[:16]
+    same = c.req("POST", "/objects/deals/records/query", json={"filter": {"external_opportunity_id": ext}, "limit": 5}).json().get("data", [])
+    if same:
+        print("this reply already has a deal (open or closed); nothing to do"); return 0
+    mine = c.req("POST", "/objects/deals/records/query", json={"filter": {"associated_people": {"target_object": "people", "target_record_id": rid}}, "limit": 50}).json().get("data", [])
+    if any(one(d, "stage") != "Lost" for d in mine):
+        print("this person already has a deal; nothing to do"); return 0
+    print(f"positive reply ({lead['label']}), exact match, no deal yet -> {'creating the deal' if commit else 'DRY RUN, nothing created'}")
+    if not commit:
+        return 0
+    owner = c.req("GET", "/workspace_members").json()["data"][0]["id"]["workspace_member_id"]
+    _, ok = create_for(c, owner, e, lead, rid)
+    print("deal created" if ok else "deal FAILED")
+    return 0 if ok else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--commit", action="store_true")
+    ap.add_argument("--only-email", default="", help="handle ONE reply fast (no full read of the CRM)")
+    ap.add_argument("--from-event", action="store_true", help="read the replier's email from the GitHub event file (keeps it out of the logs)")
     ap.add_argument("--skip", default="", help="comma-separated emails Ife judged not real interest")
     a = ap.parse_args()
+    if a.from_event:
+        try:
+            ev = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+        except Exception:
+            ev = {}
+        a.only_email = ((ev.get("client_payload") or {}).get("email") or (ev.get("inputs") or {}).get("email") or "").strip()
+        if not a.only_email:
+            print("no email in the signal; the full sync will handle it"); return 0
+    if a.only_email:
+        return fast(a.only_email, a.commit)
     skip = {s.strip().lower() for s in a.skip.split(",") if s.strip()}
     H = {"x-api-key": env()["PLUS_VIBE_API_KEY"]}
 
@@ -172,40 +268,8 @@ def main() -> int:
 
     made = fail = 0
     for e, l, rid in todo:
-        full = " ".join(x for x in (l.get("first_name"), l.get("last_name")) if x).strip()
-        if not rid:
-            vals = {"email_addresses": [{"email_address": e}],
-                    "relationship_stage": [{"option": "INTERESTED"}],
-                    "current_campaign": [{"value": l["campaign"]}],
-                    "legacy_source": [{"value": f"PlusVibe positive reply — {l['campaign']}"}]}
-            if full:
-                parts = full.split()
-                vals["name"] = [{"first_name": first_name(full), "last_name": " ".join(parts[1:]), "full_name": full}]
-            sl, st = linkedin_slug(l.get("linkedin_person_url") or "")
-            if st == "VALID_PROFILE":
-                vals["linkedin_slug"] = [{"value": sl}]
-                # The dashboard and the call lists read the MAIN linkedin field, not the slug: fill both.
-                # Attio rejects non-ASCII addresses in the main field, so those keep the slug only.
-                _li = (l.get("linkedin_person_url") or "").strip()
-                if _li.startswith("http") and _li.isascii():
-                    vals["linkedin"] = [{"value": _li}]
-            r = c.req("POST", "/objects/people/records", json={"data": {"values": vals}})
-            if r.status_code >= 300:
-                print(f"   PERSON FAIL {r.status_code} {_why(r)}"); fail += 1; continue
-            rid = r.json()["data"]["id"]["record_id"]
-        title = f"{full or e} / {l.get('company_name') or ''}".strip(" /")
-        r = c.req("PUT", "/objects/deals/records?matching_attribute=external_opportunity_id", json={"data": {"values": {
-            "name": [{"value": title}],
-            "stage": [{"status": "Meeting Booked" if l["label"] == "MEETING_BOOKED" else "Interested"}],
-            "owner": [{"referenced_actor_type": "workspace-member", "referenced_actor_id": owner}],
-            "external_opportunity_id": [{"value": "pv-" + hashlib.sha1(e.encode()).hexdigest()[:16]}],
-            "source_channel": [{"option": "Cold email"}],
-            "source_campaign": [{"value": l["campaign"]}],
-            "associated_people": [{"target_object": "people", "target_record_id": rid}]}}})
-        if r.status_code >= 300:
-            print(f"   DEAL FAIL {r.status_code} {_why(r)}"); fail += 1
-        else:
-            made += 1
+        _, ok = create_for(c, owner, e, l, rid)
+        made += ok; fail += (not ok)
     print(f"\n{made} deals created, {fail} failed")
     return 1 if fail else 0
 

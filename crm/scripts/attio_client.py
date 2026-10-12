@@ -94,7 +94,7 @@ class AttioClient:
         for _ in range(tries):
             try:
                 r = self.session.request(method, BASE + path, timeout=90, **kw)
-                if r.status_code != 429:
+                if r.status_code != 429 and r.status_code < 500:
                     return r
                 # Retry-After on Attio is an HTTP-date, not seconds — just back off.
             except requests.exceptions.RequestException as e:
@@ -109,7 +109,7 @@ class AttioClient:
             delay *= 1.7
         if last:
             raise last
-        return r
+        return r        # the last answer (a 429 or a 5xx) after every retry
 
     def map(self, fn, items, label: str = ""):
         """Run fn over items across the pool, reporting progress."""
@@ -128,8 +128,18 @@ class AttioClient:
     def query_all(self, obj: str) -> list[dict]:
         out, off = [], 0
         while True:
-            d = self.req("POST", f"/objects/{obj}/records/query",
-                         json={"limit": 500, "offset": off}).json().get("data", [])
+            d = None
+            for attempt in range(6):                       # an error page instead of data is retried, never read as an empty list
+                r = self.req("POST", f"/objects/{obj}/records/query", json={"limit": 500, "offset": off})
+                try:
+                    d = r.json().get("data", []) if r.status_code < 300 else None
+                except ValueError:
+                    d = None
+                if d is not None:
+                    break
+                time.sleep(2.0 * (attempt + 1))
+            if d is None:
+                raise RuntimeError(f"Attio kept answering {r.status_code} while reading {obj}")
             out += d
             if len(d) < 500:
                 return out

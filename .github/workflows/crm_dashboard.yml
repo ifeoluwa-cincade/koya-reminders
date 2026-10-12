@@ -84,6 +84,7 @@ jobs:
           git fetch -q --depth 1 origin dashboard-build
           mkdir -p "$GITHUB_WORKSPACE/data/working"
           git show FETCH_HEAD:check_history.json > "$GITHUB_WORKSPACE/data/working/check_history.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/check_history.json"
+          git show FETCH_HEAD:ops_last_good.json > "$GITHUB_WORKSPACE/data/working/ops_last_good.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/ops_last_good.json"
       - name: Collect opportunities and system checks
         continue-on-error: true
         run: python crm/dashboard/collect_ops.py
@@ -95,6 +96,19 @@ jobs:
           rm -rf /tmp/out && mkdir /tmp/out
           cp data/working/koya_cold_email.html /tmp/out/koya_cold_email.html
           [ -f data/working/check_history.json ] && cp data/working/check_history.json /tmp/out/check_history.json || true
+          # keep the last list that was read properly, so one bad hour never blanks the Opportunities tab
+          python3 - <<'PY'
+          import json, shutil, os
+          W = "data/working/"
+          try:
+              ops = json.load(open(W + "ops.json"))
+          except Exception:
+              ops = {}
+          if ops.get("opps") and not ops.get("errors"):
+              json.dump({"opps": ops["opps"], "ops_at": ops.get("generated_at")}, open("/tmp/out/ops_last_good.json", "w"))
+          elif os.path.exists(W + "ops_last_good.json"):
+              shutil.copy(W + "ops_last_good.json", "/tmp/out/ops_last_good.json")
+          PY
           date -u +%Y-%m-%dT%H:%M:%SZ > /tmp/out/built_at.txt
           cd /tmp/out
           git init -q -b "$TARGET_BRANCH"

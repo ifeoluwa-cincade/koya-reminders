@@ -38,6 +38,16 @@ def main() -> int:
     # Opportunities and system checks, collected by collect_ops.py in the same hourly job (empty if that part failed)
     ops_path = ROOT / "data/working/ops.json"
     ops = json.loads(ops_path.read_text()) if ops_path.exists() else {}
+    lg = ROOT / "data/working/ops_last_good.json"        # the last hour that read the list properly (kept in the private repository)
+    if not ops.get("opps") and lg.exists():
+        try:
+            good = json.loads(lg.read_text())
+            if good.get("opps"):
+                ops["opps"] = good["opps"]
+                ops["checks"] = (ops.get("checks") or []) + [{"id": "opps_stale", "node": "attio", "name": "Opportunities list", "status": "warn",
+                    "detail": "could not be read this hour, showing the list from " + str(good.get("ops_at") or good.get("generated_at") or "an earlier build")[:16].replace("T", " ") + " UTC", "at": None}]
+        except Exception:
+            pass
     hp = ROOT / "data/working/check_history.json"
     if not hp.exists():
         hp = ROOT / "crm/dashboard/check_history_seed.json"
