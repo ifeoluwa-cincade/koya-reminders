@@ -5,6 +5,8 @@ name: Dashboard build
 # (the "dashboard-build" branch there) with a key that can write to that one repository only. A routine in claude.ai then publishes it.
 # Runs every hour at 5 minutes past, so a fresh page is ready before the publishing routine runs at 20 past. It can also be started by hand. A manual run with test=true writes to a test branch and leaves the live page alone.
 on:
+  push:
+    branches: [crm-trigger]      # the hourly routine in claude.ai pushes here: GitHub's own timer is unreliable
   schedule:
     - cron: "5 * * * *"
   workflow_dispatch:

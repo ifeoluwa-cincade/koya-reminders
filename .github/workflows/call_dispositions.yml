@@ -7,6 +7,8 @@ name: Call dispositions
 # Runs every morning and evening (the evening run is late so the day's calls are counted), and can be started by hand.
 # Calls already handled are remembered, so a run only works on new calls. A manual run defaults to a DRY RUN.
 on:
+  push:
+    branches: [crm-trigger]      # the hourly routine in claude.ai pushes here: GitHub's own timer is unreliable
   schedule:
     - cron: "30 8 * * *"
     - cron: "30 20 * * *"
@@ -24,6 +26,8 @@ concurrency:
 
 jobs:
   dispositions:
+    # the hourly push only runs this at 08 and 20 UTC (morning and evening); the cron lines above are the backup
+    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.timestamp, 'T08:') || contains(github.event.head_commit.timestamp, 'T20:') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:

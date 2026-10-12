@@ -4,6 +4,8 @@ name: PlusVibe positive-reply phone lookup
 # Starts the instant a real reply arrives (repository_dispatch from the Apps Script relay) and four times a day as a safety net.
 # What was already handled is remembered in the Google Sheet itself, so a repeat run never double-posts.
 on:
+  push:
+    branches: [crm-trigger]      # the hourly routine in claude.ai pushes here: GitHub's own timer is unreliable
   repository_dispatch:
     types: [plusvibe_reply]
   schedule:

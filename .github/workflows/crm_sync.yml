@@ -7,6 +7,8 @@ name: CRM sync
 # All three scripts are safe to run twice: they check what already exists before writing.
 # workflow_dispatch defaults to a DRY RUN that changes nothing.
 on:
+  push:
+    branches: [crm-trigger]      # the hourly routine in claude.ai pushes here: GitHub's own timer is unreliable
   repository_dispatch:
     types: [plusvibe_reply]
   schedule:
