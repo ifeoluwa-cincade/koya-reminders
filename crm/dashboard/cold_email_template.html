@@ -494,7 +494,7 @@
   <button class="qsbtn" id="qsbtn" type="button" aria-label="Search leads"><span class="lbl">Search leads</span><kbd>Ctrl K</kbd></button>
 </div></div>
 
-<div id="liveBanner" class="livebanner" role="status" hidden><div class="wrap"><span id="liveBannerTxt">Live connection is off, so this page is only showing the hourly data.</span><button type="button" class="pbtn" id="allowLive">Allow live access</button></div></div>
+<div id="liveBanner" class="livebanner" role="status" hidden><div class="wrap"><span id="liveBannerTxt">Live connection is off, so this page is only showing the hourly data.</span><button type="button" class="pbtn" id="allowLive">Allow live access</button><button type="button" class="pbtn" id="liveWhy">Why is it off?</button></div><div class="wrap" id="liveDiagWrap" hidden><pre id="liveDiag" style="white-space:pre-wrap;font-size:12px;margin:8px 0;user-select:all"></pre><button type="button" class="pbtn" id="liveCopy">Copy</button></div></div>
 <div id="ptr" role="status" aria-live="polite"><span class="pa" aria-hidden="true">↓</span><span class="psp" aria-hidden="true"></span><span id="ptrtxt">Pull to refresh</span></div>
 <div id="tab-dash" class="tabpanel">
 <div class="wrap">
@@ -1246,6 +1246,20 @@
     function sync(){ bn.hidden=!!MCP; }
     var iv=setInterval(function(){ tries++; sync(); if (MCP) clearInterval(iv); }, 1500);
     setTimeout(sync, 2500);
+    document.getElementById("liveWhy").addEventListener("click",function(){
+      var z=document.getElementById("liveDiag"), w=document.getElementById("liveDiagWrap"), out=[]; w.hidden=false; z.textContent="Checking…";
+      function J(x){ try{ return JSON.stringify(x); }catch(e){ return String(x); } }
+      var c=window.claude; out.push("claude object: "+(c?"yes":"NO (not served by the viewer)")+"; use: "+(c&&c.use?"yes":"no"));
+      if(!c||!c.use){ z.textContent=out.join("\n"); return; }
+      c.use("permissions").then(function(p){ out.push("permissions: "+(p?"yes":"null")); if(!p) return null;
+        return Promise.all([p.state("mcp"),p.state("mcp:Attio"),p.state("mcp:PlusVibe"),p.state("mcp:CloudTalk")].map(function(x){ return Promise.resolve(x).catch(function(e){ return "err "+J(e); }); })).then(function(st){ out.push("state mcp/Attio/PlusVibe/CloudTalk: "+J(st)); });
+      }).catch(function(e){ out.push("permissions error: "+J(e)); }).then(function(){ return c.use("mcp"); }).then(function(m){
+        out.push("mcp namespace: "+(m?"yes":"NULL"));
+        if(!m) return;
+        return m.listTools().then(function(r){ out.push("servers: "+J((r.servers||[]).map(function(x){ return {server:x.server,auth:x.authStatus,kind:x.kind,tools:(x.tools||[]).map(function(t){ return t.name; })}; }))); },function(e){ out.push("listTools error: "+J(e)); });
+      }).catch(function(e){ out.push("mcp error: "+J(e)); }).then(function(){ out.push("page: "+location.host+"; time "+new Date().toISOString()); z.textContent=out.join("\n"); });
+    });
+    document.getElementById("liveCopy").addEventListener("click",function(){ var t=document.getElementById("liveDiag").textContent, b=this; function ok(){ b.textContent="Copied"; setTimeout(function(){ b.textContent="Copy"; },1500); } try{ navigator.clipboard.writeText(t).then(ok,function(){ var r=document.createRange(); r.selectNodeContents(document.getElementById("liveDiag")); var se=getSelection(); se.removeAllRanges(); se.addRange(r); b.textContent="Selected: copy it"; }); }catch(e){ b.textContent="Select and copy"; } });
     btn.addEventListener("click",function(){
       btn.disabled=true; btn.textContent="Asking…";
       var P=window.claude && window.claude.use ? window.claude.use("permissions") : Promise.resolve(null);
@@ -2286,7 +2300,7 @@
     var jobs=[];
     if (typeof MCP!=="undefined" && !MCP){ var ab=document.getElementById("allowLive"); if(ab && !ab.disabled) ab.click(); }   // live access is off: a pull asks for it
     try{ if (typeof MCP!=="undefined" && MCP){ jobs.push(MCP.invalidate().catch(function(){}).then(function(){ return Promise.all([ liveSync(), liveNumbers() ]); })); } }catch(e){}
-    var done=function(ok){ el.classList.remove("busy"); setTxt(ok?"Updated just now":"The live connection is still starting. Try again in a few seconds."); setTimeout(function(){ el.classList.remove("show"); busy=false; if(!ok) lastRun=0; }, ok?1400:2600); };
+    var done=function(ok){ el.classList.remove("busy"); setTxt(ok?"Updated just now":"Live access is off. Tap the amber bar at the top, then Why is it off?"); setTimeout(function(){ el.classList.remove("show"); busy=false; if(!ok) lastRun=0; }, ok?1400:2600); };
     if (!jobs.length) { setTimeout(function(){ done(false); }, 400); return; }
     Promise.all(jobs).then(function(){ done(true); },function(){ done(false); });
   }
