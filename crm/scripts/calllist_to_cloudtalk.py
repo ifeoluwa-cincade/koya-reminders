@@ -182,6 +182,7 @@ def main() -> int:
     print(f"Attio people read: {len(allp):,}")
 
     plan_add, plan_create, plan_remove, summary = [], [], [], {}
+    plan_fill, filled = [], set()
     for L in spec:
         if a.only and L["slug"] != a.only:
             continue
@@ -211,7 +212,10 @@ def main() -> int:
             emails = [x.get("email_address", "").lower() for x in (p["values"].get("email_addresses") or [])]
             cid = next((by_email[x] for x in emails if x in by_email), None) or by_phone.get(e164)
             if cid and cid not in has_number:
-                skip["CloudTalk contact has no number"] += 1; continue
+                # 2026-10-12: the contact exists (copied over by the Attio link) but holds no number, because the number was found
+                # after it was copied. Put Attio's number on it, then label it as normal.
+                if cid not in filled:
+                    plan_fill.append((cid, e164)); filled.add(cid)
             if cid:
                 want.add(cid)
                 if cid not in tagged_now[L["tag"]]:
@@ -227,7 +231,7 @@ def main() -> int:
         summary[L["slug"]] = (len(entries), len(want), dict(skip))
         print(f"{L['slug']}: {len(entries)} entries, {len(want)} ready, skipped {dict(skip)}, notes {dict(note)}")
 
-    print(f"to tag: {len(plan_add)} | to create in CloudTalk: {len(plan_create)} | to untag: {len(plan_remove)}")
+    print(f"to tag: {len(plan_add)} | to create in CloudTalk: {len(plan_create)} | to untag: {len(plan_remove)} | numbers to add to existing contacts: {len(plan_fill)}")
 
     # ---- the campaign check (Ife 2026-10-12): a label is only useful if a campaign that uses it is ACTIVE. Never switch an inactive one on.
     legacy_st, dialer_st = campaign_statuses(H)
@@ -253,6 +257,13 @@ def main() -> int:
     if not a.commit:
         print("DRY RUN: nothing written"); return 0
 
+    nfill = nfill_bad = 0
+    for cid, e164 in plan_fill:
+        if req("POST", f"/contacts/edit/{cid}.json", H, json={"ContactNumber": [{"public_number": e164}]}).status_code < 300:
+            nfill += 1
+        else:
+            nfill_bad += 1
+    print(f"numbers added to existing contacts: {nfill}, failed {nfill_bad}")
     ok = bad = 0
     for cid, tag, lid, eid in plan_add:
         r = req("PUT", f"/contacts/addTags/{cid}.json", H, json={"tags": [tag]})
