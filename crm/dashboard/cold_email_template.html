@@ -343,6 +343,7 @@
   .rbtn:hover{background:var(--ink); color:#fff; border-color:var(--ink);}
   .rzbox{border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-top:10px; background:var(--bg-soft);}
   .rzh{font-weight:600; font-size:14px; margin-bottom:6px;}
+  .rzh2{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); margin:12px 0 4px;} .rzr small{color:var(--ink-3); margin-left:4px;}
   .rzr{display:flex; gap:12px; padding:3px 0; font-size:13px; flex-wrap:wrap;} .rzr span:first-child{width:170px; color:var(--ink-3); flex:none;} .rzr span:last-child{min-width:0; overflow-wrap:anywhere;}
   .rzl{display:flex; gap:8px; align-items:center; margin:8px 0; font-size:13px;} .rzl select,.rzl input[type=date]{font:inherit; padding:5px 8px; border:1px solid var(--line); border-radius:8px; background:#fff;}
   .rzb{display:flex; gap:8px; margin-top:10px;} .rzgo{background:var(--ink); color:#fff; border-color:var(--ink);} .rbtn:disabled{opacity:.5; cursor:default;}
@@ -1258,7 +1259,7 @@
       else if(LIVE_ERR){ t="Live: error (tap)"; bad=true; }
       else if(LIVE_AT){ t="Live: on, checked "+Math.max(0,Math.round((Date.now()-LIVE_AT)/60000))+" min ago"; }
       else t="Live: connecting";
-      pill.textContent=t; pill.style.background=bad?"#fff4d6":""; pill.style.borderColor=bad?"#e08a3c":"";
+      pill.textContent=t; pill.hidden=!bad; pill.style.background=bad?"#fff4d6":""; pill.style.borderColor=bad?"#e08a3c":"";
     }
     setInterval(pillSync,2000); pillSync();
     function runDiag(){
@@ -1531,10 +1532,29 @@
       return {deal:attioVal(db,"stage"), next:attioVal(db,"next_action_at"), reason:attioVal(db,"lost_reason"), rel:attioVal(pb,"relationship_stage"), paused:attioVal(pb,"outreach_paused"), conn:attioVal(pb,"linkedin_connection")};
     });
   }
+  var PVTAGS=[["INTERESTED","Interested"],["NOT_INTERESTED","Not interested"],["OUT_OF_OFFICE","Out of office"],["AUTOMATIC_REPLY","Auto reply"],["MEETING_BOOKED","Meeting booked"],["MEETING_COMPLETED","Meeting completed"],["WRONG_PERSON","Wrong person"],["CLOSED","Closed"],["CYCLE_1","Cycle 1"],["CYCLE_2","Cycle 2"],["FOLLOW_UPS","Follow ups"],["HIRING_GUIDE_SENT","Hiring guide sent"],["LATER","Later"]];
+  var PVSTATUS={REPLIED:"replied, sending stopped",COMPLETED:"finished",NOT_CONTACTED:"waiting for its next email",CONTACTED:"sending",ACTIVE:"sending",IN_PROGRESS:"sending",PAUSED:"paused",SKIPPED:"skipped",BOUNCED:"bounced",UNSUBSCRIBED:"unsubscribed"};
+  var DONE_ST=["COMPLETED","REPLIED","BOUNCED","UNSUBSCRIBED","SKIPPED"];
+  var RZPICK=null, RZPICKED=false;
+  function defaultTag(act,reasonVal){ if(act==="lost") return reasonVal==="BAD_FIT"?"WRONG_PERSON":"NOT_INTERESTED"; return RZTAG[act]||"KEEP"; }
+  function tagName(k){ var f=PVTAGS.filter(function(t){ return t[0]===k; })[0]; return f?f[1]:(k&&k!=="KEEP"?k.replace(/_/g," ").toLowerCase():"no tag"); }
+  // the whole PlusVibe picture BEFORE you confirm: where the lead is in every sequence now, what each one becomes, and the tag to put on them
+  function rzPvBlock(o,act,a,pv){
+    var rows=(o.sequence&&o.sequence.length)?o.sequence:(pv||[]).map(function(x){ return {id:x.campaign,name:x.name,sub:x.sub,status:x.status,label:x.label}; });
+    var curTag=(rows.filter(function(x){ return x.label; })[0]||{}).label||"";
+    RZPICK=defaultTag(act,(document.getElementById("rzreason")||{}).value||"");
+    var h='<div class="rzh2">Where they are in PlusVibe now</div>';
+    h+=rows.length?rows.map(function(x){ var stopNow=a.stop&&DONE_ST.indexOf(x.status)<0&&x.status;
+      return '<div class="rzr"><span>'+esc(x.name||"Campaign")+' <small>'+(x.sub?"subsequence":"main")+'</small></span><span>'+esc(PVSTATUS[x.status]||x.status||"no record")+(stopNow?' → <b>stopped</b>':'')+'</span></div>'; }).join(""):'<div class="rzr"><span>PlusVibe</span><span>not in any campaign</span></div>';
+    h+='<div class="rzr"><span>Tag on them now</span><span><b>'+esc(tagName(curTag))+'</b></span></div>';
+    if(a.stop) h+='<div class="rzh2">Tag to put on them</div><div class="stagechips" id="rztags" role="group">'+[["KEEP","Keep "+tagName(curTag)]].concat(PVTAGS).map(function(t){ return '<button type="button" class="schip" data-tg="'+t[0]+'" aria-pressed="'+(t[0]===RZPICK)+'">'+esc(t[1])+'</button>'; }).join("")+'</div>';
+    if(a.stop) h+='<div class="tnote" id="rztagnote">The tag is put on them within a minute of confirming.</div>';
+    return h;
+  }
   var RZSTATE=null;
   function rzOpen(act){
     var o=oppById(openId), z=document.getElementById("rzone"); if(!o||!z) return;
-    if(!MCP){ z.innerHTML='<p class="tnote" style="color:var(--down)">Live access is off, so nothing can be changed from here yet. Tap the Live pill at the bottom left, then Allow live access.</p>'; return; }
+    if(!MCP){ z.innerHTML='<p class="tnote" style="color:var(--down)">Live access is off, so nothing can be changed from here yet. Tap Allow live access in the bar at the top.</p>'; return; }
     z.innerHTML='<p class="tnote">Checking the live state in Attio and PlusVibe…</p>';
     Promise.all([attioNow(o), o.email?pvRowsAll(o):Promise.resolve([])]).then(function(rs){
       var cur=rs[0], pv=rs[1], a=RZ[act], rows=[], did=dealIdOf(o);
@@ -1545,15 +1565,15 @@
       if (a.rel) rows.push(["Attio person",(cur.rel||"?")+" → "+a.rel+", outreach paused"]);
       if (a.entry && (o.lists||[]).length) rows.push(["Attio call lists",(o.lists||[]).length+" list"+((o.lists||[]).length>1?"s":"")+" marked "+a.entry]);
       var html='<div class="rzbox"><div class="rzh">'+esc(a.label)+': what will change</div>'+rows.map(function(r){ return '<div class="rzr"><span>'+esc(r[0])+'</span><span>'+esc(r[1])+'</span></div>'; }).join("");
-      if (a.stop){ html+= pv.length ? pv.map(function(x){ return '<div class="rzr"><span>PlusVibe emails</span><span>'+esc(x.campaign.slice(-6))+': '+esc(x.status)+' → COMPLETED</span></div>'; }).join("") : '<div class="rzr"><span>PlusVibe emails</span><span>not in any campaign, nothing to stop</span></div>'; }
-      if (a.stop){ var curLab=((pv||[]).filter(function(x){ return x.label; })[0]||{}).label||"none", newTag=RZTAG[act]||(act==="lost"?"by the reason: Not interested = NOT_INTERESTED, Bad fit = WRONG_PERSON, otherwise CLOSED":"");
-        html+='<div class="rzr"><span>PlusVibe tag</span><span>'+esc(curLab)+' → '+esc(newTag||"unchanged")+' (set within a minute)</span></div>'; }
+      if (a.stop || a.deal){ html+=rzPvBlock(o,act,a,pv); }
       if (a.reason===true) html+='<label class="rzl">Why lost <select id="rzreason">'+REASONS.map(function(r){ return '<option>'+r+'</option>'; }).join("")+'</select></label>';
       if (a.date) html+='<div class="fup"><div class="fqs"><button type="button" class="schip" data-q="15m">In 15 min</button><button type="button" class="schip" data-q="1h">In 1 hour</button><button type="button" class="schip" data-q="tom">Tomorrow 9:00</button><button type="button" class="schip" data-q="mon">Next Monday 9:00</button></div><div class="fcal" id="fcal"></div><div class="ftime"><span>Time</span><button type="button" class="tbtn" id="ftbtn" aria-expanded="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><b id="ftlab">09:00</b><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button><span class="tnote">Lagos time</span></div><input type="hidden" id="rztime" value="09:00"><div class="tpick" id="tpick" hidden><div class="clk" id="clk"></div></div><input type="hidden" id="rzdate"><div class="fsum" id="fsum">Pick a day</div></div>';
       if (a.date) html+='<label class="rzl planl" for="rzplan">Note for this follow-up <span class="tnote">(optional, it is shown in the reminder)</span></label><textarea id="rzplan" class="rnote" rows="2" maxlength="500" placeholder="For example: check if he accepted the connection request, or call him again"></textarea>';
       if (a.stop) html+='<label class="rzl"><input type="checkbox" id="rzstop" checked> Stop the emails in PlusVibe</label>';
       html+='<div class="rzb"><button class="pbtn" type="button" id="rzgo">Confirm</button><button class="pbtn ghost" type="button" id="rzcancel">Cancel</button></div><div id="rzres"></div></div>';
       z.innerHTML=html; if (a.date) fupStart(o);
+      var tg=document.getElementById("rztags"); if (tg) tg.addEventListener("click",function(e){ var b=e.target.closest("[data-tg]"); if(!b) return; RZPICK=b.dataset.tg; RZPICKED=true; Array.prototype.forEach.call(tg.querySelectorAll("[data-tg]"),function(x){ x.setAttribute("aria-pressed",String(x===b)); }); });
+      RZPICKED=false; var rs0=document.getElementById("rzreason"); if (rs0 && tg) rs0.addEventListener("change",function(){ if(RZPICKED) return; RZPICK=defaultTag(act,rs0.value); Array.prototype.forEach.call(tg.querySelectorAll("[data-tg]"),function(x){ x.setAttribute("aria-pressed",String(x.dataset.tg===RZPICK)); }); });
       var rsel=document.getElementById("rzreason");
       if (rsel){                                                   // start from the reason PlusVibe already has for this lead
         var lb=((pv||[]).filter(function(x){ return x.label; })[0]||{}).label||"", mp=({NOT_INTERESTED:"NOT_INTERESTED",WRONG_PERSON:"BAD_FIT",LATER:"TIMING",OUT_OF_OFFICE:"NO_RESPONSE"})[lb];
@@ -1661,7 +1681,7 @@
     function step(name,fn){ seq=seq.then(function(){ return fn().then(function(){ log.push([name,true,""]); },function(e){ log.push([name,false,errText(e)]); }); }); }
     var plan=(document.getElementById("rzplan")||{value:""}).value.trim();
     if (a.date && plan && did && plan!==planOf(o)) step("Follow-up note",function(){ return MCP.callTool("Attio","create-note",{title:"Follow-up note · "+until+" "+utime,content:plan,parent_object:"deals",parent_record_id:did},{cache:false}).then(function(r){ if(!/[0-9a-f]{8}-[0-9a-f-]{27}/.test(txt(r))) throw {code:"upstream_error",message:"Attio did not confirm the plan note"}; (o.notes=o.notes||[]).unshift({id:"plan"+Date.now(),title:"Follow-up note · "+until+" "+utime,text:plan,t:new Date().toISOString(),kind:"note",on:"deal"}); persistNote(o,"Follow-up note · "+until+" "+utime,plan,"deal"); }); });
-    if (did){ var dv={}; if(a.deal) dv.stage=a.deal; if(a.reason&&reason) dv.lost_reason=reason; if(a.date) dv.next_action_at=until+"T"+utime+":00+01:00"; if(Object.keys(dv).length) step("Attio deal",function(){ return MCP.callTool("Attio","update-record",{object:"deals",record_id:did,values:dv},{cache:false}); }); }
+    if (did){ var dv={}; if(a.deal) dv.stage=a.deal; if(a.reason&&reason) dv.lost_reason=reason; if(a.date) dv.next_action_at=until+"T"+utime+":00+01:00"; if(a.stop&&RZPICK) dv.plusvibe_tag=RZPICK; if(Object.keys(dv).length) step("Attio deal",function(){ return MCP.callTool("Attio","update-record",{object:"deals",record_id:did,values:dv},{cache:false}); }); }
     if (a.rel) step("Attio person",function(){ return MCP.callTool("Attio","update-record",{object:"people",record_id:o.id,values:{relationship_stage:a.rel,outreach_status:"PAUSED",outreach_paused:true}},{cache:false}); });
     if (a.entry) (o.lists||[]).forEach(function(sl){ step("Attio call list "+sl.replace(/^call_/,""),function(){ return MCP.callTool("Attio","update-list-entry-by-record-id",{list:sl,parent_object:"people",parent_record_id:o.id,entry_values:{call_outcome:a.entry}},{cache:false}); }); });
     if (stop) S.pv.forEach(function(x){ step("PlusVibe "+x.campaign.slice(-6),function(){ return MCP.callTool("PlusVibe","update_lead_status",{workspace_id:PVWS_ID,campaign_id:x.campaign,email:o.email,new_status:"COMPLETED"},{cache:false}); }); });
@@ -1671,6 +1691,7 @@
       if (did&&a.date){ var want=new Date(until+"T"+utime+":00+01:00").toISOString().slice(0,16).replace("T"," "); chk.push(["Attio follow-up time",(n.next||"").indexOf(want)>=0,(n.next||"none").slice(0,40)+" (UTC)"]); }
       if (a.rel) chk.push(["Attio person",n.rel===a.rel,(n.rel||"?")+(n.paused?", paused: "+n.paused:"")]);
       if (stop) pv.forEach(function(x){ chk.push(["PlusVibe "+x.campaign.slice(-6),x.status==="COMPLETED"||x.done===1,x.status+(x.done===1?", completed":"")]); });
+      if (a.stop&&RZPICK) chk.push(["PlusVibe tag",true,(RZPICK==="KEEP"?"kept as it is":tagName(RZPICK)+", being applied now")]);
       var bad=log.filter(function(l){ return !l[1]; }), all=chk.every(function(c){ return c[1]; })&&!bad.length;
       z.innerHTML='<div class="rzdone '+(all?"ok":"bad")+'">'+(all?"Done. Every system was read back and matches.":"Check this one. Something did not match.")+'</div>'+
         chk.map(function(c){ return '<div class="rzr"><span>'+esc(c[0])+'</span><span class="'+(c[1]?"okt":"badt")+'">'+(c[1]?"✓ ":"✗ ")+esc(c[2])+'</span></div>'; }).join("")+
