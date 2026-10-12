@@ -305,6 +305,7 @@
   .tag.src{background:#fff; border:1px solid var(--line); color:var(--ink-3);}
   .oseen{font-size:12.5px; color:var(--ink-3); font-variant-numeric:tabular-nums;}
   .odue{font-size:12.5px; font-weight:600; font-variant-numeric:tabular-nums;}
+  .odue.nodate{color:var(--ink-2); font-weight:500; border:1px dashed var(--line); border-radius:999px; padding:2px 9px; justify-self:start;}
   .odue.over{color:var(--down);} .odue.today{color:var(--amber);} .odue.soon{color:#4a3cc4;} .odue.later{color:var(--ink-3); font-weight:500;}
   @media (max-width:860px){
     .ogrid{grid-template-columns:minmax(0,1fr) auto; row-gap:6px;}
@@ -930,7 +931,7 @@
   function fmtDate(iso){ if(!iso) return "—"; var d=new Date(iso); if(isNaN(d.getTime())) return "—"; return DOW[d.getDay()]+" "+d.getDate()+" "+MON[d.getMonth()]; }
   function dueInfo(o){ if (o.bucket==="lost"||o.bucket==="won") return {n:null,label:(o.bucket==="won"?"Won":"Lost")+(o.closed_at?" "+fmtDate(o.closed_at):""),cls:"later"};
     var n=o.due_set?daysFromNow(o.due):null;          // no follow-up date unless one was set: the "30 days after last touch" guess is never shown as a due date
-    if(n==null) return {n:null,label:"No date",cls:"later"};
+    if(n==null) return {n:null,label:"Set a date",cls:"later nodate"};
     if(n<0) return {n:n,label:"Overdue "+(-n)+"d",cls:"over"};
     if(n===0) return {n:0,label:"Due today",cls:"today"};
     if(n===1) return {n:1,label:"Tomorrow",cls:"soon"};
