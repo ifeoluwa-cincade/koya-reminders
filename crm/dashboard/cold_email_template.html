@@ -1049,7 +1049,7 @@
   }
   function reviewMark(o){
     if (REV[o.id]==="done") return '<span class="orv" data-tip="Resolved"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="#2e9d62"/><path d="M4.6 8.3l2.3 2.3 4.5-4.8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
-    return "";
+    return '<span class="orv" data-tip="Open"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="#fff3e0" stroke="#e08a3c" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="#e08a3c"/></svg></span>';
   }
   function noteIcon(o){
     var n=teamNotes(o); if(!n) return "";
@@ -1058,7 +1058,7 @@
   function liMark(o){
     if (o.li_conn==="Connected") return '<span class="oli" data-tip="Connected on LinkedIn"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0a66c2"/><text x="8" y="12" text-anchor="middle" font-size="9" font-weight="700" fill="#fff" font-family="Arial,sans-serif">in</text></svg></span>';
     if (o.li_conn==="Request sent") return '<span class="oli" data-tip="LinkedIn connection request sent"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x=".75" y=".75" width="14.5" height="14.5" rx="3" fill="#fff" stroke="#6b7480" stroke-dasharray="2 2"/><text x="8" y="12" text-anchor="middle" font-size="9" font-weight="700" fill="#6b7480" font-family="Arial,sans-serif">in</text></svg></span>';
-    return "";
+    return '<span class="oli" data-tip="Not connected on LinkedIn"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x=".75" y=".75" width="14.5" height="14.5" rx="3" fill="none" stroke="#b9c0c7" stroke-width="1.5"/><text x="8" y="12" text-anchor="middle" font-size="9" font-weight="700" fill="#b9c0c7" font-family="Arial,sans-serif">in</text></svg></span>';
   }
   function renderOpps(){
     var over=countWhere(function(o){ return dueInfo(o).cls==="over"; }), today=countWhere(function(o){ return dueInfo(o).cls==="today"; });
@@ -2275,7 +2275,7 @@
 // Scrolling up quickly does NOT count: the trackpad keeps sending "momentum" scroll events after the page reaches the top, so anything in the first 0.8 s at the top is ignored.
 (function(){
   var el=document.getElementById("ptr"), tx=document.getElementById("ptrtxt"), busy=false, lastRun=0, topSince=(window.scrollY<=0?Date.now():null);
-  var T_DRAG=190, T_WHEEL=1100, REST_MS=800, HOLD_MS=450, GAP_MS=160, COOL_MS=30000;
+  var T_DRAG=110, T_WHEEL=420, REST_MS=350, HOLD_MS=0, GAP_MS=200, COOL_MS=8000;
   var startY=null, dy=0, touchT=0, wheelAcc=0, wheelStart=0, lastWheel=0;
   function setTxt(t){ tx.textContent=t; }
   function reset(){ el.classList.remove("pull","ready"); el.style.transform=""; el.style.opacity=""; }
@@ -2284,6 +2284,7 @@
     if (busy || Date.now()-lastRun<COOL_MS) { reset(); return; }
     busy=true; lastRun=Date.now(); reset(); el.classList.add("show","busy"); setTxt("Refreshing…");
     var jobs=[];
+    if (typeof MCP!=="undefined" && !MCP){ var ab=document.getElementById("allowLive"); if(ab && !ab.disabled) ab.click(); }   // live access is off: a pull asks for it
     try{ if (typeof MCP!=="undefined" && MCP){ jobs.push(MCP.invalidate().catch(function(){}).then(function(){ return Promise.all([ liveSync(), liveNumbers() ]); })); } }catch(e){}
     var done=function(ok){ el.classList.remove("busy"); setTxt(ok?"Updated just now":"The live connection is still starting. Try again in a few seconds."); setTimeout(function(){ el.classList.remove("show"); busy=false; if(!ok) lastRun=0; }, ok?1400:2600); };
     if (!jobs.length) { setTimeout(function(){ done(false); }, 400); return; }
@@ -2309,7 +2310,7 @@
     if (busy || window.scrollY>0 || e.deltaY>=0 || panelOpen() || !rested()) { wheelAcc=0; wheelStart=0; if(!busy) reset(); return; }
     if (now-lastWheel>GAP_MS) { wheelAcc=0; wheelStart=now; }          // a new gesture starts after a pause
     lastWheel=now; wheelAcc+=-e.deltaY;
-    if (wheelAcc>=150) { var r=Math.min(wheelAcc/T_WHEEL,1); el.classList.add("pull"); el.style.transform="translate(-50%,"+(r*56-56)+"px)"; el.style.opacity=String(r); el.classList.toggle("ready",r>=1); setTxt(r>=1?"Release to refresh":"Keep pulling to refresh"); }
+    if (wheelAcc>=60) { var r=Math.min(wheelAcc/T_WHEEL,1); el.classList.add("pull"); el.style.transform="translate(-50%,"+(r*56-56)+"px)"; el.style.opacity=String(r); el.classList.toggle("ready",r>=1); setTxt(r>=1?"Release to refresh":"Keep pulling to refresh"); }
     if (wheelAcc>=T_WHEEL && now-wheelStart>=HOLD_MS) { wheelAcc=0; run(); }
   },{passive:true});
   window.addEventListener("wheel",function(){ clearTimeout(window.__ptrT); window.__ptrT=setTimeout(function(){ if(!busy){ wheelAcc=0; reset(); } },300); },{passive:true});

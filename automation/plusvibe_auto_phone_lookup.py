@@ -69,12 +69,30 @@ def raw_values_update(worksheet, cell_range: str, values: list):
     worksheet.client.session.put(url, params={"valueInputOption": "RAW"}, json={"values": values}).raise_for_status()
 
 
+
+def _get(url, **kw):
+    """requests.get that retries a dropped connection or a 5xx (a transient network blip used to fail the whole run)."""
+    import time
+    last = None
+    for i in range(4):
+        try:
+            r = requests.get(url, **kw)
+            if r.status_code < 500 and r.status_code != 429:
+                return r
+            last = r
+        except requests.exceptions.RequestException as e:
+            last = e
+        time.sleep(2 * (i + 1))
+    if isinstance(last, Exception):
+        raise last
+    return last
+
 def pv_headers():
     return {"x-api-key": env("PLUS_VIBE_API_KEY")}
 
 
 def fetch_new_positive_leads(already_seen: set[str]) -> list[dict]:
-    r = requests.get(f"{PV_BASE}/campaign/list-all", headers=pv_headers(),
+    r = _get(f"{PV_BASE}/campaign/list-all", headers=pv_headers(),
                       params={"workspace_id": WORKSPACE_ID}, timeout=30)
     r.raise_for_status()
     camps = r.json()
@@ -84,7 +102,7 @@ def fetch_new_positive_leads(already_seen: set[str]) -> list[dict]:
         if not c.get("lead_count"):
             continue
         cid, cname = c["id"], c["camp_name"]
-        r2 = requests.get(f"{PV_BASE}/lead/workspace-leads", headers=pv_headers(),
+        r2 = _get(f"{PV_BASE}/lead/workspace-leads", headers=pv_headers(),
                            params={"workspace_id": WORKSPACE_ID, "campaign_id": cid,
                                    "limit": 1000, "status": "REPLIED"}, timeout=30)
         if r2.status_code != 200:
@@ -96,7 +114,7 @@ def fetch_new_positive_leads(already_seen: set[str]) -> list[dict]:
                 continue
             is_positive = lead.get("label") in POSITIVE_LABELS
             if not is_positive:
-                r3 = requests.get(f"{PV_BASE}/lead/get", headers=pv_headers(),
+                r3 = _get(f"{PV_BASE}/lead/get", headers=pv_headers(),
                                    params={"workspace_id": WORKSPACE_ID, "email": email}, timeout=30)
                 time.sleep(0.15)
                 if r3.status_code == 200:
@@ -167,7 +185,7 @@ def salesql_hint(linkedin: str) -> str:
     if not linkedin:
         return ""
     try:
-        r = requests.get(SALESQL_URL, headers={"Authorization": f"Bearer {env('SALES_QL_API_KEY')}"},
+        r = _get(SALESQL_URL, headers={"Authorization": f"Bearer {env('SALES_QL_API_KEY')}"},
                           params={"linkedin_url": linkedin}, timeout=30)
         if r.status_code != 200:
             return ""
