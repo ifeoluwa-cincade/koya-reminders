@@ -1059,7 +1059,7 @@
   function liMark(o){
     if (o.li_conn==="Connected") return '<span class="oli" data-tip="Connected on LinkedIn"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0a66c2"/><text x="8" y="12" text-anchor="middle" font-size="9" font-weight="700" fill="#fff" font-family="Arial,sans-serif">in</text></svg></span>';
     if (o.li_conn==="Request sent") return '<span class="oli" data-tip="LinkedIn connection request sent"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x=".75" y=".75" width="14.5" height="14.5" rx="3" fill="#fff" stroke="#6b7480" stroke-dasharray="2 2"/><text x="8" y="12" text-anchor="middle" font-size="9" font-weight="700" fill="#6b7480" font-family="Arial,sans-serif">in</text></svg></span>';
-    return '<span class="oli" data-tip="Not connected on LinkedIn"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x=".75" y=".75" width="14.5" height="14.5" rx="3" fill="none" stroke="#b9c0c7" stroke-width="1.5"/><text x="8" y="12" text-anchor="middle" font-size="9" font-weight="700" fill="#b9c0c7" font-family="Arial,sans-serif">in</text></svg></span>';
+    return '<span class="oli" data-tip="Not connected on LinkedIn yet"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="#8d96a0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.6"/><path d="M1.4 13.4c.3-2.6 2.2-4 4.6-4s4.3 1.4 4.6 4"/><path d="M13 4.2v4M11 6.2h4"/></svg></span>';
   }
   function renderOpps(){
     var over=countWhere(function(o){ return dueInfo(o).cls==="over"; }), today=countWhere(function(o){ return dueInfo(o).cls==="today"; });
@@ -1139,11 +1139,11 @@
       (MCP?'<h4>Calls in CloudTalk</h4><div id="ctcalls">'+callsHTML(o)+'</div>':"")+
       '<h4>Notes in Attio</h4><div id="nlist">'+notesHTML(o)+'</div>'+
       (o.summary?'<h4>'+(o.call_at?"Call summary":"Latest reply")+'</h4><p class="ptext">'+esc(o.summary)+'</p>':"")+
-      seqHTML(o)+
+      '<div id="seqwrap">'+seqHTML(o)+'</div>'+
       (thread?'<h4>Email thread in PlusVibe, newest first</h4><ol class="thread">'+thread+'</ol>':(o.email?'<h4>Email thread in PlusVibe</h4><p class="tnote">No messages were found in PlusVibe for this address.</p>':""))+
       (MCP&&o.email?'<h4>Emails in Attio</h4><p class="tnote">Sent from your own inbox, including anything outside PlusVibe.</p><div id="aemails" class="aemails">'+attioEmailsHTML(o)+'</div>':"")+
       '</div></div>';
-    var p=document.getElementById("panel"); p.innerHTML=html; p.scrollTop=prevOuter; [].forEach.call(p.querySelectorAll(".pcol"),function(c,i){ c.scrollTop=prevScroll[i]||0; });
+    var p=document.getElementById("panel"); p.innerHTML=html; if(MCP && !keepScroll) setTimeout(function(){ refreshSeq(o); },300); p.scrollTop=prevOuter; [].forEach.call(p.querySelectorAll(".pcol"),function(c,i){ c.scrollTop=prevScroll[i]||0; });
     document.getElementById("panelwrap").hidden=false;
     if(!keepScroll) document.getElementById("pclose").focus();
     if (MCP && !keepScroll) refreshOpen(o);
@@ -1496,6 +1496,24 @@
       return {deal:attioVal(db,"stage"), next:attioVal(db,"next_action_at"), reason:attioVal(db,"lost_reason"), rel:attioVal(pb,"relationship_stage"), paused:attioVal(pb,"outreach_paused"), conn:attioVal(pb,"linkedin_connection")};
     });
   }
+  // re-read where the lead is in every PlusVibe sequence (live) and redraw the box on the right; the main sequence and each subsequence are read separately
+  function refreshSeq(o){
+    if (!MCP || !o || !o.email || !(o.sequence||[]).length) return Promise.resolve(false);
+    return Promise.all(o.sequence.map(function(q){
+      return MCP.callTool("PlusVibe","find_lead_by_email",{workspace_id:PVWS_ID,email:o.email,campaign_id:q.id},{cache:false}).then(function(r){
+        var j=pvJson(r), row=Array.isArray(j)?j.filter(function(x){ return (x.campaign||(x.lead_data||{}).campaign_id)===q.id; })[0]:null;
+        if (row){ q.status=row.status||q.status; q.label=row.label||(row.lead_data||{}).label||""; if (DONE_ST.indexOf(q.status)>=0) q.next=null; }
+      }).catch(function(){});
+    })).then(function(){ var w=document.getElementById("seqwrap"); if (w && openId===o.id) w.innerHTML=seqHTML(o); return true; });
+  }
+  // after a stage change: keep re-reading for up to a minute until PlusVibe shows the new tag and the sequences stopped
+  function watchSeq(o,tag,stop){
+    var waits=[2500,6000,10000,15000,20000,25000], i=0;
+    function matched(){ return (o.sequence||[]).every(function(q){ return (!tag||tag==="KEEP"||!q.status||q.label===tag||DONE_ST.indexOf(q.status)>=0&&!q.label) && (!stop||!q.status||DONE_ST.indexOf(q.status)>=0); }); }
+    return new Promise(function(res){
+      (function step(){ refreshSeq(o).then(function(){ if (matched()||i>=waits.length) return res(matched()); setTimeout(step,waits[i++]); }); })();
+    });
+  }
   var PVTAGS=[["INTERESTED","Interested"],["NOT_INTERESTED","Not interested"],["OUT_OF_OFFICE","Out of office"],["AUTOMATIC_REPLY","Auto reply"],["MEETING_BOOKED","Meeting booked"],["MEETING_COMPLETED","Meeting completed"],["WRONG_PERSON","Wrong person"],["CLOSED","Closed"],["CYCLE_1","Cycle 1"],["CYCLE_2","Cycle 2"],["FOLLOW_UPS","Follow ups"],["HIRING_GUIDE_SENT","Hiring guide sent"],["LATER","Later"]];
   var PVSTATUS={REPLIED:"replied, sending stopped",COMPLETED:"finished",NOT_CONTACTED:"waiting for its next email",CONTACTED:"sending",ACTIVE:"sending",IN_PROGRESS:"sending",PAUSED:"paused",SKIPPED:"skipped",BOUNCED:"bounced",UNSUBSCRIBED:"unsubscribed"};
   var DONE_ST=["COMPLETED","REPLIED","BOUNCED","UNSUBSCRIBED","SKIPPED"];
@@ -1662,9 +1680,9 @@
         bad.map(function(l){ return '<div class="rzr"><span>'+esc(l[0])+'</span><span class="badt">'+esc(l[2])+'</span></div>'; }).join("");
       if (all && a.deal && !/^(Won|Lost)/.test(a.deal) && a.rel!=="CUSTOMER" && a.rel!=="LOST"){            // a plain stage move: show the new stage straight away
         o.stage=a.deal; var bkk=stageBucket(a.deal); if(bkk){ o.bucket=bkk; o.status=BUCKET_NAME[bkk]; }
-        setTimeout(function(){ if(openId===o.id) openPanel(o.id,true); if(tab==="opps") renderOpps(); },1500);
+        setTimeout(function(){ if(openId===o.id) openPanel(o.id,true); if(tab==="opps") renderOpps(); if(stop) watchSeq(o,RZPICK,true); },1500);
       }
-      if (all && (a.rel==="LOST"||a.rel==="CUSTOMER"||/^(Won|Lost)/.test(a.deal||""))){ o.resolved=true; o.closedAs=(a.rel==="CUSTOMER"||/^Won/.test(a.deal||""))?"won":"lost"; o.reason=reason||a.reason||null; var gb=document.querySelector("#rzone .rzb"); if(gb) gb.hidden=true; setTimeout(function(){ if(openId===o.id) closePanel(); },2200); }
+      if (all && (a.rel==="LOST"||a.rel==="CUSTOMER"||/^(Won|Lost)/.test(a.deal||""))){ o.resolved=true; o.closedAs=(a.rel==="CUSTOMER"||/^Won/.test(a.deal||""))?"won":"lost"; o.reason=reason||a.reason||null; var gb=document.querySelector("#rzone .rzb"); if(gb) gb.hidden=true; var wz=document.getElementById("rzres"); if(wz&&stop) wz.insertAdjacentHTML("beforeend",'<p class="tnote" id="rzwait">Waiting for PlusVibe to show the new tag on the right…</p>'); (stop?watchSeq(o,RZPICK,true):Promise.resolve(true)).then(function(){ var ww=document.getElementById("rzwait"); if(ww) ww.textContent="PlusVibe now shows this."; setTimeout(function(){ if(openId===o.id) closePanel(); },3500); }); }
       logAct(all?(a.date?"followup":"resolve"):"error", all?(a.date?"Follow-up set for "+leadLabel(o)+": "+fmtWhen(new Date(until+"T"+utime+":00+01:00").toISOString()):leadLabel(o)+": "+a.label+(stop?", emails and calls stopped":"")):"Close-out did not fully match for "+leadLabel(o)+" ("+a.label+")",o.id);
       return MCP.invalidate().catch(function(){}).then(function(){ return liveSync(); }).then(function(){
         if (all && a.date){ var o2=oppById(o.id); if(o2){ o2.due=new Date(until+"T"+utime+":00+01:00").toISOString(); o2.due_set=true; } setTimeout(function(){ if(openId===o.id) openPanel(o.id,true); },1500); }
