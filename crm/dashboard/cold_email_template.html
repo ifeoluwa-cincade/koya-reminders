@@ -608,7 +608,7 @@
 <div class="wrap">
   <div class="sect"><h2>Systems &amp; operations</h2><span id="sysAge"></span></div>
   <div class="sysbar"><span class="sysbadge" id="sysBadge"></span></div>
-  <div class="sect"><h2><button type="button" class="foldbtn" data-fold="up" aria-expanded="true" aria-controls="fold-up"><svg class="fchev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>Uptime</button></h2><div class="seg" id="upseg" role="group" aria-label="Range"><button type="button" class="segb" data-n="30" aria-pressed="true">30 days</button><button type="button" class="segb" data-n="90" aria-pressed="false">90 days</button></div></div>
+  <div class="sect"><h2><button type="button" class="foldbtn" data-fold="up" aria-expanded="true" aria-controls="fold-up"><svg class="fchev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>Uptime</button></h2><div class="seg" id="upseg" role="group" aria-label="Range"><button type="button" class="segb" data-n="24h" aria-pressed="false">24 hours</button><button type="button" class="segb" data-n="7d" aria-pressed="true">7 days</button><button type="button" class="segb" data-n="30" aria-pressed="false">30 days</button><button type="button" class="segb" data-n="90" aria-pressed="false">90 days</button></div></div>
   <div class="foldbody" id="fold-up">
   <div class="uplist" id="uplist"></div>
   <p class="tnote upnote" id="upnote"></p>
@@ -1934,32 +1934,35 @@
   }
 
   // ----- uptime bars and past incidents, from the stored hourly check history
-  var UPN=30;
+  var UPR="7d", UPSPEC={"24h":{h:1,cnt:24,lab:"24 hours ago",end:"Now"},"7d":{h:3,cnt:56,lab:"7 days ago",end:"Now"},"30":{d:30,lab:"30 days ago",end:"Today"},"90":{d:90,lab:"90 days ago",end:"Today"}};   // 24 hours: a cell per hour; 7 days: a cell per 3 hours; 30 and 90 days: a cell per day
   var HIST=(DATA.history||{runs:[],names:{}}), NOTES=(DATA.notes||[]);
   var WORST={o:0,i:0,w:1,b:2};
   function lagosDay(t){ return new Date(Date.parse(t)+36e5).toISOString().slice(0,10); }
   function fmtDur(ms){ var m=Math.round(ms/6e4); if(m<60) return m+" min"; if(m<2880){ var h=Math.floor(m/60), r=m%60; return h+" h"+(r?" "+r+" min":""); } return Math.round(m/1440)+" days"; }
   function fmtAt(t){ return new Date(t).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",timeZone:"Africa/Lagos"}); }
   function nodeIds(n){ return Object.keys(HIST.names).filter(function(id){ return HIST.names[id].node===n; }); }
+  function hhmm(t){ return new Date(t).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",timeZone:"Africa/Lagos"}); }
   function renderUptime(){
-    var runs=HIST.runs||[], today=lagosDay(new Date().toISOString()), days=[];
-    for (var i=UPN-1;i>=0;i--) days.push(iso(N(today)-i));
-    var first=runs.length?lagosDay(runs[0].t):null;
+    var runs=HIST.runs||[], spec=UPSPEC[UPR], today=lagosDay(new Date().toISOString()), days=[], hb=[], size=(spec.h||0)*36e5;
+    if (spec.d){ for (var i=spec.d-1;i>=0;i--) days.push(iso(N(today)-i)); }
+    else { var end=Math.ceil(Date.now()/size)*size; for (var k=0;k<spec.cnt;k++) hb.push(end-(spec.cnt-k)*size); }
+    var keys=spec.d?days:hb, first=runs.length?lagosDay(runs[0].t):null;
     var nodes=NODES.filter(function(n){ return nodeIds(n.id).length; });
     document.getElementById("uplist").innerHTML=nodes.map(function(n){
-      var ids=nodeIds(n.id), perDay={}, up=0, tot=0;
+      var ids=nodeIds(n.id), per={}, up=0, tot=0;
       runs.forEach(function(r){
         var w=-1; ids.forEach(function(id){ var c=r.s[id]; if(c!=null) w=Math.max(w,WORST[c]||0); }); if(w<0) return;
-        var d=lagosDay(r.t), o=perDay[d]||(perDay[d]={w:0,runs:0,bad:0}); o.w=Math.max(o.w,w); o.runs++; if(w===2) o.bad++;
-        if (days.indexOf(d)>=0){ tot++; if(w<2) up++; } });
-      var cells=days.map(function(d){ var o=perDay[d], cls=!o?"":o.w===2?"bad":o.w===1?"warn":"ok";
-        var tip=fmtDay(d)+" · "+(!o?"no data collected":o.w===2?o.bad+" of "+o.runs+" check runs had a failure":o.w===1?"something needed a look":"all good");
+        var key=spec.d?lagosDay(r.t):Math.floor(Date.parse(r.t)/size)*size, o=per[key]||(per[key]={w:0,runs:0,bad:0}); o.w=Math.max(o.w,w); o.runs++; if(w===2) o.bad++;
+        if (keys.indexOf(key)>=0){ tot++; if(w<2) up++; } });
+      var cells=keys.map(function(d){ var o=per[d], cls=!o?"":o.w===2?"bad":o.w===1?"warn":"ok";
+        var when=spec.d?fmtDay(d):fmtAt(d)+" to "+hhmm(d+size);
+        var tip=when+" · "+(!o?"no data collected":o.w===2?o.bad+" of "+o.runs+" check run"+(o.runs>1?"s":"")+" had a failure":o.w===1?"something needed a look":"all good");
         return '<span class="upcell '+cls+'" data-tip="'+esc(tip)+'"></span>'; }).join("");
       var pct=tot?(Math.floor(up/tot*1000)/10).toFixed(1).replace(/\.0$/,"")+"% up":"no data yet";
       var stat=nodeStatus(n.id,liveChecks());
-      return '<div class="uprow"><div class="uphead"><span class="upname"><span class="sdot '+(stat.status==="bad"?"bad":stat.status==="warn"?"warn":"ok")+'"></span>'+esc(n.t)+'</span><span class="uppct">'+pct+'</span></div><div class="upbar">'+cells+'</div><div class="upfoot"><span>'+UPN+' days ago</span><span>Today</span></div></div>';
+      return '<div class="uprow"><div class="uphead"><span class="upname"><span class="sdot '+(stat.status==="bad"?"bad":stat.status==="warn"?"warn":"ok")+'"></span>'+esc(n.t)+'</span><span class="uppct">'+pct+'</span></div><div class="upbar">'+cells+'</div><div class="upfoot"><span>'+spec.lab+'</span><span>'+spec.end+'</span></div></div>';
     }).join("") || '<div class="oempty">No history stored yet.</div>';
-    document.getElementById("upnote").textContent="Up means no check was failing. Grey days have no data: checks are collected on weekdays, and history before "+(first?fmtDay(first):"today")+" was not recorded."+(runs.some(function(r){ return r.bf; })?" Older bars for GitHub jobs come from GitHub's own run history.":"");
+    document.getElementById("upnote").textContent="Up means no check was failing. Grey cells have no data: checks run every hour on weekdays, and history before "+(first?fmtDay(first):"today")+" was not recorded."+(runs.some(function(r){ return r.bf; })?" Older bars for GitHub jobs come from GitHub's own run history.":"");
     // incidents: a run of failing or looking-bad results for one check, ended by the next ok
     var inc=[];
     Object.keys(HIST.names).forEach(function(id){
@@ -1982,7 +1985,7 @@
     document.getElementById("inclist").innerHTML=html||'<div class="oempty">No incidents recorded.</div>';
   }
   function fmtDay(d){ return new Date(d+"T12:00:00Z").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short",timeZone:"UTC"}); }
-  document.getElementById("upseg").addEventListener("click",function(e){ var b=e.target.closest(".segb"); if(!b) return; UPN=+b.dataset.n; [].forEach.call(document.querySelectorAll("#upseg .segb"),function(x){ x.setAttribute("aria-pressed",String(x===b)); }); renderUptime(); });
+  document.getElementById("upseg").addEventListener("click",function(e){ var b=e.target.closest(".segb"); if(!b) return; UPR=b.dataset.n; [].forEach.call(document.querySelectorAll("#upseg .segb"),function(x){ x.setAttribute("aria-pressed",String(x===b)); }); renderUptime(); });
 
   // collapsible sections on the Systems page (remembered in this browser)
   (function(){
@@ -2142,7 +2145,7 @@
     {tab:"opps",panel:1,sel:".nhead",t:"Notes",x:"Press Add note, type what happened and save. It is stored on the person in Attio and the box folds away."},
     {tab:"opps",panel:1,sel:"#rstagechips",t:"Move the deal",x:"Pick a stage and press Move the deal. This changes the deal stage in Attio only. Nothing else is touched."},
     {tab:"opps",panel:1,sel:"#panel .props",t:"The details",x:"Status, last touch, follow-up time, campaign, email and phone, then the latest reply or call summary and the email thread below."},
-    {tab:"sys",sel:"#uplist",t:"Uptime",x:"One bar per system, one cell per day. Green means every check passed, amber means something needed a look, red means a failure, grey means no data. The arrow next to the heading folds it away."},
+    {tab:"sys",sel:"#uplist",t:"Uptime",x:"One bar per system. Pick 24 hours (a cell per hour), 7 days (a cell per 3 hours), or 30 and 90 days (a cell per day). Green means every check passed, amber means something needed a look, red means a failure, grey means no data. The arrow next to the heading folds it away."},
     {tab:"sys",sel:"#inclist",t:"Past incidents",x:"Every time something failed, with when it started, how long it lasted, what happened and what fixed it."},
     {tab:"sys",sel:"#actlist",t:"Activity",x:"What happened, newest first: leads closed, notes, stage moves and follow-ups set from this page, plus every reminder the script sends. The filters narrow it, and Open lead jumps to the lead."},
     {tab:"sys",sel:"#gfig",t:"How the tools connect",x:"Each circle is a tool or an automation and glows by health: green is fine, amber needs a look, red is failing. Drag one around, hover to see what it connects to, and click it to see only its checks."},
