@@ -12,6 +12,17 @@
     --mono:'Geist Mono',ui-monospace,'SF Mono',Menlo,monospace;
     --ease:cubic-bezier(.22,1,.36,1);
   }
+  /* dark mode: the whole page is inverted, then the dark header, logos and status marks are inverted back so they keep their own colours */
+  html[data-koya-theme="dark"]{filter:invert(1) hue-rotate(180deg); background:#fff;}
+  html[data-koya-theme="dark"] header, html[data-koya-theme="dark"] img, html[data-koya-theme="dark"] .orv, html[data-koya-theme="dark"] .oli{filter:invert(1) hue-rotate(180deg);}
+  /* night glow: slow drifting violet and green light from the top corners, only in dark mode (the same colours as the header) */
+  #nightglow{display:none;}
+  html[data-koya-theme="dark"] #nightglow{display:block; position:fixed; inset:0; pointer-events:none; z-index:2; filter:invert(1) hue-rotate(180deg); opacity:.68;
+    background:radial-gradient(55% 42% at 12% -8%,rgba(23,160,96,.75),transparent 70%),radial-gradient(52% 40% at 92% -6%,rgba(110,86,240,.85),transparent 70%),radial-gradient(60% 36% at 50% 112%,rgba(110,86,240,.38),transparent 70%);
+    background-size:130% 130%; animation:koyaGlow 16s ease-in-out infinite alternate;}
+  @keyframes koyaGlow{0%{background-position:0% 0%,100% 0%,50% 100%; opacity:.45;} 50%{opacity:.7;} 100%{background-position:18% 8%,82% 10%,40% 88%; opacity:.5;}}
+  @media (prefers-reduced-motion:reduce){ html[data-koya-theme="dark"] #nightglow{animation:none;} }
+  #themeBtn svg{display:block;}
   *{box-sizing:border-box;}
   html{scrollbar-gutter:stable; overflow-y:scroll;}
   body{background:var(--bg-soft); color:var(--ink); font-family:var(--font); font-size:16px; line-height:1.5;
@@ -458,11 +469,27 @@
   .csys{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3);}
   @media (max-width:640px){ .crow{grid-template-columns:62px minmax(0,1fr);} .cwhen{grid-column:2; text-align:left;} }
 </style>
+<script>
+// colour theme: Automatic (dark from 19:00 to 06:00 local time), Light, or Dark. The choice is remembered in this browser only.
+(function(){
+  var KEY="koyaTheme", ICON={auto:'<path d="M12 3a9 9 0 1 0 0 18z" fill="currentColor"/><circle cx="12" cy="12" r="9" fill="none"/>',light:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',dark:'<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>'}, NAME={auto:"automatic",light:"light",dark:"dark"};
+  function pref(){ try{ var v=localStorage.getItem(KEY); return v==="light"||v==="dark"?v:"auto"; }catch(e){ return "auto"; } }
+  function night(){ var h=new Date().getHours(); return h>=19||h<6; }
+  function apply(){ var p=pref(), dark=p==="dark"||(p==="auto"&&night()); document.documentElement.setAttribute("data-koya-theme",dark?"dark":"light");
+    var b=document.getElementById("themeBtn"); if(b){ b.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+ICON[p]+'</svg>'; b.setAttribute("data-tip","Theme: "+NAME[p]+" (tap to change)"); b.setAttribute("aria-label","Colour theme: "+NAME[p]); } }
+  apply();
+  document.addEventListener("DOMContentLoaded",function(){ apply(); var b=document.getElementById("themeBtn"); if(b) b.addEventListener("click",function(){ var n={auto:"light",light:"dark",dark:"auto"}[pref()]; try{ if(n==="auto") localStorage.removeItem(KEY); else localStorage.setItem(KEY,n); }catch(e){} apply(); }); });
+  setInterval(apply,60000);
+})();
+</script>
 
+
+<div id="nightglow" aria-hidden="true"></div>
 <header><div class="wrap">
   <div class="hrow">
     <div><div class="eyebrow">// Outbound · email and cold calling</div><h1>Koya Outbound</h1></div>
     <div class="hright"><div class="updated" id="updated">—</div>
+      <button class="tgbtn round" id="themeBtn" type="button" aria-label="Colour theme" data-tip="Theme: automatic"></button>
       <button class="tgbtn round" id="tourbtn" type="button" aria-label="Take a tour of this page">?</button>
       <button class="tgbtn" id="tgbtn" type="button" aria-expanded="false" aria-controls="targets"><span id="tgtxt">Show targets</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" id="tgchev"><path d="M6 9l6 6 6-6"/></svg></button></div>
   </div>
