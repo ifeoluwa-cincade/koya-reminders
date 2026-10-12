@@ -297,7 +297,6 @@
   .ostage{display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-width:0;}
   .ostage small{font-size:11.5px; color:var(--ink-3); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .osrc{display:flex; gap:7px; justify-content:center; color:var(--ink-3); line-height:0;}
-  #diagBox:not([hidden]){display:flex;}
   .livebanner{background:#fff4d6; border-bottom:1px solid #ecd28a; color:#5c4a12; font-size:13.5px; padding:9px 0; position:sticky; top:0; z-index:40;} .livebanner .wrap{display:flex; align-items:center; gap:14px; flex-wrap:wrap;} .livebanner .pbtn{padding:5px 14px; font-size:13px;}
   
   .omarks{display:flex; gap:9px; justify-content:flex-end; align-items:center; line-height:0;} .oli,.orv{line-height:0;}
@@ -496,8 +495,6 @@
   <button class="qsbtn" id="qsbtn" type="button" aria-label="Search leads"><span class="lbl">Search leads</span><kbd>Ctrl K</kbd></button>
 </div></div>
 
-<button type="button" id="livePill" style="position:fixed;left:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:60;border:1px solid var(--line,#d9dde1);background:var(--card,#fff);color:var(--ink,#0d0f13);border-radius:999px;padding:7px 13px;font:600 12.5px/1 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.12);cursor:pointer">Live: checking</button>
-<div id="diagBox" hidden style="position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);align-items:flex-end;justify-content:center"><div style="background:var(--card,#fff);color:var(--ink,#0d0f13);width:min(720px,100%);max-height:80%;overflow:auto;border-radius:16px 16px 0 0;padding:16px"><div style="display:flex;gap:8px;margin-bottom:8px"><button type="button" class="pbtn" id="diagCopy">Copy</button><button type="button" class="pbtn" id="diagAsk">Allow live access</button><button type="button" class="pbtn" id="diagClose">Close</button></div><pre id="diagTxt" style="white-space:pre-wrap;word-break:break-word;font-size:12px;margin:0;user-select:all"></pre></div></div>
 <div id="liveBanner" class="livebanner" role="status" hidden><div class="wrap"><span id="liveBannerTxt">Live connection is off, so this page is only showing the hourly data.</span><button type="button" class="pbtn" id="allowLive">Allow live access</button></div></div>
 <div id="ptr" role="status" aria-live="polite"><span class="pa" aria-hidden="true">↓</span><span class="psp" aria-hidden="true"></span><span id="ptrtxt">Pull to refresh</span></div>
 <div id="tab-dash" class="tabpanel">
@@ -1251,39 +1248,6 @@
     function sync(){ bn.hidden=!!MCP; }
     var iv=setInterval(function(){ tries++; sync(); if (MCP) clearInterval(iv); }, 1500);
     setTimeout(sync, 2500);
-    var pill=document.getElementById("livePill"), box=document.getElementById("diagBox"), dz=document.getElementById("diagTxt");
-    function J(x){ try{ return JSON.stringify(x); }catch(e){ return String(x); } }
-    function pillSync(){
-      var t, bad=false;
-      if(!MCP){ t="Live: OFF (tap)"; bad=true; }
-      else if(LIVE_ERR){ t="Live: error (tap)"; bad=true; }
-      else if(LIVE_AT){ t="Live: on, checked "+Math.max(0,Math.round((Date.now()-LIVE_AT)/60000))+" min ago"; }
-      else t="Live: connecting";
-      pill.textContent=t; pill.hidden=!bad; pill.style.background=bad?"#fff4d6":""; pill.style.borderColor=bad?"#e08a3c":"";
-    }
-    setInterval(pillSync,2000); pillSync();
-    function runDiag(){
-      var out=[]; dz.textContent="Checking…"; var c=window.claude;
-      out.push("page time "+new Date().toISOString()+" host "+location.host);
-      out.push("claude object: "+(c?"yes":"NO")+"; use: "+(c&&c.use?"yes":"no"));
-      out.push("page thinks live is: "+(MCP?"ON":"OFF")+"; last Attio re-check error: "+(LIVE_ERR||"none")+"; last PlusVibe numbers error: "+(typeof LIVE_NUM_ERR!=="undefined"&&LIVE_NUM_ERR||"none")+"; last live check "+(LIVE_AT?new Date(LIVE_AT).toISOString():"never"));
-      out.push("recent live call errors: "+J(window.__liveErrs||[]));
-      if(!c||!c.use){ dz.textContent=out.join("\n"); return; }
-      c.use("permissions").then(function(p){ out.push("permissions: "+(p?"yes":"null")); if(!p) return;
-        return Promise.all(["mcp","mcp:Attio","mcp:PlusVibe","mcp:CloudTalk"].map(function(n){ return Promise.resolve(p.state(n)).catch(function(e){ return "err "+J(e); }); })).then(function(st){ out.push("permission state mcp/Attio/PlusVibe/CloudTalk: "+J(st)); });
-      }).catch(function(e){ out.push("permissions error: "+J(e)); }).then(function(){ return c.use("mcp"); }).then(function(m){
-        out.push("mcp namespace: "+(m?"yes":"NULL")); if(!m) return;
-        return m.listTools().then(function(r){
-          out.push("servers: "+J((r.servers||[]).map(function(x){ return {server:x.server,auth:x.authStatus,kind:x.kind,tools:(x.tools||[]).map(function(t){ return t.name; })}; })));
-          var want=[["Attio","update-record"],["Attio","get-records-by-ids"],["Attio","create-note"],["PlusVibe","update_lead_status"],["PlusVibe","find_lead_by_email"],["CloudTalk","cloudtalk_search_calls"]];
-          return Promise.all(want.map(function(w){ return m.describeTool(w[0],w[1]).then(function(d){ out.push("schema "+w[0]+"."+w[1]+": "+J(d.inputSchema).slice(0,700)); },function(e){ out.push("schema "+w[0]+"."+w[1]+": none ("+(e&&e.code)+")"); }); }));
-        },function(e){ out.push("listTools error: "+J(e)); });
-      }).catch(function(e){ out.push("mcp error: "+J(e)); }).then(function(){ dz.textContent=out.join("\n"); });
-    }
-    pill.addEventListener("click",function(){ box.hidden=false; runDiag(); });
-    document.getElementById("diagClose").addEventListener("click",function(){ box.hidden=true; });
-    document.getElementById("diagAsk").addEventListener("click",function(){ document.getElementById("allowLive").click(); setTimeout(runDiag,2500); });
-    document.getElementById("diagCopy").addEventListener("click",function(){ var t=dz.textContent, b=this; function ok(){ b.textContent="Copied"; setTimeout(function(){ b.textContent="Copy"; },1500); } try{ navigator.clipboard.writeText(t).then(ok,function(){ var r=document.createRange(); r.selectNodeContents(dz); var se=getSelection(); se.removeAllRanges(); se.addRange(r); b.textContent="Selected: copy it"; }); }catch(e){ b.textContent="Select and copy"; } });
     btn.addEventListener("click",function(){
       btn.disabled=true; btn.textContent="Asking…";
       var P=window.claude && window.claude.use ? window.claude.use("permissions") : Promise.resolve(null);
@@ -2348,7 +2312,7 @@
     var jobs=[];
     if (typeof MCP!=="undefined" && !MCP){ var ab=document.getElementById("allowLive"); if(ab && !ab.disabled) ab.click(); }   // live access is off: a pull asks for it
     try{ if (typeof MCP!=="undefined" && MCP){ jobs.push(MCP.invalidate().catch(function(){}).then(function(){ return Promise.all([ liveSync(), liveNumbers() ]); })); } }catch(e){}
-    var done=function(ok){ el.classList.remove("busy"); setTxt(ok?"Updated just now":"Live is not working. Tap the Live pill at the bottom right and copy what it says."); setTimeout(function(){ el.classList.remove("show"); busy=false; if(!ok) lastRun=0; }, ok?1400:2600); };
+    var done=function(ok){ el.classList.remove("busy"); setTxt(ok?"Updated just now":"Could not refresh. Try again in a moment."); setTimeout(function(){ el.classList.remove("show"); busy=false; if(!ok) lastRun=0; }, ok?1400:2600); };
     if (!jobs.length) { setTimeout(function(){ done(false); }, 400); return; }
     Promise.all(jobs).then(function(){ done(true); },function(){ done(false); });
   }
