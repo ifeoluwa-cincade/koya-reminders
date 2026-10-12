@@ -13,14 +13,16 @@
     --ease:cubic-bezier(.22,1,.36,1);
   }
   /* dark mode: the whole page is inverted, then the dark header, logos and status marks are inverted back so they keep their own colours */
-  html[data-koya-theme="dark"]{filter:invert(1) hue-rotate(180deg); background:#fff;}
+  html[data-koya-theme="light"]{filter:brightness(var(--kb,1));}
+  html[data-koya-theme="dark"]{filter:invert(1) hue-rotate(180deg) brightness(var(--kb,1)); background:#fff;}
+  #themeVeil{position:fixed; inset:0; z-index:9999; pointer-events:none; opacity:0; background:#000; transition:opacity .7s ease;}
   html[data-koya-theme="dark"] header, html[data-koya-theme="dark"] img, html[data-koya-theme="dark"] .orv, html[data-koya-theme="dark"] .oli{filter:invert(1) hue-rotate(180deg);}
   /* night glow: slow drifting violet and green light from the top corners, only in dark mode (the same colours as the header) */
   #nightglow{display:none;}
-  html[data-koya-theme="dark"] #nightglow{display:block; position:fixed; inset:0; pointer-events:none; z-index:2; filter:invert(1) hue-rotate(180deg); opacity:.68;
+  html[data-koya-theme="dark"] #nightglow{display:block; position:fixed; inset:0; pointer-events:none; z-index:2; filter:invert(1) hue-rotate(180deg); opacity:calc(.68*var(--kg,1));
     background:radial-gradient(55% 42% at 12% -8%,rgba(23,160,96,.75),transparent 70%),radial-gradient(52% 40% at 92% -6%,rgba(110,86,240,.85),transparent 70%),radial-gradient(60% 36% at 50% 112%,rgba(110,86,240,.38),transparent 70%);
     background-size:130% 130%; animation:koyaGlow 16s ease-in-out infinite alternate;}
-  @keyframes koyaGlow{0%{background-position:0% 0%,100% 0%,50% 100%; opacity:.45;} 50%{opacity:.7;} 100%{background-position:18% 8%,82% 10%,40% 88%; opacity:.5;}}
+  @keyframes koyaGlow{0%{background-position:0% 0%,100% 0%,50% 100%; opacity:calc(.45*var(--kg,1));} 50%{opacity:calc(.72*var(--kg,1));} 100%{background-position:18% 8%,82% 10%,40% 88%; opacity:calc(.52*var(--kg,1));}}
   @media (prefers-reduced-motion:reduce){ html[data-koya-theme="dark"] #nightglow{animation:none;} }
   #themeBtn svg{display:block;}
   *{box-sizing:border-box;}
@@ -474,9 +476,24 @@
 (function(){
   var KEY="koyaTheme", ICON={auto:'<path d="M12 3a9 9 0 1 0 0 18z" fill="currentColor"/><circle cx="12" cy="12" r="9" fill="none"/>',light:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',dark:'<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>'}, NAME={auto:"automatic",light:"light",dark:"dark"};
   function pref(){ try{ var v=localStorage.getItem(KEY); return v==="light"||v==="dark"?v:"auto"; }catch(e){ return "auto"; } }
-  function night(){ var h=new Date().getHours(); return h>=19||h<6; }
-  function apply(){ var p=pref(), dark=p==="dark"||(p==="auto"&&night()); document.documentElement.setAttribute("data-koya-theme",dark?"dark":"light");
-    var b=document.getElementById("themeBtn"); if(b){ b.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+ICON[p]+'</svg>'; b.setAttribute("data-tip","Theme: "+NAME[p]+" (tap to change)"); b.setAttribute("aria-label","Colour theme: "+NAME[p]); } }
+  // time of day (local) decides the look: dusk dims the page from 17:30, it dissolves into dark mode at 19:30 and the glow fades in over an hour;
+  // the glow fades out from 05:00, the page dissolves back to light at 06:30 and brightens until 08:00
+  function plan(){ var p=pref(), d=new Date(), t=d.getHours()+d.getMinutes()/60;
+    if(p==="dark") return {dark:true,b:1,g:1};
+    if(p==="light") return {dark:false,b:1,g:1};
+    var dark=(t>=19.5||t<6.5), b=1, g=1;
+    if(t>=17.5&&t<19.5) b=1-0.18*(t-17.5)/2; else if(t>=6.5&&t<8) b=0.82+0.18*(t-6.5)/1.5;
+    if(t>=19.5&&t<20.5) g=t-19.5; else if(t>=5&&t<6.5) g=(6.5-t)/1.5;
+    return {dark:dark,b:b,g:g}; }
+  var shown=null, busy=false;
+  function paint(pl){ var r=document.documentElement; r.setAttribute("data-koya-theme",pl.dark?"dark":"light"); r.style.setProperty("--kb",String(pl.b.toFixed(3))); r.style.setProperty("--kg",String(Math.max(0,Math.min(1,pl.g)).toFixed(3)));
+    var b=document.getElementById("themeBtn"), p=pref(); if(b){ b.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+ICON[p]+'</svg>'; b.setAttribute("data-tip","Theme: "+NAME[p]+" (tap to change)"); b.setAttribute("aria-label","Colour theme: "+NAME[p]); } }
+  function apply(){ var pl=plan(); if(shown===null||busy){ paint(pl); shown=pl.dark; return; }
+    if(pl.dark!==shown){                                       // light <-> dark: dissolve through black instead of a hard switch
+      var v=document.getElementById("themeVeil"); if(!v){ paint(pl); shown=pl.dark; return; }
+      busy=true; v.style.background=shown?"#fff":"#000"; v.style.opacity="1";             // the page is inverted in dark mode, so a white veil shows as black there
+      setTimeout(function(){ paint(pl); shown=pl.dark; v.style.background=pl.dark?"#fff":"#000"; setTimeout(function(){ v.style.opacity="0"; busy=false; },80); },750);
+    } else paint(pl); }
   apply();
   document.addEventListener("DOMContentLoaded",function(){ apply(); var b=document.getElementById("themeBtn"); if(b) b.addEventListener("click",function(){ var n={auto:"light",light:"dark",dark:"auto"}[pref()]; try{ if(n==="auto") localStorage.removeItem(KEY); else localStorage.setItem(KEY,n); }catch(e){} apply(); }); });
   setInterval(apply,60000);
@@ -484,7 +501,7 @@
 </script>
 
 
-<div id="nightglow" aria-hidden="true"></div>
+<div id="nightglow" aria-hidden="true"></div><div id="themeVeil" aria-hidden="true"></div>
 <header><div class="wrap">
   <div class="hrow">
     <div><div class="eyebrow">// Outbound · email and cold calling</div><h1>Koya Outbound</h1></div>
