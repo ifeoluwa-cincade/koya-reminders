@@ -4,11 +4,14 @@ name: Call dispositions
 #   1. live_call_dispositions.py  - no answer / voicemail by talk time, otherwise a transcript and a verdict
 #   2. apply_call_verdicts.py     - a note per call on the person, and their stage only where the call is the strongest signal
 #   3. calls_to_call_lists.py     - the dialler queue stops re-ringing people who already answered
-# Runs every morning and evening (the evening run is late so the day's calls are counted), and can be started by hand.
+# Starts within minutes of a call (the CloudTalk note that lands in Attio fires a webhook -> relay -> call_note), runs every hour from the routine push as a safety net,
+# keeps its morning and evening timers, and can be started by hand. (Ife 2026-10-12: it used to run only at 08 and 20 UTC to save GitHub minutes; the public repo has no such limit.)
 # Calls already handled are remembered, so a run only works on new calls. A manual run defaults to a DRY RUN.
 on:
   push:
     branches: [crm-trigger]      # the hourly routine in claude.ai pushes here: GitHub's own timer is unreliable
+  repository_dispatch:
+    types: [call_note]
   schedule:
     - cron: "30 8 * * *"
     - cron: "30 20 * * *"
@@ -26,8 +29,6 @@ concurrency:
 
 jobs:
   dispositions:
-    # the hourly push only runs this at 08 and 20 UTC (morning and evening); the cron lines above are the backup
-    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.timestamp, 'T08:') || contains(github.event.head_commit.timestamp, 'T20:') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -54,6 +55,9 @@ jobs:
         run: |
           pip install requests pyyaml
           npm install -g @anthropic-ai/claude-code
+      - name: Give the recording a moment to be ready
+        if: ${{ github.event_name == 'repository_dispatch' }}
+        run: sleep 45
       - name: Decide dry run or real run
         run: |
           # a manual run with dry_run=true changes nothing; every automatic run is real
