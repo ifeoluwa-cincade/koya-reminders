@@ -297,6 +297,8 @@
   .ostage{display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-width:0;}
   .ostage small{font-size:11.5px; color:var(--ink-3); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .osrc{display:flex; gap:7px; justify-content:center; color:var(--ink-3); line-height:0;}
+  .livebanner{background:#fff4d6; border-bottom:1px solid #ecd28a; color:#5c4a12; font-size:13.5px; padding:9px 0; position:sticky; top:0; z-index:40;} .livebanner .wrap{display:flex; align-items:center; gap:14px; flex-wrap:wrap;} .livebanner .pbtn{padding:5px 14px; font-size:13px;}
+  .orv{cursor:pointer; padding:4px; margin:-4px;}
   .omarks{display:flex; gap:9px; justify-content:flex-end; align-items:center; line-height:0;} .oli,.orv{line-height:0;}
   .tag{font-size:11.5px; border-radius:999px; padding:2px 10px; background:var(--bg-tint); color:var(--ink-2); white-space:nowrap;}
   .tag.meeting{background:var(--up-bg); color:var(--up);} .tag.followup{background:var(--band); color:#4a3cc4;} .tag.lost{background:#fbe9e7; color:#a3382c;} .tag.won{background:var(--up-bg); color:var(--up);} .tag.chasing{background:#fdebdc; color:#b4531a;} .tag.callback{background:#fdf2dc; color:var(--amber);} .tag.later{background:var(--bg-tint); color:var(--ink-3);}
@@ -492,6 +494,7 @@
   <button class="qsbtn" id="qsbtn" type="button" aria-label="Search leads"><span class="lbl">Search leads</span><kbd>Ctrl K</kbd></button>
 </div></div>
 
+<div id="liveBanner" class="livebanner" role="status" hidden><div class="wrap"><span id="liveBannerTxt">Live connection is off, so this page is only showing the hourly data.</span><button type="button" class="pbtn" id="allowLive">Allow live access</button></div></div>
 <div id="ptr" role="status" aria-live="polite"><span class="pa" aria-hidden="true">↓</span><span class="psp" aria-hidden="true"></span><span id="ptrtxt">Pull to refresh</span></div>
 <div id="tab-dash" class="tabpanel">
 <div class="wrap">
@@ -1015,9 +1018,8 @@
       if (fStatus==="today" && d.cls!=="today") return false;
       if (["meeting","followup","chasing","callback","later"].indexOf(fStatus)>=0 && o.bucket!==fStatus) return false;
       if (fSource!=="all" && o.source.indexOf(fSource)<0) return false;
-      if (fReview==="queue" && REV[o.id]!=="queue") return false;
+      if (fReview==="open" && REV[o.id]==="done") return false;
       if (fReview==="done" && REV[o.id]!=="done") return false;
-      if (fReview==="new" && REV[o.id]) return false;
       if (fNotes==="has" && !teamNotes(o)) return false;
       if (fNotes==="none" && teamNotes(o)) return false;
       return true; }).sort(SORTS[fSort]||SORTS.recent);
@@ -1042,13 +1044,12 @@
     var lostN=CLOSED.filter(function(o){ return o.bucket==="lost"; }).length, wonN=CLOSED.filter(function(o){ return o.bucket==="won"; }).length;
     var vsw='<div class="seg" id="oview" role="group" aria-label="Which leads">'+[["open","Open",OPPS.length],["lost","Lost",lostN],["won","Won",wonN]].map(function(v){ return '<button type="button" class="segb" data-view="'+v[0]+'" aria-pressed="'+(fView===v[0])+'">'+v[1]+' <b>'+v[2]+'</b></button>'; }).join("")+'</div>';
     if (fView!=="open"){ document.getElementById("otools").innerHTML=vsw; return; }
-    document.getElementById("otools").innerHTML=vsw+menuHTML("status",st,fStatus,"Status","filter",fStatus!=="all")+menuHTML("source",so,fSource,"Source","layers",fSource!=="all")+menuHTML("review",[{k:"all",l:"All leads",n:OPPS.length},{k:"queue",l:"To review",n:countWhere(function(o){ return REV[o.id]==="queue"; }),hot:true},{k:"done",l:"Reviewed",n:countWhere(function(o){ return REV[o.id]==="done"; })},{k:"new",l:"Not looked at yet",n:countWhere(function(o){ return !REV[o.id]; })}],fReview,"Review","layers",fReview!=="all")+menuHTML("notes",[{k:"all",l:"All leads",n:OPPS.length},{k:"has",l:"Has notes",n:countWhere(function(o){ return teamNotes(o)>0; })},{k:"none",l:"No notes",n:countWhere(function(o){ return teamNotes(o)===0; })}],fNotes,"Notes","note",fNotes!=="all")+menuHTML("sort",sr,fSort,"Sort","sort",false)+
+    document.getElementById("otools").innerHTML=vsw+menuHTML("status",st,fStatus,"Status","filter",fStatus!=="all")+menuHTML("source",so,fSource,"Source","layers",fSource!=="all")+menuHTML("review",[{k:"all",l:"All leads",n:OPPS.length},{k:"open",l:"Open",n:countWhere(function(o){ return REV[o.id]!=="done"; }),hot:true},{k:"done",l:"Resolved",n:countWhere(function(o){ return REV[o.id]==="done"; })}],fReview,"Open or resolved","layers",fReview!=="all")+menuHTML("notes",[{k:"all",l:"All leads",n:OPPS.length},{k:"has",l:"Has notes",n:countWhere(function(o){ return teamNotes(o)>0; })},{k:"none",l:"No notes",n:countWhere(function(o){ return teamNotes(o)===0; })}],fNotes,"Notes","note",fNotes!=="all")+menuHTML("sort",sr,fSort,"Sort","sort",false)+
       '<button class="tbtn icon" type="button" id="sortdir" aria-label="'+(fDir==="asc"?"Ascending":"Descending")+'" title="'+(fDir==="asc"?"Ascending, click for descending":"Descending, click for ascending")+'"><span class="dirarrow'+(fDir==="asc"?"":" down")+'">'+svg("arrow")+'</span></button>';
   }
   function reviewMark(o){
-    if (REV[o.id]==="done") return '<span class="orv" data-tip="Reviewed"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="#2e9d62"/><path d="M4.6 8.3l2.3 2.3 4.5-4.8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
-    if (REV[o.id]==="queue") return '<span class="orv" data-tip="To review"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="#fff3e0" stroke="#e08a3c" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="#e08a3c"/></svg></span>';
-    return "";
+    if (REV[o.id]==="done") return '<span class="orv" data-rv="1" data-tip="Resolved. Tap to open it again"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="#2e9d62"/><path d="M4.6 8.3l2.3 2.3 4.5-4.8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+    return '<span class="orv" data-rv="1" data-tip="Open. Tap to mark it resolved"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="#b9c0c7" stroke-width="1.6"/></svg></span>';
   }
   function noteIcon(o){
     var n=teamNotes(o); if(!n) return "";
@@ -1087,7 +1088,7 @@
     var b=e.target.closest("[data-menu]"); if(b){ OPEN_MENU=OPEN_MENU===b.dataset.menu?null:b.dataset.menu; renderTools(); }
   });
   document.addEventListener("click",function(){ if(OPEN_MENU){ OPEN_MENU=null; renderTools(); } });
-  document.getElementById("olist").addEventListener("click",function(e){ var hs=e.target.closest("[data-hs]"); if(hs){ var k=hs.dataset.hs; if(fSort===k) fDir=fDir==="asc"?"desc":"asc"; else { fSort=k; fDir=SDEF[k]; } renderOpps(); return; } var b=e.target.closest("[data-id]"); if(b) openPanel(b.dataset.id); });
+  document.getElementById("olist").addEventListener("click",function(e){ var rvm=e.target.closest(".orv"); if(rvm){ var rr=rvm.closest("[data-id]"); var oo=rr&&oppById(rr.dataset.id); if(oo) setReview(oo, REV[oo.id]==="done"?"open":"done"); return; } var hs=e.target.closest("[data-hs]"); if(hs){ var k=hs.dataset.hs; if(fSort===k) fDir=fDir==="asc"?"desc":"asc"; else { fSort=k; fDir=SDEF[k]; } renderOpps(); return; } var b=e.target.closest("[data-id]"); if(b) openPanel(b.dataset.id); });
   // drag a lead to where you want it: the first drag switches Sort to "My order" and keeps the list as it looks now
   var DRAG=null;
   (function(){ var ol=document.getElementById("olist");
@@ -1238,20 +1239,22 @@
   }
   (function(){ try{ if (window.claude && window.claude.use){ window.claude.use("mcp").then(function(m){ MCP=m; if(m){ if(openId && oppById(openId)) openPanel(openId); if(PENDING_LEAD){ var pl=PENDING_LEAD; PENDING_LEAD=null; if(oppById(pl)) openPanel(pl); else loadLeadLive(pl); } liveSync(); liveNumbers(); liveDials(); setInterval(function(){ if(!document.hidden){ liveSync(); liveNumbers(); liveDials(); } },300000); document.addEventListener("visibilitychange",function(){ if(!document.hidden){ liveSync(); liveNumbers(); liveDials(); } }); } },function(){}); } }catch(e){} })();
 
-  // When the live connection is off, say so on the page and offer one tap to allow it (the page asks the viewer for access to Attio, PlusVibe and CloudTalk).
-  setTimeout(function(){
-    if (MCP) return; var n=document.getElementById("liveNote"); if(!n) return;
-    n.innerHTML='Live connection is off, so this page is showing the hourly data. <button type="button" class="pbtn ghost" id="allowLive" style="padding:3px 10px; font-size:12.5px; margin-left:6px">Allow live access</button>';
-    var b=document.getElementById("allowLive");
-    b.addEventListener("click",function(){
-      b.disabled=true; b.textContent="Asking…";
+  // When the live connection is off, a banner across the top of EVERY tab says so and offers one tap to allow it
+  // (the page asks the viewer for access to Attio, PlusVibe and CloudTalk). It disappears the moment the connection is on.
+  (function(){
+    var bn=document.getElementById("liveBanner"), msg=document.getElementById("liveBannerTxt"), btn=document.getElementById("allowLive"), tries=0;
+    function sync(){ bn.hidden=!!MCP; }
+    var iv=setInterval(function(){ tries++; sync(); if (MCP) clearInterval(iv); }, 1500);
+    setTimeout(sync, 2500);
+    btn.addEventListener("click",function(){
+      btn.disabled=true; btn.textContent="Asking…";
       var P=window.claude && window.claude.use ? window.claude.use("permissions") : Promise.resolve(null);
       P.then(function(p){ return p && p.request ? p.request() : null; }).then(function(){ return window.claude.use("mcp"); }).then(function(m){
-        if (m) { MCP=m; n.textContent="Live connection is on."; liveSync(); liveNumbers(); liveDials(); }
-        else { n.innerHTML='Still off. Please check that Attio, PlusVibe and CloudTalk are connected in claude.ai Settings, then Connectors, and open this page again.'; }
-      }).catch(function(){ n.textContent="Could not turn the live connection on from here. Check Settings, then Connectors in claude.ai."; });
+        if (m) { MCP=m; bn.hidden=true; liveSync(); liveNumbers(); liveDials(); }
+        else { btn.disabled=false; btn.textContent="Try again"; msg.textContent="Still off. Check that Attio, PlusVibe and CloudTalk are connected in claude.ai: Settings, then Connectors. Then open this page again."; }
+      }).catch(function(){ btn.disabled=false; btn.textContent="Try again"; msg.textContent="Could not turn it on from here. Check claude.ai: Settings, then Connectors."; });
     });
-  }, 5000);
+  })();
 
   // ----- resolve a lead from the panel: show what will change, then change it, then read every system back
   var RZ={won:{label:"Won",deal:"Won 🎉",rel:"CUSTOMER",entry:"MEETING_BOOKED",stop:true},
@@ -1261,7 +1264,7 @@
           followup:{label:"Follow up on a date",date:true,stop:false},
           interested:{label:"Interested",deal:"Interested",stop:false},
           multitouch:{label:"Multi-touch",deal:"Multi-touch",stop:false},
-          later:{label:"Later",deal:"Later",stop:false},
+          later:{label:"Later",deal:"Later",stop:true},                                   // Later also stops the emails in PlusVibe, including a subsequence they were moved into (Ife, 2026-10-12)
           profiles:{label:"Profiles sent",deal:"Profiles Sent",stop:false},
           trial:{label:"Trial",deal:"Trial",stop:false}};
   var RZORDER=["interested","multitouch","later","booked","profiles","trial","won","lost","notint"];
@@ -1340,10 +1343,10 @@
   var REV={};
   function setReview(o,state){
     if (!db) return;
-    var cur=REV[o.id], next=cur===state?null:state;                         // pressing the active button clears it
+    var next=state==="done"?"done":null;                                    // two states only: Open (nothing saved) or Resolved
     if (next) REV[o.id]=next; else delete REV[o.id];
     try{ if (next) db.doc("review/"+o.id).set({state:next,name:o.name||"",t:new Date().toISOString()}).catch(function(){}); else db.doc("review/"+o.id).delete().catch(function(){}); }catch(e){}
-    if (openId===o.id){ [].forEach.call(document.querySelectorAll("#rrev .schip"),function(b){ b.setAttribute("aria-pressed",String(REV[o.id]===b.dataset.rev)); }); }
+    if (openId===o.id){ [].forEach.call(document.querySelectorAll("#rrev .schip"),function(b){ b.setAttribute("aria-pressed",String((REV[o.id]==="done")===(b.dataset.rev==="done"))); }); }
     if (tab==="opps") renderOpps();
   }
   function seqHTML(o){
@@ -1359,7 +1362,7 @@
         (x.sent&&x.sent.length?'<div class="seqm">'+x.sent.map(function(e){ return '<span data-tip="'+esc(e.subject||"")+'">Step '+esc(e.step)+' · '+d(e.t)+'</span>'; }).join("")+'</div>':'')+'</div>'; }).join("");
   }
   function reviewHTML(o){
-    return '<h4>Review</h4><div class="stagechips" id="rrev" role="group" aria-label="Review">'+[["queue","To review"],["done","Reviewed"]].map(function(x){ return '<button type="button" class="schip" data-rev="'+x[0]+'" aria-pressed="'+(REV[o.id]===x[0])+'"'+(db?'':' disabled')+'>'+x[1]+'</button>'; }).join("")+'</div>';
+    return '<h4>Open or resolved</h4><div class="stagechips" id="rrev" role="group" aria-label="Open or resolved">'+[["open","Open"],["done","Resolved"]].map(function(x){ return '<button type="button" class="schip" data-rev="'+x[0]+'" aria-pressed="'+((REV[o.id]==="done")===(x[0]==="done"))+'"'+(db?'':' disabled')+'>'+x[1]+'</button>'; }).join("")+'</div>';
   }
   function toClosed(o){
     o.bucket=o.closedAs==="won"?"won":"lost"; o.status=o.bucket==="won"?"Won":"Lost"; o.stage=o.bucket==="won"?"Won 🎉":"Lost"; o.closed_at=o.closed_at||new Date().toISOString(); o.resolved=false;
@@ -1474,6 +1477,13 @@
       if(ok){ logAct("stage",leadLabel(o)+" moved to "+to,o.id); o.stage=to; var bk2=stageBucket(to); if(bk2){ o.bucket=bk2; o.status=BUCKET_NAME[bk2]; } setTimeout(function(){ if(openId===o.id) openPanel(o.id,true); },900); return MCP.invalidate().catch(function(){}).then(function(){ return liveSync(); }); }
     }).catch(function(e){ stat("rstagemsg","bad","Not moved: "+errText(e)); }).then(function(){ var b=document.getElementById("rstagego"); if(b) b.disabled=false; });
   }
+  function pvRowsAll(o){
+    return pvRows(o).then(function(rows){
+      var have={}; rows.forEach(function(x){ have[x.campaign]=1; });
+      (o.sequence||[]).forEach(function(q){ if (q.sub && q.id && !have[q.id] && ["COMPLETED","REPLIED","BOUNCED","UNSUBSCRIBED"].indexOf(q.status)<0) rows.push({campaign:q.id, status:q.status||"ACTIVE", name:q.name||"", sub:true, label:q.label||""}); });
+      return rows;
+    });
+  }
   function pvRows(o){ return MCP.callTool("PlusVibe","find_lead_by_email",{workspace_id:PVWS_ID,email:o.email},{cache:false}).then(function(r){ var j=pvJson(r); return Array.isArray(j)?j.map(function(x){ return {campaign:x.campaign||(x.lead_data||{}).campaign_id, status:x.status, label:x.label||(x.lead_data||{}).label||"", done:(x.lead_data||{}).is_completed}; }).filter(function(x){ return x.campaign; }):[]; }); }
   function attioNow(o){
     var did=dealIdOf(o);
@@ -1487,7 +1497,7 @@
   function rzOpen(act){
     var o=oppById(openId), z=document.getElementById("rzone"); if(!o||!z||!MCP) return;
     z.innerHTML='<p class="tnote">Checking the live state in Attio and PlusVibe…</p>';
-    Promise.all([attioNow(o), o.email?pvRows(o):Promise.resolve([])]).then(function(rs){
+    Promise.all([attioNow(o), o.email?pvRowsAll(o):Promise.resolve([])]).then(function(rs){
       var cur=rs[0], pv=rs[1], a=RZ[act], rows=[], did=dealIdOf(o);
       RZSTATE={o:o,act:act,cur:cur,pv:pv};
       if (a.deal && !did && !a.rel){ z.innerHTML='<p class="tnote" style="color:var(--down)">This lead has no deal in Attio yet. Create the deal below first, then set its stage here.</p>'; return; }
@@ -2110,7 +2120,7 @@
     [".tbtn[data-menu]",/Status/,"Filter by how far the lead has got"],
     [".tbtn[data-menu]",/Source/,"Filter by where the lead came from"],
     [".tbtn[data-menu]",/Notes/,"Show only leads the team has written a note on"],
-    [".tbtn[data-menu]",/Review/,"Your review queue: leads marked To review, Reviewed, or not looked at yet"],
+    [".tbtn[data-menu]",/Open or resolved/,"Show only leads that are still open (need a look) or already resolved (looked at)"],
     [".tbtn[data-menu]",/Sort/,"Choose what the list is ordered by"],
   ];
   function setTip(el,t){ if (!el.hasAttribute("data-tip")) el.setAttribute("data-tip",t); if (el.hasAttribute("title")) el.removeAttribute("title"); }
