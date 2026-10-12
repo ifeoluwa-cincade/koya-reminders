@@ -123,11 +123,11 @@ def apply(stage: str, reason: str, email: str, hdr, camps, commit: bool, chosen:
                 bad += 0 if ok else 1
             else:
                 print(f"   would stop {'subsequence' if x['sub'] else 'main'} (was {x['status']})")
-        if tag and x["label"] != tag:
+        if tag and x["label"] != tag and x["status"] != "SKIPPED":
             todo += 1
             if commit:
                 r = pv_post("/lead/data/update", {"workspace_id": WS, "campaign_id": x["id"], "email": email, "variables": {"label": tag}}, hdr)
-                ok = r.status_code < 300
+                ok = r.status_code < 300 or (x["status"] == "SKIPPED" and r.status_code == 400)      # PlusVibe will not retag a skipped lead in a subsequence; the tag is lead-wide and the main sequence carries it
                 print(f"   tag {x['label'] or 'none'} -> {tag}: {r.status_code} {'' if ok else _why(r)}")
                 bad += 0 if ok else 1
             else:
@@ -140,7 +140,7 @@ def apply(stage: str, reason: str, email: str, hdr, camps, commit: bool, chosen:
                 continue
             if stop and x["status"] not in DONE:
                 bad += 1; print(f"   READBACK: a {'subsequence' if x['sub'] else 'main'} sequence is still {x['status']}")
-            if tag and x["label"] != tag:
+            if tag and x["label"] != tag and x["status"] != "SKIPPED":
                 bad += 1; print(f"   READBACK: a sequence still has tag {x['label'] or 'none'}, wanted {tag}")
     return todo, bad
 
