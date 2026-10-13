@@ -255,7 +255,6 @@
   @media (max-width:860px){ .cards{grid-template-columns:repeat(2,1fr);} }
   @media (max-width:560px){ .cards{grid-template-columns:1fr;} }
   .card{background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px 16px 12px;}
-  .ctop{display:flex; justify-content:space-between; align-items:center; gap:8px;}
   .cname{font-size:13.5px; font-weight:500; color:var(--ink-2);}
   .cr{display:inline-flex; align-items:center; gap:6px;}
   .edit{display:grid; place-items:center; width:28px; height:28px; padding:0; cursor:pointer; background:#fff; color:var(--ink-2);
@@ -356,77 +355,60 @@
   .omain{display:flex; flex-direction:column; min-width:0;}
   .oname{display:flex; align-items:center; gap:7px; min-width:0;}
   .nact{display:flex; flex-wrap:wrap; align-items:center; gap:6px 18px; margin-top:4px;}
-  #tab-chat .chatpage{max-width:820px; margin:18px auto 40px; height:calc(100vh - 290px); min-height:480px; display:flex; flex-direction:column; border:1px solid var(--line); border-radius:16px; overflow:hidden; background:#fff; box-shadow:0 20px 50px -30px rgba(20,23,26,.35);}
-  #tab-chat .cfeed{flex:1; min-height:0;}
-  #chatDrawer{position:fixed; top:0; right:0; bottom:0; z-index:99990; width:min(420px,100vw); background:#fff; border-left:1px solid var(--line); box-shadow:-24px 0 60px -30px rgba(20,23,26,.4); display:flex; flex-direction:column;}
-  #chatDrawer[hidden]{display:none;}
-  .chead{display:flex; align-items:center; gap:10px; padding:16px 16px 12px; border-bottom:1px solid var(--line);}
-  .chead b{font-size:16px;} .chead .chint{flex:1; color:var(--ink-3); font-size:12px; min-width:0;}
-  .chead button{border:0; background:transparent; font-size:22px; line-height:1; cursor:pointer; color:var(--ink-2);}
-  .cfeed{flex:1; overflow:auto; padding:14px 16px; display:flex; flex-direction:column; gap:10px;}
-  .cwrite{position:relative; border-top:1px solid var(--line); padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px)); background:#fafbfa;}
-  .cwrite textarea{display:block; width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font:14px var(--font); resize:none; outline:0; background:#fff; color:var(--ink);}
-  .cwrite .cbot{display:flex; align-items:center; justify-content:space-between; padding:8px 0 0; background:none; border:0;}
-  .csub{color:var(--ink-3); font-size:12px;}
-  .cac{position:absolute; left:12px; right:12px; bottom:calc(100% - 4px); background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 34px -14px rgba(20,23,26,.4); overflow:hidden; max-height:260px; overflow-y:auto;}
-  .cac[hidden]{display:none;}
-  .cacitem{display:flex; justify-content:space-between; gap:10px; width:100%; padding:9px 12px; border:0; background:#fff; font:13.5px var(--font); text-align:left; cursor:pointer;}
-  .cacitem span{color:var(--ink-3); font:500 11px var(--mono); text-transform:uppercase; letter-spacing:.04em;}
-  .cacitem.on, .cacitem:hover{background:var(--band);}
-  .clead{border:1px solid var(--line); background:#fff; color:var(--violet); font:600 13px var(--font); border-radius:7px; padding:0 6px; cursor:pointer;}
-  .clead:hover{background:var(--band);}
-  .cto.me{background:var(--band);}
-  .cmsg.forme .cbub{border-color:var(--violet); box-shadow:0 0 0 2px rgba(110,86,240,.18);}
-  .chead #chatDesk{border:1px solid rgba(255,255,255,.35); background:transparent; color:#fff; border-radius:999px; padding:4px 12px; font:500 12px var(--font); cursor:pointer;}
-  .cacitem.hint{cursor:default; color:var(--ink-3); background:#fff;} .cacitem.hint b{font-weight:500;}
-  .cdel{align-self:flex-end; border:0; background:none; color:var(--ink-3); font:12px var(--font); cursor:pointer; padding:2px 4px; opacity:0; transition:opacity .15s;} .cmsg:hover .cdel, .cdel:focus{opacity:1;}
-  @media (hover:none){ .cdel{opacity:1;} }
-  .cping{margin:3px 4px 0; font-size:11px; color:var(--ink-3);} .cping.bad{color:var(--down);}
   /* chat look: a proper conversation, own messages on the right */
-  .chead{background:var(--grad-ink); color:#fff; border-bottom:0; padding:16px 16px 14px;}
-  .chead .ctitle{flex:1; display:flex; flex-direction:column; gap:2px;} .chead .ctitle b{font-size:16px;} .chead .ctitle span{font-size:12px; color:rgba(255,255,255,.65);}
-  .chead button{color:#fff;}
-  .cfeed{background:var(--bg-soft); gap:6px; padding:14px 14px;}
-  .cday{display:flex; justify-content:center; margin:8px 0 4px;} .cday span{font:500 11px var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); background:#fff; border:1px solid var(--line); border-radius:999px; padding:2px 10px;}
-  .cmsg{display:flex; gap:8px; align-items:flex-end; max-width:100%;} .cmsg.mine{justify-content:flex-end;}
-  .ccol{display:flex; flex-direction:column; min-width:0; max-width:82%;} .cmsg.mine .ccol{align-items:flex-end;}
-  .cwho{font-weight:600; font-size:12px; margin:0 4px 2px; color:var(--ink-2);} .cwho span{font:500 10.5px var(--mono); color:var(--ink-3); margin-left:4px;}
-  .cbub{background:#fff; border:1px solid var(--line); border-radius:14px 14px 14px 4px; padding:9px 12px; line-height:1.45; overflow-wrap:anywhere; font-size:14px;}
-  .cmsg.mine .cbub{background:var(--violet); color:#fff; border-color:var(--violet); border-radius:14px 14px 4px 14px;}
-  .cmsg.mine .cto{background:rgba(255,255,255,.2); color:#fff; border-color:rgba(255,255,255,.35);} .cmsg.mine .clead{background:#fff;}
-  .cwrite{background:#fff; padding:8px 12px calc(10px + env(safe-area-inset-bottom,0px));}
-  .ctools{display:flex; align-items:center; gap:6px; padding:0 0 6px;} .ctools button{font:500 12.5px var(--font); border:1px solid var(--line); background:var(--bg-soft); color:var(--ink-2); border-radius:999px; padding:3px 10px; cursor:pointer;} .ctools .csub{margin-left:auto;}
-  .cbox{display:flex; gap:8px; align-items:flex-end; border:1px solid var(--line); border-radius:14px; background:#fff; padding:6px 6px 6px 12px;} .cbox:focus-within{border-color:var(--violet);}
-  .cbox textarea{border:0; padding:6px 0; min-height:22px; max-height:120px; flex:1; background:transparent;}
-  .csendi{border:0; background:var(--ink); color:#fff; width:34px; height:34px; border-radius:10px; display:grid; place-items:center; cursor:pointer; flex:none;}
+  /* ===== team chat (v4): three columns, threads | conversation | lead details ===== */
+  #tab-chat .chatpage{max-width:1280px; margin:18px auto 40px; height:calc(100vh - 250px); min-height:580px; display:flex; flex-direction:column; border:1px solid var(--line); border-radius:18px; overflow:hidden; background:#fff; box-shadow:0 24px 60px -34px rgba(20,23,26,.4);}
+  .chead{display:flex; align-items:center; gap:14px; padding:16px 18px; background:var(--grad-ink); color:#fff;}
+  .chead .ctitle{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;} .chead .ctitle b{font-size:17px;} .chead .ctitle span{font-size:12.5px; color:rgba(255,255,255,.65);}
+  .cavs{display:flex; align-items:center;} .cavs .cav{margin-left:-8px; border:2px solid #101215; width:30px; height:30px; font-size:11px;} .cavs .cav:first-child{margin-left:0;} .cavs .more{font:500 12px var(--font); color:rgba(255,255,255,.75); margin-left:8px;}
+  .chead #chatDesk{border:1px solid rgba(255,255,255,.35); background:transparent; color:#fff; border-radius:999px; padding:5px 12px; font:500 12px var(--font); cursor:pointer;}
+  .chead .cx{border:0; background:rgba(255,255,255,.12); color:#fff; width:32px; height:32px; border-radius:10px; font-size:20px; line-height:1; cursor:pointer;} .chead .cx:hover{background:rgba(255,255,255,.22);}
+  .cbar{display:flex; align-items:center; gap:14px; padding:0 16px; border-bottom:1px solid var(--line); background:#fff;}
+  .ctabs2{display:flex; gap:4px;} .ctabs2 button{border:0; background:none; padding:13px 12px; font:500 14px var(--font); color:var(--ink-2); cursor:pointer; border-bottom:2px solid transparent;} .ctabs2 button.on{color:var(--ink); border-bottom-color:var(--violet);}
+  .ctabs2 .n{display:inline-block; min-width:18px; margin-left:4px; padding:0 5px; border-radius:999px; background:var(--violet); color:#fff; font:600 10.5px var(--mono); text-align:center; line-height:17px;}
+  .csearch{flex:1; max-width:360px; margin-left:auto; border:1px solid var(--line); border-radius:10px; padding:7px 11px; font:13.5px var(--font); background:var(--bg-soft); color:var(--ink); outline:0;} .csearch:focus{border-color:var(--violet); background:#fff;}
+  .cgrid{flex:1; min-height:0; display:grid; grid-template-columns:262px minmax(0,1fr) 310px;}
+  .cthreads{border-right:1px solid var(--line); overflow:auto; background:#fff;}
+  .cth{display:flex; gap:11px; width:100%; text-align:left; padding:12px 14px; border:0; border-bottom:1px solid var(--line-2); background:#fff; cursor:pointer; font:inherit; color:inherit; align-items:center;} .cth:hover{background:var(--bg-soft);} .cth.on{background:var(--band);}
+  .cth .tx{min-width:0; flex:1;} .cth b{display:block; font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;} .cth small{display:block; color:var(--ink-3); font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .cth .tm{font:500 10.5px var(--mono); color:var(--ink-3); align-self:flex-start; margin-top:3px;}
+  .cthh{padding:12px 14px 6px; font:500 11px var(--mono); letter-spacing:.07em; text-transform:uppercase; color:var(--ink-3);}
+  .cav{width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font:600 12px var(--font); flex:none; background:var(--band); color:var(--violet);}
+  .cmain{display:flex; flex-direction:column; min-height:0; min-width:0;}
+  .cfeed{flex:1; min-height:0; overflow:auto; padding:16px 18px; display:flex; flex-direction:column; gap:12px; background:var(--bg-soft);}
+  .cday{display:flex; justify-content:center; margin:6px 0 2px;} .cday span{font:500 11px var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); background:#fff; border:1px solid var(--line); border-radius:999px; padding:2px 11px;}
+  .cempty{padding:26px 16px; color:var(--ink-3); text-align:center; font-size:13.5px;}
+  .cmsg{display:flex; gap:10px; align-items:flex-end; max-width:100%;} .cmsg.mine{justify-content:flex-end;}
+  .ccol{display:flex; flex-direction:column; min-width:0; max-width:min(560px,86%);} .cmsg.mine .ccol{align-items:flex-end;}
+  .cwho{font-size:12px; margin:0 4px 3px; color:var(--ink-2);} .cwho b{font-weight:600; margin-right:6px;} .cwho span{font:500 10.5px var(--mono); color:var(--ink-3);}
+  .cbub{background:#fff; border:1px solid var(--line); border-radius:16px 16px 16px 5px; padding:10px 13px; line-height:1.5; overflow-wrap:anywhere; font-size:14.5px; display:flex; flex-direction:column; gap:9px; min-width:0;}
+  .cmsg.mine .cbub{background:var(--violet); color:#fff; border-color:var(--violet); border-radius:16px 16px 5px 16px;}
+  .cmsg.forme .cbub{border-color:var(--violet); box-shadow:0 0 0 3px rgba(110,86,240,.16);}
+  .cto{background:var(--band); color:#4a3cc4; font-weight:600; border-radius:6px; padding:0 5px;} .cto.me{background:var(--violet); color:#fff;} .cmsg.mine .cto{background:rgba(255,255,255,.22); color:#fff;}
+  .clead{border:0; background:none; color:var(--violet); font:600 14px var(--font); padding:0; cursor:pointer;} .clead:hover{text-decoration:underline;} .cmsg.mine .clead{color:#fff; text-decoration:underline;}
+  .ccard{display:flex; align-items:center; gap:11px; width:100%; text-align:left; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:12px; padding:9px 11px; cursor:pointer; font:inherit;} .ccard:hover{border-color:var(--violet);} .ccard.off{cursor:default; opacity:.75;}
+  .ccav{width:34px; height:34px; border-radius:9px; display:grid; place-items:center; background:var(--violet); color:#fff; font:700 13px var(--font); flex:none;}
+  .cct{min-width:0; flex:1;} .cct b{display:block; font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;} .cct small{display:block; color:var(--ink-3); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;} .ccard svg{flex:none; color:var(--ink-3);}
+  .cmeta{display:flex; gap:10px; align-items:center; margin:4px 4px 0; min-height:22px;}
+  .clike{display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); background:#fff; color:var(--ink-3); border-radius:999px; padding:2px 9px; font:500 12px var(--font); cursor:pointer;} .clike.on{background:var(--band); color:var(--violet); border-color:#cfc8f6;} .clike.zero{opacity:0; transition:opacity .15s;} .cmsg:hover .clike.zero, .clike.zero:focus{opacity:1;}
+  .cdel{border:0; background:none; color:var(--ink-3); font:12px var(--font); cursor:pointer; padding:2px 4px; opacity:0; transition:opacity .15s;} .cmsg:hover .cdel, .cdel:focus{opacity:1;} @media (hover:none){ .cdel,.clike.zero{opacity:1;} }
+  .cleadp{border-left:1px solid var(--line); overflow:auto; padding:18px 16px; background:#fff;}
+  .clh{display:flex; gap:12px; align-items:center; margin-bottom:14px;} .clh b{display:block; font-size:16px;} .clh small{color:var(--ink-3); font-size:12.5px;}
+  .clrow{display:flex; justify-content:space-between; gap:12px; padding:9px 0; border-bottom:1px solid var(--line-2); font-size:13.5px;} .clrow span:first-child{color:var(--ink-3);} .clrow span:last-child{text-align:right; font-weight:500;}
+  .clbtn{display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin-top:12px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:10px; padding:9px 12px; font:500 13.5px var(--font); cursor:pointer;} .clbtn.pri{background:var(--ink); color:#fff; border-color:var(--ink);}
+  .cwrite{position:relative; background:#fff; border-top:1px solid var(--line); padding:9px 14px calc(12px + env(safe-area-inset-bottom,0px));}
+  .ctools{display:flex; align-items:center; gap:7px; padding:0 0 7px;} .ctools button{font:500 12.5px var(--font); border:1px solid var(--line); background:var(--bg-soft); color:var(--ink-2); border-radius:999px; padding:3px 11px; cursor:pointer;} .csub{margin-left:auto; color:var(--ink-3); font-size:12px;}
+  .cbox{display:flex; gap:8px; align-items:flex-end; border:1px solid var(--line); border-radius:14px; background:#fff; padding:6px 6px 6px 13px;} .cbox:focus-within{border-color:var(--violet);}
+  .cbox textarea{border:0; outline:0; padding:7px 0; min-height:22px; max-height:130px; flex:1; background:transparent; resize:none; font:14.5px var(--font); color:var(--ink);}
+  .csendi{border:0; background:var(--violet); color:#fff; width:36px; height:36px; border-radius:10px; display:grid; place-items:center; cursor:pointer; flex:none;}
+  .cac{position:absolute; left:14px; right:14px; bottom:calc(100% - 2px); background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 34px -14px rgba(20,23,26,.4); overflow:hidden; max-height:270px; overflow-y:auto; z-index:5;} .cac[hidden]{display:none;}
+  .cacitem{display:flex; justify-content:space-between; gap:10px; width:100%; padding:10px 13px; border:0; background:#fff; font:13.5px var(--font); text-align:left; cursor:pointer; color:var(--ink);} .cacitem span{color:var(--ink-3); font:500 11px var(--mono); text-transform:uppercase; letter-spacing:.04em;} .cacitem.on,.cacitem:hover{background:var(--band);} .cacitem.hint{cursor:default; color:var(--ink-3);} .cacitem.hint:hover{background:#fff;}
+  @media (max-width:1050px){ .cgrid{grid-template-columns:230px minmax(0,1fr);} .cleadp{display:none;} }
+  @media (max-width:720px){ .cgrid{grid-template-columns:1fr;} .cthreads{display:none;} #tab-chat .chatpage{height:calc(100vh - 200px); border-radius:0; margin:0 -16px;} .csearch{max-width:none;} }
   /* messages between teammates */
   .chatbell{position:relative;}
   .chatbell .cbadge{position:absolute; top:-6px; right:-6px; min-width:18px; padding:1px 5px; border-radius:999px; background:var(--violet); color:#fff; font:600 10.5px var(--mono); text-align:center; line-height:15px;}
   .chatbell .cbadge[hidden]{display:none;}
-  #chatPop{position:fixed; top:62px; right:max(16px,calc((100vw - 1180px)/2)); z-index:900; width:min(400px,calc(100vw - 32px)); max-height:min(70vh,560px); overflow:auto; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 40px -16px rgba(20,23,26,.35);}
-  #chatPop[hidden]{display:none;}
-  .ctabs{display:flex; gap:6px; padding:12px 14px 8px; position:sticky; top:0; background:#fff;}
-  .ctabs button{font:500 12.5px var(--font); padding:5px 11px; border-radius:999px; border:0; background:transparent; color:var(--ink-2); cursor:pointer;}
-  .ctabs button.on{background:var(--ink); color:#fff;}
-  .citem{display:flex; gap:11px; padding:12px 14px; border-top:1px solid var(--line); width:100%; text-align:left; background:none; border-left:0; border-right:0; border-bottom:0; cursor:pointer; font:inherit; color:inherit;}
-  .citem:hover{background:var(--bg-soft);}
-  .cdot{width:8px; height:8px; border-radius:50%; background:var(--violet); margin-top:7px; flex:none;}
-  .cdot.read{background:transparent; border:1.5px solid var(--line);}
-  .cav{width:30px; height:30px; border-radius:50%; background:var(--band); color:var(--violet); display:grid; place-items:center; font:600 12px var(--font); flex:none;}
-  .cmeta{font:500 11px var(--mono); color:var(--ink-3); margin-top:3px; letter-spacing:.03em; text-transform:uppercase;}
-  .cempty{padding:22px 16px; color:var(--ink-3); text-align:center;}
-  .cthread{display:flex; flex-direction:column; gap:10px; margin-bottom:10px;}
-  .cto{background:#fff; border:1px solid var(--line); color:var(--violet); font-weight:600; border-radius:6px; padding:0 5px;}
-  .cdone{margin-top:7px; font:500 12.5px var(--font); padding:4px 10px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer;}
-  .cdone.ok{background:var(--up-bg); color:var(--up); border-color:#cfe9da; cursor:default;}
-  .ccomp{border:1px solid var(--line); border-radius:12px; overflow:hidden;}
-  .ccomp .ctop{display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--line); color:var(--ink-3); font-size:13px;}
-  .ccomp select{font:500 13px var(--font); border:0; background:var(--bg-soft); border-radius:8px; padding:3px 8px; color:var(--ink);}
-  .ccomp textarea{display:block; width:100%; border:0; outline:0; padding:10px 12px; font:14px var(--font); min-height:58px; resize:vertical; color:var(--ink); background:#fff;}
-  .ccomp .cbot{display:flex; justify-content:flex-end; padding:7px 10px; background:#fafbfa; border-top:1px solid var(--line);}
-  .csend{background:var(--ink); color:#fff; border:0; border-radius:9px; padding:7px 16px; font:500 13px var(--font); cursor:pointer;}
-  .cwho2{display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 8px;}
-  .cwho2 button{font:500 12.5px var(--font); padding:5px 11px; border-radius:999px; border:1px solid var(--line); background:#fff; cursor:pointer;}
   .oname .newtag{margin-left:0; flex:none;}
   .omain b{font-weight:600; font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .ocomp{font-size:12.5px; color:var(--ink-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
@@ -1130,7 +1112,7 @@
 
   // ----- tabs
   var SCR={}, prevTab="dash";
-  function setTab(t, fromHash){
+  function setTab(t, fromHash){ var __from=tab;
     if (TABKEYS.indexOf(t)<0) t="dash";
     tab=t;
     document.getElementById("tab-dash").hidden = t!=="dash";
@@ -1142,7 +1124,7 @@
     TABKEYS.forEach(function(k){ var b=document.getElementById("tabbtn-"+k); b.setAttribute("aria-selected", String(k===t)); });
     if (t==="opps") renderOpps();
     if (t==="plan") renderPlan();
-    try{ CHAT_OPEN=(t==="chat"); if (t==="chat") chatShow(); else chatBadge(); }catch(e){}
+    try{ CHAT_OPEN=(t==="chat"); if (t==="chat"){ if(__from!=="chat") CHAT_FROM=__from; chatShow(); } else chatBadge(); }catch(e){}
     if (t==="sys") renderSys();
     if (!fromHash){ try{ history.replaceState(null,"", HASH[t]?("#"+HASH[t]):location.pathname+location.search); }catch(e){ try{ location.hash=HASH[t]; }catch(e2){} } }
     try{ localStorage.setItem("koya-tab", t); }catch(e){}
@@ -2607,7 +2589,7 @@
   }
   // ----- team chat: ONE channel for the team. A message can tag people (@) and leads (@ or #); a lead tag is a link that opens that lead.
   // Stored in the shared db (collection "chat"); names come from the viewer's own sign-in (the user capability), nothing is typed in or remembered per device.
-  var CHAT=[], CHAT_READY=false, CHAT_OPEN=false, CHAT_LAST=0, CHAT_ME={id:null,name:""}, CHAT_USER=null, CHAT_PEOPLE=[], CHAT_NAMES={}, CHAT_ROSTER={}, CHAT_RENAMING=false, CHAT_DELARM=null, CHAT_TAGS=[], CHAT_AC=[], CHAT_ACI=0;
+  var CHAT=[], CHAT_READY=false, CHAT_OPEN=false, CHAT_LAST=0, CHAT_ME={id:null,name:""}, CHAT_USER=null, CHAT_PEOPLE=[], CHAT_NAMES={}, CHAT_ROSTER={}, CHAT_RENAMING=false, CHAT_DELARM=null, CHAT_VIEW="all", CHAT_Q="", CHAT_FILTER=null, CHAT_FROM="opps", CHAT_TAGS=[], CHAT_AC=[], CHAT_ACI=0;
   try{ CHAT_LAST=+localStorage.getItem("koya-chat-last")||0; }catch(e){}
   function chatSeenLead(){}
   function chatInit(n){ return String(n||"?").trim().slice(0,2).toUpperCase(); }
@@ -2625,18 +2607,45 @@
     return ps.map(function(p){ if(p.t==="lead") return '<button type="button" class="clead" data-clead="'+esc(p.id)+'">#'+esc(p.l||"lead")+'</button>';
       if(p.t==="user") return '<span class="cto'+(p.id&&p.id===CHAT_ME.id?" me":"")+'">@'+esc((p.id&&CHAT_NAMES[p.id])||p.n||"Someone")+'</span>';
       return esc(p.v).replace(/\n/g,"<br>"); }).join(""); }
-  function chatMsgHTML(m){ var mine=m.fromId===CHAT_ME.id, nm=mine?(CHAT_ME.name||"You"):chatName(m.fromId);
-    return '<div class="cmsg'+(mine?" mine":"")+((m.tagIds||[]).indexOf(CHAT_ME.id)>=0?" forme":"")+'">'+(mine?'':'<span class="cav">'+esc(chatInit(nm))+'</span>')+'<div class="ccol"><div class="cwho">'+(mine?'':esc(nm)+' ')+'<span>'+esc(chatWhen(m.t))+'</span></div><div class="cbub">'+chatPartsHTML(m)+'</div>'+((mine||CHAT_ME.admin)?'<button type="button" class="cdel" data-cdel="'+esc(m.id)+'">'+(CHAT_DELARM===m.id?"Click again to delete":"Delete")+'</button>':'')+'</div></div>'; }
+  function chatHue(id){ var h=0, x=String(id||"?"); for(var i=0;i<x.length;i++) h=(h*31+x.charCodeAt(i))%360; return h; }
+  function chatAv(id,name){ var h=chatHue(id||name); return '<span class="cav" style="background:hsl('+h+' 70% 92%);color:hsl('+h+' 45% 32%)">'+esc(chatInit(name))+'</span>'; }
+  function chatClock(t){ var d=new Date(t); return isNaN(d)?"":d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}); }
+  function chatLeadOf(m){ var p=(m.parts||[]).filter(function(x){ return x.t==="lead"; })[0]; return p?p:null; }
+  function chatLeadCard(p){ var o=oppById(p.id); if(!o) return '<div class="ccard off"><span class="ccav">'+esc(chatInit(p.l))+'</span><span class="cct"><b>'+esc(p.l||"Lead")+'</b><small>Not on the page right now</small></span></div>';
+    return '<button type="button" class="ccard" data-clead="'+esc(o.id)+'"><span class="ccav">'+esc(chatInit(o.name||o.email))+'</span><span class="cct"><b>'+esc(o.name||o.email)+'</b><small>'+esc((o.company?o.company+" · ":"")+(o.stage||o.status||"Lead")+" · "+(o.last_touch?relAgo(o.last_touch):"no touch yet"))+'</small></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg></button>'; }
+  function chatMsgHTML(m){ var mine=m.fromId===CHAT_ME.id, nm=mine?(CHAT_ME.name||"You"):chatName(m.fromId), lp=chatLeadOf(m), likes=m.likes||[], iLike=likes.indexOf(CHAT_ME.id)>=0;
+    return '<div class="cmsg'+(mine?" mine":"")+((m.tagIds||[]).indexOf(CHAT_ME.id)>=0?" forme":"")+'">'+(mine?'':chatAv(m.fromId,nm))+'<div class="ccol"><div class="cwho">'+(mine?'':'<b>'+esc(nm)+'</b>')+'<span>'+esc(chatClock(m.t))+'</span></div><div class="cbub"><div>'+chatPartsHTML(m)+'</div>'+(lp?chatLeadCard(lp):'')+'</div><div class="cmeta"><button type="button" class="clike'+(iLike?" on":"")+(likes.length?"":" zero")+'" data-clike="'+esc(m.id)+'" aria-label="Like"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11v9H4v-9h3zM7 11l4-8a2 2 0 012 2v4h6a2 2 0 012 2.3l-1.2 7A2 2 0 0117.8 20H7"/></svg>'+(likes.length||"")+'</button>'+((mine||CHAT_ME.admin)?'<button type="button" class="cdel" data-cdel="'+esc(m.id)+'">'+(CHAT_DELARM===m.id?"Click again to delete":"Delete")+'</button>':'')+'</div></div></div>'; }
   function chatDayLabel(t){ var d=new Date(t); if(isNaN(d)) return ""; var n=new Date(), y=new Date(Date.now()-864e5), k=function(x){ return x.getFullYear()+"-"+x.getMonth()+"-"+x.getDate(); }; return k(d)===k(n)?"Today":k(d)===k(y)?"Yesterday":d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}); }
   function chatPageBuild(){ var m=document.getElementById("chatMount"); if(!m||m.firstChild) return m;
-    m.innerHTML='<div class="chead"><div class="ctitle"><b>Team chat</b><span id="chatSub">Tag a person or a lead. Tagged people are alerted the moment this page is open in their browser.</span></div><button type="button" id="chatDesk" hidden>Turn on desktop alerts</button></div><div id="chatFeed" class="cfeed"></div><div class="cwrite"><div id="chatAc" class="cac" hidden></div><div class="ctools"><button type="button" data-ctool="@">@ Person</button><button type="button" data-ctool="#"># Lead</button><span class="csub" id="chatWho"></span></div><div class="cbox"><textarea id="chatText" rows="1" placeholder="Message the team"></textarea><button type="button" class="csendi" id="chatSend" aria-label="Send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div></div>';
+    m.innerHTML='<div class="chead"><div class="ctitle"><b>Team chat</b><span>Discuss leads, share updates and stay in sync.</span></div><div class="cavs" id="chatAvs"></div><button type="button" id="chatDesk" hidden>Turn on desktop alerts</button><button type="button" class="cx" id="chatBack" aria-label="Close chat">&times;</button></div>'+
+      '<div class="cbar"><div class="ctabs2"><button type="button" data-cview="all" class="on">Chat</button><button type="button" data-cview="men">Mentions <span class="n" id="chatMenN" hidden>0</span></button></div><input id="chatSearch" class="csearch" type="search" placeholder="Search messages" autocomplete="off"></div>'+
+      '<div class="cgrid"><aside class="cthreads" id="chatThreads"></aside><section class="cmain"><div id="chatFeed" class="cfeed"></div><div class="cwrite"><div id="chatAc" class="cac" hidden></div><div class="ctools"><button type="button" data-ctool="@">@ Person</button><button type="button" data-ctool="#"># Lead</button><span class="csub" id="chatWho"></span></div><div class="cbox"><textarea id="chatText" rows="1" placeholder="Message the team. Type @ for a person, # for a lead"></textarea><button type="button" class="csendi" id="chatSend" aria-label="Send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div></div></section><aside class="cleadp" id="chatLead"></aside></div>';
     return m; }
   function chatDeskUpdate(){ var b=document.getElementById("chatDesk"); if(b) b.hidden=!(window.Notification&&Notification.permission==="default"); }
   function chatShow(){ if(!CHAT) return; chatPageBuild(); chatDeskUpdate(); CHAT_OPEN=true; chatMarkSeen(); chatDraw(); var f=document.getElementById("chatFeed"); if(f) f.scrollTop=f.scrollHeight; }
-  function chatDraw(){ if(tab!=="chat") return; chatPageBuild(); var f=document.getElementById("chatFeed"); if(!f) return; var  atEnd=f.scrollHeight-f.scrollTop-f.clientHeight<80;
-    var list=CHAT.slice().sort(function(a,b){ return String(a.t).localeCompare(String(b.t)); }).slice(-120);
+  function chatThreadsHTML(){ var by={}; CHAT.forEach(function(m){ var lp=chatLeadOf(m); if(!lp) return; var b=by[lp.id]||(by[lp.id]={id:lp.id,name:lp.l,n:0,last:null}); b.n++; if(!b.last||String(m.t)>String(b.last.t)) b.last=m; });
+    var arr=Object.keys(by).map(function(k){ return by[k]; }).sort(function(a,b){ return String(b.last.t).localeCompare(String(a.last.t)); });
+    var h='<button type="button" class="cth'+(CHAT_FILTER?"":" on")+'" data-cthread=""><span class="cav" style="background:var(--grad-ink);color:#fff">T</span><span class="tx"><b>Team chat</b><small>'+(CHAT.length?CHAT.length+" message"+(CHAT.length===1?"":"s"):"No messages yet")+'</small></span></button>';
+    if(arr.length) h+='<div class="cthh">Lead threads</div>';
+    arr.forEach(function(b){ var o=oppById(b.id), nm=(o&&(o.name||o.email))||b.name||"Lead"; h+='<button type="button" class="cth'+(CHAT_FILTER===b.id?" on":"")+'" data-cthread="'+esc(b.id)+'"><span class="cav" style="background:hsl('+chatHue(b.id)+' 70% 92%);color:hsl('+chatHue(b.id)+' 45% 32%)">'+esc(chatInit(nm))+'</span><span class="tx"><b>'+esc(nm)+'</b><small>'+esc(String(b.last.text||"").slice(0,60))+'</small></span><span class="tm">'+esc(chatClock(b.last.t))+'</span></button>'; });
+    return h; }
+  function chatLeadPanelHTML(list){ var id=CHAT_FILTER, lp=null; if(!id){ for(var i=list.length-1;i>=0;i--){ lp=chatLeadOf(list[i]); if(lp){ id=lp.id; break; } } } var o=id?oppById(id):null;
+    if(!o) return '<div class="cempty">Tag a lead with <b>#</b> and its details appear here.</div>';
+    var d=dueInfo(o), rows=[["Stage",o.stage||o.status||"-"],["Source",o.source||"-"],["Last touch",o.last_touch?relAgo(o.last_touch):"No touch yet"],["Follow-up",d.label]];
+    return '<div class="clh"><span class="ccav" style="width:42px;height:42px;font-size:15px">'+esc(chatInit(o.name||o.email))+'</span><div><b>'+esc(o.name||o.email)+'</b><small>'+esc(o.company||o.email||"")+'</small></div></div>'+rows.map(function(r){ return '<div class="clrow"><span>'+esc(r[0])+'</span><span>'+esc(r[1])+'</span></div>'; }).join("")+
+      '<button type="button" class="clbtn pri" data-clead="'+esc(o.id)+'">Open lead</button><button type="button" class="clbtn" data-chatlead="'+esc(o.id)+'">Message about this lead</button>'; }
+  function chatDraw(){ if(tab!=="chat") return; chatPageBuild(); var f=document.getElementById("chatFeed"); if(!f) return; var atEnd=f.scrollHeight-f.scrollTop-f.clientHeight<80, q=String(CHAT_Q||"").toLowerCase().trim();
+    var all=CHAT.slice().sort(function(a,b){ return String(a.t).localeCompare(String(b.t)); }), list=all;
+    if(CHAT_VIEW==="men") list=list.filter(function(m){ return (m.tagIds||[]).indexOf(CHAT_ME.id)>=0; });
+    if(CHAT_FILTER) list=list.filter(function(m){ var lp=chatLeadOf(m); return lp&&lp.id===CHAT_FILTER; });
+    if(q) list=list.filter(function(m){ var lp=chatLeadOf(m); return String(m.text||"").toLowerCase().indexOf(q)>=0||(lp&&String(lp.l||"").toLowerCase().indexOf(q)>=0); });
+    list=list.slice(-150);
     var last="", html=list.map(function(m){ var dl=chatDayLabel(m.t), sep=dl!==last?'<div class="cday"><span>'+esc(dl)+'</span></div>':""; last=dl; return sep+chatMsgHTML(m); }).join("");
-    f.innerHTML=list.length?html:'<div class="cempty">No messages yet. Write the first one below.</div>'; if(atEnd) f.scrollTop=f.scrollHeight;
+    f.innerHTML=list.length?html:'<div class="cempty">'+(q?"No message matches that search.":CHAT_VIEW==="men"?"Nobody has tagged you yet.":CHAT_FILTER?"No messages about this lead yet.":"No messages yet. Write the first one below.")+'</div>'; if(atEnd) f.scrollTop=f.scrollHeight;
+    document.getElementById("chatThreads").innerHTML=chatThreadsHTML(); document.getElementById("chatLead").innerHTML=chatLeadPanelHTML(list.length?list:all);
+    var men=CHAT.filter(function(m){ return (m.tagIds||[]).indexOf(CHAT_ME.id)>=0&&m.fromId!==CHAT_ME.id&&Date.now()-Date.parse(m.t)<7*864e5; }).length, mn=document.getElementById("chatMenN"); if(mn){ mn.textContent=men; mn.hidden=!men; }
+    [].forEach.call(document.querySelectorAll("[data-cview]"),function(b){ b.classList.toggle("on",b.dataset.cview===CHAT_VIEW); });
+    var ids={}; Object.keys(CHAT_ROSTER).forEach(function(i){ ids[i]=1; }); if(CHAT_ME.id) ids[CHAT_ME.id]=1; var ks=Object.keys(ids), av=document.getElementById("chatAvs"); if(av) av.innerHTML=ks.slice(0,5).map(function(i){ return chatAv(i,chatName(i)==="Someone"&&i===CHAT_ME.id?CHAT_ME.name:chatName(i)); }).join("")+(ks.length>5?'<span class="more">+'+(ks.length-5)+'</span>':"");
     var w=document.getElementById("chatWho"); if(w){ if(!CHAT_ME.id) w.textContent="Sign in to Claude to post"; else if(CHAT_RENAMING) w.innerHTML='<input id="chatNameIn" value="'+esc(CHAT_ME.name||"")+'" maxlength="30" style="font:inherit;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:2px 6px;width:110px"> <button type="button" id="chatNameSave" style="font:inherit;font-size:12px;border:0;background:var(--ink);color:#fff;border-radius:8px;padding:3px 9px;cursor:pointer">Save</button>'; else w.innerHTML='You are <b>'+esc(CHAT_ME.name||"you")+'</b> <button type="button" id="chatRename" style="font:inherit;font-size:12px;border:0;background:none;color:var(--violet);cursor:pointer;padding:0 0 0 4px">change</button>'; } }
   function chatRedraw(){ chatBadge(); chatDraw(); }
   function chatOpen(pre){ try{ var pc=document.getElementById("pclose"); if(pc&&!document.getElementById("panelwrap").hidden) pc.click(); }catch(e){} setTab("chat"); chatShow();
@@ -2686,9 +2695,13 @@
       chatResolve(ids).then(function(){
         if(CHAT_READY){ CHAT.forEach(function(m){ if(!prev[m.id]&&m.fromId!==CHAT_ME.id&&Date.now()-Date.parse(m.t)<120000&&!(tab==="chat"&&!document.hidden&&(m.tagIds||[]).indexOf(CHAT_ME.id)<0)) chatNotify(m); }); }
         CHAT_READY=true; if(CHAT_OPEN) chatMarkSeen(); chatRedraw(); }); },function(){}); }catch(e){} }
-  document.addEventListener("click",function(e){ var t=e.target.closest&&e.target.closest("#chatBtn,#chatSend,#chatDesk,#chatRename,#chatNameSave,[data-cdel],[data-clead],[data-cpick],[data-chatlead],[data-ctool]");
+  document.addEventListener("click",function(e){ var t=e.target.closest&&e.target.closest("#chatBtn,#chatBack,#chatSend,#chatDesk,#chatRename,#chatNameSave,[data-cview],[data-cthread],[data-clike],[data-cdel],[data-clead],[data-cpick],[data-chatlead],[data-ctool]");
     if(!t){ var ac=document.getElementById("chatAc"); if(ac&&!ac.hidden&&!e.target.closest("#chatAc,#chatText")) ac.hidden=true; return; }
     if(t.id==="chatBtn"){ chatOpen(); return; }
+    if(t.id==="chatBack"){ setTab(CHAT_FROM&&CHAT_FROM!=="chat"?CHAT_FROM:"opps"); return; }
+    if(t.dataset.cview){ CHAT_VIEW=t.dataset.cview; chatDraw(); return; }
+    if(t.dataset.cthread!==undefined){ CHAT_FILTER=t.dataset.cthread||null; chatDraw(); var fe=document.getElementById("chatFeed"); if(fe) fe.scrollTop=fe.scrollHeight; return; }
+    if(t.dataset.clike){ var lm=CHAT.filter(function(x){ return x.id===t.dataset.clike; })[0]; if(lm&&db&&CHAT_ME.id){ var ls=(lm.likes||[]).slice(), ix=ls.indexOf(CHAT_ME.id); if(ix>=0) ls.splice(ix,1); else ls.push(CHAT_ME.id); db.collection("chat").doc(lm.id).update({likes:ls}).catch(function(){ toast("Could not save that"); }); } return; }
     if(t.dataset.cdel){ var mid=t.dataset.cdel; if(CHAT_DELARM===mid){ CHAT_DELARM=null; if(db) db.collection("chat").doc(mid).delete().then(function(){ toast("Message deleted"); },function(){ toast("Could not delete it"); }); } else { CHAT_DELARM=mid; chatDraw(); setTimeout(function(){ if(CHAT_DELARM===mid){ CHAT_DELARM=null; chatDraw(); } },4000); } return; }
     if(t.id==="chatRename"){ CHAT_RENAMING=true; chatDraw(); var ni=document.getElementById("chatNameIn"); if(ni){ ni.focus(); ni.select(); } return; }
     if(t.id==="chatNameSave"){ chatRename((document.getElementById("chatNameIn")||{}).value); return; }
@@ -2697,8 +2710,8 @@
     if(t.id==="chatSend"){ chatSend(); return; }
     if(t.dataset.cpick!==undefined){ chatPick(+t.dataset.cpick); return; }
     if(t.dataset.clead){ var id=t.dataset.clead; if(oppById(id)){ openPanel(id); } else toast("That lead is not on the page"); return; }
-    if(t.dataset.chatlead){ var o=oppById(t.dataset.chatlead); if(o) chatOpen({type:"lead",id:o.id,label:"#"+chatLeadLabel(o)}); return; } });
-  document.addEventListener("input",function(e){ if(e.target&&e.target.id==="chatText") chatAcUpdate(); });
+    if(t.dataset.chatlead){ var o=oppById(t.dataset.chatlead); if(o){ CHAT_FILTER=o.id; chatOpen({type:"lead",id:o.id,label:"#"+chatLeadLabel(o)}); } return; } });
+  document.addEventListener("input",function(e){ if(e.target&&e.target.id==="chatText"){ chatAcUpdate(); try{ e.target.style.height="auto"; e.target.style.height=Math.min(130,e.target.scrollHeight)+"px"; }catch(x){} } if(e.target&&e.target.id==="chatSearch"){ CHAT_Q=e.target.value; chatDraw(); } });
   document.addEventListener("keydown",function(e){ if(!e.target||e.target.id!=="chatText") return; var ac=document.getElementById("chatAc"), open=ac&&!ac.hidden&&CHAT_AC.length;
     if(open&&(e.key==="ArrowDown"||e.key==="ArrowUp")){ e.preventDefault(); CHAT_ACI=(CHAT_ACI+(e.key==="ArrowDown"?1:CHAT_AC.length-1))%CHAT_AC.length; [].forEach.call(ac.querySelectorAll(".cacitem"),function(b,i){ b.classList.toggle("on",i===CHAT_ACI); }); return; }
     if(open&&(e.key==="Enter"||e.key==="Tab")){ e.preventDefault(); chatPick(CHAT_ACI); return; }
