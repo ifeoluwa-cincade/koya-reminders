@@ -64,6 +64,7 @@ def main() -> int:
     ap.add_argument("--workspace", default="ATTIO_API_KEY_2")
     a = ap.parse_args()
     v = json.loads(IN.read_text())
+    v = {k: x for k, x in v.items() if x.get("verdict") not in ("UNKNOWN", None) and not x.get("retry")}      # a call that could not be judged yet (transcription failed) is retried by the call job; it must never become a note with an error message in it
     if not v:                                  # the hourly job calls this every run; no calls yet means nothing to do
         print("no calls to write yet")
         return 0
