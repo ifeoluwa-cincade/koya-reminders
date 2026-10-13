@@ -1350,11 +1350,12 @@
     // one read per stage, and further pages until a page brings nothing new: the tool returns a limited page, and one combined read missed the newest deals
     var lastRaw="";
     function pageStage(st){ var out={}, flt1={attribute:"stage",op:"eq",value:st};
-      function go(off,pg){ var inp={object:"deals",filter:flt1,limit:100}; if(off) inp.offset=off;
-        return ask(inp).catch(function(){ return off?null:ask({object:"deals",filter:flt1}); }).then(function(r){
+      function go(off,cur,pg){ var inp={object:"deals",filter:flt1,limit:100}; if(cur) inp.cursor=cur; else if(off) inp.offset=off;
+        return ask(inp).catch(function(){ if(off||cur) return null; return ask({object:"deals",filter:flt1}); }).then(function(r){
           if(!r) return out; lastRaw=String(txt(r)); var b=attioBlocks(txt(r)), got=Object.keys(b), fresh=0; got.forEach(function(i){ if(!out[i]){ out[i]=b[i]; fresh++; } });
-          return (fresh&&got.length>=20&&pg<4)?go(off+got.length,pg+1):out; }); }
-      return go(0,0); }
+          var cm=lastRaw.match(/(?:next_cursor|nextCursor|next cursor|cursor)["']?\s*[:=]\s*["']?([A-Za-z0-9_\-+\/=.]{6,})/i), nc=cm&&cm[1]&&!/^(null|none|undefined)$/i.test(cm[1])?cm[1]:null;
+          return (fresh&&pg<15)?go(off+got.length,nc,pg+1):out; }); }
+      return go(0,null,0); }
     return Promise.all(OPEN.map(pageStage)).then(function(parts){
       var B={}, counts=[]; parts.forEach(function(pt,i){ var k=Object.keys(pt); k.forEach(function(d){ B[d]=pt[d]; }); counts.push(OPEN[i]+" "+k.length); });
       var ids=Object.keys(B);
@@ -1362,7 +1363,7 @@
       LIVE_COUNTS=counts.join(", ");
       var known={}; OPPS.concat(CLOSED).forEach(function(o){ known[o.id]=1; });
       var fresh=[]; ids.forEach(function(did){ var b=B[did], m=b.match(/people,[0-9a-f-]{36},([0-9a-f-]{36})/), pid=m&&m[1], st=attioVal(b,"stage"); if (pid && !known[pid] && OPEN.indexOf(st)>=0){ known[pid]=1; fresh.push({pid:pid,did:did,b:b,st:st}); } });
-      LIVE_DISC_ERR=null; var nn=document.getElementById("liveNote"); if (nn) nn.textContent=ids.length+" open deals read live from Attio ("+LIVE_COUNTS+"), "+fresh.length+" new"; if (!fresh.length) return;
+      LIVE_DISC_ERR=null; var nn=document.getElementById("liveNote"); if (nn){ nn.textContent=""; nn.title=ids.length+" open deals read live from Attio ("+LIVE_COUNTS+"), "+fresh.length+" new"; } if (!fresh.length) return;
       return MCP.callTool("Attio","get-records-by-ids",{object:"people",record_ids:fresh.map(function(f){ return f.pid; })},{cache:false}).then(function(r2){
         var P=attioBlocks(txt(r2)), added=0;
         fresh.forEach(function(f){ var pb=P[f.pid]; if(!pb) return;
@@ -1380,7 +1381,7 @@
             if (tab==="opps") renderOpps(); if (openId===o.id) openPanel(o.id,true);
           }).catch(function(){});
         });
-        if (added){ var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=OPPS.length; if(tab==="opps") renderOpps(); var n=document.getElementById("liveNote"); if(n) n.textContent=added+" new lead"+(added>1?"s":"")+" found live in Attio"; }
+        if (added){ var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=OPPS.length; if(tab==="opps") renderOpps(); var n=document.getElementById("liveNote"); if(n){ n.textContent=""; n.title=added+" new lead"+(added>1?"s":"")+" found live in Attio"; } }
       });
     }).catch(function(e){ LIVE_DISC_ERR=errText(e); var n1=document.getElementById("liveNote"); if(n1) n1.textContent="New leads could not be read live ("+LIVE_DISC_ERR+")"; });
   }
@@ -1418,7 +1419,7 @@
       LIVE_AT=Date.now(); LIVE_ERR=null;
       var cnt=document.getElementById("tabcnt-opps"); if(cnt) cnt.textContent=OPPS.length;
       if (tab==="opps") renderOpps(); if (tab==="sys") renderSys();
-      var n=document.getElementById("liveNote"); if(n) n.textContent="leads re-checked in Attio just now"+(gone?" · "+gone+" resolved lead"+(gone>1?"s":"")+" removed":"");
+      var n=document.getElementById("liveNote"); if(n){ n.textContent=""; n.title="leads re-checked in Attio just now"+(gone?" · "+gone+" resolved lead"+(gone>1?"s":"")+" removed":""); }
     }).catch(function(e){ LIVE_ERR=errText(e); var n=document.getElementById("liveNote"); if(n) n.textContent="could not re-check leads in Attio: "+LIVE_ERR+" (showing the hourly data)"; });
   }
   // Email numbers read straight from PlusVibe: one call per day for the last 7 days (get_analytics_stats gives totals for the range asked)
