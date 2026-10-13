@@ -1282,24 +1282,34 @@
   function errText(e){ if (e && /was not found/i.test(String(e.message||""))) return "that lead no longer exists in Attio (it was deleted). Reload the page to refresh the list"; var c=(e&&e.code)||"error"; return ({server_not_connected:"the connector is not connected in your claude.ai",needs_reauth:"reconnect the connector in claude.ai Settings, Connectors",not_in_manifest:"the connector was not allowed for this page",blocked_by_policy:"blocked by your organisation",tool_error:(e&&e.message)||"the tool reported an error",server_unavailable:"the service did not answer, try again",upstream_error:"the service did not answer, try again"})[c]||(c+": "+((e&&e.message)||"")); }
   function stageBucket(st){ return ({"Meeting Booked":"meeting","Interested":"followup","Multi-touch":"chasing","Later":"later"})[st]||null; }
   // ----- live discovery: ask Attio for every open deal, so a lead that arrived since the hourly build shows up on a pull
-  var LIVE_DISC_ERR=null;
+  var LIVE_DISC_ERR=null, LIVE_COUNTS="";
   function liveDiscover(){
     if (!MCP) return Promise.resolve();
     var OPEN=["Interested","Multi-touch","Later","Meeting Booked","Profiles Sent","Trial"], flt={or:OPEN.map(function(x){ return {attribute:"stage",op:"eq",value:x}; })};
     function ask(inp){ return MCP.callTool("Attio","list-records",inp,{cache:false}); }
-    return ask({object:"deals",filter:flt,limit:100}).catch(function(){ return ask({object:"deals",filter:flt}); }).then(function(r){
-      var B=attioBlocks(txt(r)), ids=Object.keys(B);
-      if (!ids.length){ LIVE_DISC_ERR="the list came back in a format the page could not read: "+String(txt(r)).replace(/\s+/g," ").slice(0,140); var n0=document.getElementById("liveNote"); if(n0) n0.textContent="New leads could not be read live ("+LIVE_DISC_ERR+")"; return; }
+    // one read per stage, and further pages until a page brings nothing new: the tool returns a limited page, and one combined read missed the newest deals
+    var lastRaw="";
+    function pageStage(st){ var out={}, flt1={attribute:"stage",op:"eq",value:st};
+      function go(off,pg){ var inp={object:"deals",filter:flt1,limit:100}; if(off) inp.offset=off;
+        return ask(inp).catch(function(){ return off?null:ask({object:"deals",filter:flt1}); }).then(function(r){
+          if(!r) return out; lastRaw=String(txt(r)); var b=attioBlocks(txt(r)), got=Object.keys(b), fresh=0; got.forEach(function(i){ if(!out[i]){ out[i]=b[i]; fresh++; } });
+          return (fresh&&pg<8)?go(off+got.length,pg+1):out; }); }
+      return go(0,0); }
+    return Promise.all(OPEN.map(pageStage)).then(function(parts){
+      var B={}, counts=[]; parts.forEach(function(pt,i){ var k=Object.keys(pt); k.forEach(function(d){ B[d]=pt[d]; }); counts.push(OPEN[i]+" "+k.length); });
+      var ids=Object.keys(B);
+      if (!ids.length){ LIVE_DISC_ERR="the list came back in a format the page could not read: "+lastRaw.replace(/\s+/g," ").slice(0,140); var n0=document.getElementById("liveNote"); if(n0) n0.textContent="New leads could not be read live ("+LIVE_DISC_ERR+")"; return; }
+      LIVE_COUNTS=counts.join(", ");
       var known={}; OPPS.concat(CLOSED).forEach(function(o){ known[o.id]=1; });
       var fresh=[]; ids.forEach(function(did){ var b=B[did], m=b.match(/people,[0-9a-f-]{36},([0-9a-f-]{36})/), pid=m&&m[1], st=attioVal(b,"stage"); if (pid && !known[pid] && OPEN.indexOf(st)>=0){ known[pid]=1; fresh.push({pid:pid,did:did,b:b,st:st}); } });
-      LIVE_DISC_ERR=null; var nn=document.getElementById("liveNote"); if (nn) nn.textContent=ids.length+" open deals read live from Attio, "+fresh.length+" new"; if (!fresh.length) return;
+      LIVE_DISC_ERR=null; var nn=document.getElementById("liveNote"); if (nn) nn.textContent=ids.length+" open deals read live from Attio ("+LIVE_COUNTS+"), "+fresh.length+" new"; if (!fresh.length) return;
       return MCP.callTool("Attio","get-records-by-ids",{object:"people",record_ids:fresh.map(function(f){ return f.pid; })},{cache:false}).then(function(r2){
         var P=attioBlocks(txt(r2)), added=0;
         fresh.forEach(function(f){ var pb=P[f.pid]; if(!pb) return;
           var dname=attioVal(f.b,"name")||"", nx=attioVal(f.b,"next_action_at"), em=(pb.match(/email_addresses\[\d+\]:\s*(\S+)/)||[])[1]||null, li=attioVal(pb,"linkedin"), ch=attioVal(f.b,"source_channel")||"";
           var bk=stageBucket(f.st)||"followup", parts=dname.split("/");
           OPPS.push({id:f.pid,name:attioVal(pb,"name")||dname,company:parts.length>1?parts.slice(1).join("/").trim():null,email:em,phone:((pb.match(/phone_numbers\[\d+\]:\s*(\S+)/)||[])[1]||null),linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:f.st,source:/call/i.test(ch)?"Call":"Email",
-            last_touch:new Date().toISOString(),due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,summary:null,call_at:null,attempts:null,campaign:null,
+            last_touch:new Date().toISOString(),due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,summary:attioVal(pb,"last_reply_summary")||null,call_at:null,attempts:null,campaign:null,
             links:{attio:"https://app.attio.com/koya-talent/person/"+f.pid,deal:"https://app.attio.com/koya-talent/deals/record/"+f.did,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[],live_new:true}); added++; });
         OPPS.filter(function(o){ return o.live_new && o.email && !o.sequence; }).forEach(function(o){                       // PlusVibe: where this lead is in the sequences, straight away
           o.sequence=[];
