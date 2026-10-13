@@ -1036,7 +1036,14 @@
   // ---------- tabs, opportunities, systems & operations (added 2026-10-09) ----------
   // The data below is baked into the page by the hourly build (collect_ops.py). The page cannot call Attio, PlusVibe or
   // CloudTalk itself, so everything here is read-only for now and says how old it is.
-  var ALLOPPS=(DATA.opps||[]).slice(), CLOSED=ALLOPPS.filter(function(o){ return o.bucket==="lost"||o.bucket==="won"; }), OPPS=ALLOPPS.filter(function(o){ return o.bucket!=="lost"&&o.bucket!=="won"; }), fView="open", CHECKS=(DATA.checks||[]).slice(), OPS_AT=DATA.ops_at||null;
+  // names shown the way a person would write them: no credentials after the name, no ALL CAPS, company names that came in all lowercase get capitals
+  function titleCase(x){ return String(x).toLowerCase().replace(/(^|[\s'\u2019])([a-z\u00e0-\u00ff])/g,function(m,a,b){ return a+b.toUpperCase(); }); }
+  function cleanName(n){ if(!n) return n; var s=String(n).replace(/\s+/g," ").trim(); s=s.split(/\s[-\u2013|~]\s|,\s*/)[0].trim();
+    var t=s.split(" "); while(t.length>2 && /^[A-Z]{2,6}$/.test(t[t.length-1]) && !/^(JR|SR|II|III|IV)$/.test(t[t.length-1])) t.pop();
+    s=t.join(" "); if(s.length>3 && s===s.toUpperCase() && /[A-Z]/.test(s)) s=titleCase(s); return s; }
+  function cleanCo(c){ if(!c) return c; var s=String(c).trim(); return /^[a-z ]+$/.test(s)?titleCase(s):s; }
+  function tidyOpp(o){ o.name=cleanName(o.name); o.company=cleanCo(o.company); return o; }
+  var ALLOPPS=(DATA.opps||[]).slice().map(tidyOpp), CLOSED=ALLOPPS.filter(function(o){ return o.bucket==="lost"||o.bucket==="won"; }), OPPS=ALLOPPS.filter(function(o){ return o.bucket!=="lost"&&o.bucket!=="won"; }), fView="open", CHECKS=(DATA.checks||[]).slice(), OPS_AT=DATA.ops_at||null;
   var HASH={dash:"", opps:"opps", plan:"plan", sys:"systems"}, TABKEYS=["dash","opps","plan","sys"], tab="dash";
   var RULE={meeting:3, followup:2, chasing:2, callback:1, later:30};
   var BUCKET_NAME={meeting:"Meeting booked", followup:"Follow up", chasing:"Multi-touch", callback:"Callback", later:"Later", lost:"Lost", won:"Won"};
@@ -1328,7 +1335,7 @@
       function go(off,pg){ var inp={object:"deals",filter:flt1,limit:100}; if(off) inp.offset=off;
         return ask(inp).catch(function(){ return off?null:ask({object:"deals",filter:flt1}); }).then(function(r){
           if(!r) return out; lastRaw=String(txt(r)); var b=attioBlocks(txt(r)), got=Object.keys(b), fresh=0; got.forEach(function(i){ if(!out[i]){ out[i]=b[i]; fresh++; } });
-          return (fresh&&pg<8)?go(off+got.length,pg+1):out; }); }
+          return (fresh&&got.length>=20&&pg<4)?go(off+got.length,pg+1):out; }); }
       return go(0,0); }
     return Promise.all(OPEN.map(pageStage)).then(function(parts){
       var B={}, counts=[]; parts.forEach(function(pt,i){ var k=Object.keys(pt); k.forEach(function(d){ B[d]=pt[d]; }); counts.push(OPEN[i]+" "+k.length); });
@@ -1343,9 +1350,9 @@
         fresh.forEach(function(f){ var pb=P[f.pid]; if(!pb) return;
           var dname=attioVal(f.b,"name")||"", nx=attioVal(f.b,"next_action_at"), em=(pb.match(/email_addresses\[\d+\]:\s*(\S+)/)||[])[1]||null, li=attioVal(pb,"linkedin"), ch=attioVal(f.b,"source_channel")||"";
           var bk=stageBucket(f.st)||"followup", parts=dname.split("/");
-          OPPS.push({id:f.pid,name:attioVal(pb,"name")||dname,company:parts.length>1?parts.slice(1).join("/").trim():null,email:em,phone:((pb.match(/phone_numbers\[\d+\]:\s*(\S+)/)||[])[1]||null),linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:f.st,source:/call/i.test(ch)?"Call":"Email",
+          OPPS.push(tidyOpp({id:f.pid,name:attioVal(pb,"name")||dname,company:parts.length>1?parts.slice(1).join("/").trim():null,email:em,phone:((pb.match(/phone_numbers\[\d+\]:\s*(\S+)/)||[])[1]||null),linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:f.st,source:/call/i.test(ch)?"Call":"Email",
             last_touch:new Date().toISOString(),due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,summary:attioVal(pb,"last_reply_summary")||null,call_at:null,attempts:null,campaign:null,
-            links:{attio:"https://app.attio.com/koya-talent/person/"+f.pid,deal:"https://app.attio.com/koya-talent/deals/record/"+f.did,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[],live_new:true}); added++; });
+            links:{attio:"https://app.attio.com/koya-talent/person/"+f.pid,deal:"https://app.attio.com/koya-talent/deals/record/"+f.did,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[],live_new:true})); added++; });
         OPPS.filter(function(o){ return o.live_new && o.email && !o.sequence; }).forEach(function(o){                       // PlusVibe: where this lead is in the sequences, straight away
           o.sequence=[];
           MCP.callTool("PlusVibe","find_lead_by_email",{workspace_id:PVWS_ID,email:o.email},{cache:false}).then(function(r){
