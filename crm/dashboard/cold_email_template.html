@@ -1665,6 +1665,9 @@
   }
   document.addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest("#copyLeadLink"); if(!b||!openId) return; var u=ARTIFACT_URL+"#lead-"+openId; function ok(){ b.innerHTML=svgIcon("check"); b.setAttribute("data-tip","Link copied"); setTimeout(function(){ b.innerHTML=svgIcon("link"); b.setAttribute("data-tip","Copy link to this lead"); },1800); }
     try{ navigator.clipboard.writeText(u).then(ok,function(){ b.setAttribute("data-tip",u); }); }catch(x){ b.setAttribute("data-tip",u); } });
+  // a small confirmation at the bottom of the page (a reminder being set no longer posts to Discord: Discord only pings when it is due)
+  function toast(msg){ var t=document.getElementById("koyaToast"); if(!t){ t=document.createElement("div"); t.id="koyaToast"; t.setAttribute("role","status"); t.style.cssText="position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;transition:opacity .25s ease,transform .25s ease;z-index:9990;max-width:calc(100vw - 32px);background:#0d0f13;color:#fff;border-radius:999px;padding:11px 18px;font-size:14px;box-shadow:0 12px 30px -10px rgba(0,0,0,.5);pointer-events:none;"; document.body.appendChild(t); }
+    t.textContent=msg; requestAnimationFrame(function(){ t.style.opacity="1"; t.style.transform="translate(-50%,0)"; }); clearTimeout(t._h); t._h=setTimeout(function(){ t.style.opacity="0"; t.style.transform="translate(-50%,20px)"; },4500); }
   var RZSTATE=null;
   function rzOpen(act){
     var o=oppById(openId), z=document.getElementById("rzone"); if(!o||!z) return;
@@ -1807,6 +1810,7 @@
       if (stop) pv.forEach(function(x){ chk.push(["PlusVibe "+x.campaign.slice(-6),x.status==="COMPLETED"||x.done===1,x.status+(x.done===1?", completed":"")]); });
       if (a.stop&&RZPICK) chk.push(["PlusVibe tag",true,(RZPICK==="KEEP"?"kept as it is":tagName(RZPICK)+", being applied now")]);
       var bad=log.filter(function(l){ return !l[1]; }), all=chk.every(function(c){ return c[1]; })&&!bad.length;
+      if (all && a.date) toast("Reminder set for "+fmtWhen(new Date(until+"T"+utime+":00+01:00").toISOString())+". Discord will ping you when it is due.");
       z.innerHTML='<div class="rzdone '+(all?"ok":"bad")+'">'+(all?"Done. Every system was read back and matches.":"Check this one. Something did not match.")+'</div>'+
         chk.map(function(c){ return '<div class="rzr"><span>'+esc(c[0])+'</span><span class="'+(c[1]?"okt":"badt")+'">'+(c[1]?"✓ ":"✗ ")+esc(c[2])+'</span></div>'; }).join("")+
         bad.map(function(l){ return '<div class="rzr"><span>'+esc(l[0])+'</span><span class="badt">'+esc(l[2])+'</span></div>'; }).join("");
