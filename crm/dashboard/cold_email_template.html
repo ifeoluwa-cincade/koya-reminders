@@ -953,13 +953,17 @@
   }
 
   // "Updated 25 min ago" ticks by itself, so a stuck refresh is obvious instead of looking current.
+  var LIVE_ALL_AT=null, LIVE_PART="";
   function age(){
     if (!DATA.generated_at) return;
-    var u=new Date(DATA.generated_at), m=Math.max(0,Math.round((Date.now()-u.getTime())/6e4));
+    var u=new Date(DATA.generated_at), base=u.getTime(), live=false;
+    if (LIVE_ALL_AT && LIVE_ALL_AT>base){ base=LIVE_ALL_AT; live=true; }
+    var m=Math.max(0,Math.round((Date.now()-base)/6e4));
     var ago = m<1 ? "just now" : m<60 ? m+" min ago" : m<1440 ? Math.floor(m/60)+"h "+(m%60)+"m ago" : Math.floor(m/1440)+" days ago";
     var el=document.getElementById("updated");
-    el.textContent="Data updated "+ago+" · "+u.toLocaleString("en-GB",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+(DATA.built_by==="manual"?" · built by hand, the automatic build runs hourly":"");
-    el.style.color = m>180 ? "#ffb4a8" : "";
+    el.textContent = live ? "Data updated "+ago+" \u00b7 live"+(LIVE_PART?" (could not read "+LIVE_PART+")":"")
+      : "Data updated "+ago+" \u00b7 "+u.toLocaleString("en-GB",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+(DATA.built_by==="manual"?" \u00b7 built by hand, the automatic build runs hourly":"");
+    el.style.color = (!live && m>180) ? "#ffb4a8" : "";
   }
   age(); setInterval(age, 60000);
   // If the page is left open past midnight, move to the new day by itself.
@@ -1239,6 +1243,36 @@
   function pvJson(r){ var t=txt(r), i=t.search(/[\[{]/); if(i<0) return null; try{ return JSON.parse(t.slice(i)); }catch(e){ return null; } }
   function errText(e){ if (e && /was not found/i.test(String(e.message||""))) return "that lead no longer exists in Attio (it was deleted). Reload the page to refresh the list"; var c=(e&&e.code)||"error"; return ({server_not_connected:"the connector is not connected in your claude.ai",needs_reauth:"reconnect the connector in claude.ai Settings, Connectors",not_in_manifest:"the connector was not allowed for this page",blocked_by_policy:"blocked by your organisation",tool_error:(e&&e.message)||"the tool reported an error",server_unavailable:"the service did not answer, try again",upstream_error:"the service did not answer, try again"})[c]||(c+": "+((e&&e.message)||"")); }
   function stageBucket(st){ return ({"Meeting Booked":"meeting","Interested":"followup","Multi-touch":"chasing","Later":"later"})[st]||null; }
+  // ----- live discovery: ask Attio for every open deal, so a lead that arrived since the hourly build shows up on a pull
+  var LIVE_DISC_ERR=null;
+  function liveDiscover(){
+    if (!MCP) return Promise.resolve();
+    var OPEN=["Interested","Multi-touch","Later","Meeting Booked","Profiles Sent","Trial"], flt={or:OPEN.map(function(x){ return {attribute:"stage",op:"eq",value:x}; })};
+    function ask(inp){ return MCP.callTool("Attio","list-records",inp,{cache:false}); }
+    return ask({object:"deals",filter:flt,limit:100}).catch(function(){ return ask({object:"deals",filter:flt}); }).then(function(r){
+      var B=attioBlocks(txt(r)), ids=Object.keys(B);
+      if (!ids.length){ LIVE_DISC_ERR="the list came back in a format the page could not read"; return; }
+      var known={}; OPPS.concat(CLOSED).forEach(function(o){ known[o.id]=1; });
+      var fresh=[]; ids.forEach(function(did){ var b=B[did], m=b.match(/people,[0-9a-f-]{36},([0-9a-f-]{36})/), pid=m&&m[1], st=attioVal(b,"stage"); if (pid && !known[pid] && OPEN.indexOf(st)>=0){ known[pid]=1; fresh.push({pid:pid,did:did,b:b,st:st}); } });
+      LIVE_DISC_ERR=null; if (!fresh.length) return;
+      return MCP.callTool("Attio","get-records-by-ids",{object:"people",record_ids:fresh.map(function(f){ return f.pid; })},{cache:false}).then(function(r2){
+        var P=attioBlocks(txt(r2)), added=0;
+        fresh.forEach(function(f){ var pb=P[f.pid]; if(!pb) return;
+          var dname=attioVal(f.b,"name")||"", nx=attioVal(f.b,"next_action_at"), em=(pb.match(/email_addresses\[\d+\]:\s*(\S+)/)||[])[1]||null, li=attioVal(pb,"linkedin"), ch=attioVal(f.b,"source_channel")||"";
+          var bk=stageBucket(f.st)||"followup", parts=dname.split("/");
+          OPPS.push({id:f.pid,name:attioVal(pb,"name")||dname,company:parts.length>1?parts.slice(1).join("/").trim():null,email:em,phone:null,linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:f.st,source:/call/i.test(ch)?"Call":"Email",
+            last_touch:null,due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,summary:null,call_at:null,attempts:null,campaign:null,
+            links:{attio:"https://app.attio.com/koya-talent/person/"+f.pid,deal:"https://app.attio.com/koya-talent/deals/record/"+f.did,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[],live_new:true}); added++; });
+        if (added){ var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=OPPS.length; if(tab==="opps") renderOpps(); var n=document.getElementById("liveNote"); if(n) n.textContent=added+" new lead"+(added>1?"s":"")+" found live in Attio"; }
+      });
+    }).catch(function(e){ LIVE_DISC_ERR=errText(e); });
+  }
+  // the header says "updated just now" only when every live read worked; otherwise it names what could not be read
+  function markLive(){
+    var bad=[]; if(LIVE_ERR||!LIVE_AT) bad.push("Attio"); if(LIVE_NUM_ERR||!LIVE_NUM_AT) bad.push("PlusVibe"); if(LIVE_CALL_ERR||!LIVE_CALL_AT) bad.push("CloudTalk");
+    if (bad.length>=3) return; LIVE_ALL_AT=Date.now(); LIVE_PART=bad.join(", "); age();
+  }
+  function liveAll(){ liveSync(); liveNumbers(); liveDials(); liveDiscover(); setTimeout(markLive,9000); setTimeout(markLive,25000); }
   // one-time housekeeping: save the input format of the Attio read tools into the shared store so the live lookup can be built against the real thing
   function captureSchemas(){ if(!db||!MCP||!MCP.describeTool) return;
     ["list-records","list-records-in-list","search-records","query-particle-sql","list-objects"].forEach(function(t){
@@ -1299,8 +1333,8 @@
     refresh:function(){
       var inv; try{ inv=(typeof MCP.invalidate==="function")?MCP.invalidate():null; }catch(e){ inv=null; }
       return Promise.resolve(inv).catch(function(){}).then(function(){
-        return Promise.all([liveSync,liveNumbers,liveDials].map(function(f){ try{ return Promise.resolve(f()).then(function(){ return true; },function(){ return false; }); }catch(e){ return Promise.resolve(false); } }));
-      }).then(function(rs){ var o=openId?oppById(openId):null; if(o) refreshSeq(o); return rs.some(Boolean); });
+        return Promise.all([liveSync,liveNumbers,liveDials,liveDiscover].map(function(f){ try{ return Promise.resolve(f()).then(function(){ return true; },function(){ return false; }); }catch(e){ return Promise.resolve(false); } }));
+      }).then(function(rs){ var o=openId?oppById(openId):null; if(o) refreshSeq(o); markLive(); return rs.some(Boolean); });
     }
   };
   // Dials read straight from CloudTalk: every outgoing call for each day since 8 Oct (cloudtalk_search_calls, newest first, 200 a page)
@@ -1323,7 +1357,7 @@
       render(); age(); if(tab==="sys") renderSys();
     }).catch(function(e){ LIVE_CALL_ERR=errText(e); if(tab==="sys") renderSys(); });
   }
-  (function(){ try{ if (window.claude && window.claude.use){ window.claude.use("mcp").then(function(m){ MCP=wrapMcp(m); if(m){  if(openId && oppById(openId)) openPanel(openId); if(PENDING_LEAD){ var pl=PENDING_LEAD; PENDING_LEAD=null; if(oppById(pl)) openPanel(pl); else loadLeadLive(pl); } liveSync(); liveNumbers(); liveDials(); setInterval(function(){ if(!document.hidden){ liveSync(); liveNumbers(); liveDials(); } },300000); document.addEventListener("visibilitychange",function(){ if(!document.hidden){ liveSync(); liveNumbers(); liveDials(); } }); } },function(){}); } }catch(e){} })();
+  (function(){ try{ if (window.claude && window.claude.use){ window.claude.use("mcp").then(function(m){ MCP=wrapMcp(m); if(m){  if(openId && oppById(openId)) openPanel(openId); if(PENDING_LEAD){ var pl=PENDING_LEAD; PENDING_LEAD=null; if(oppById(pl)) openPanel(pl); else loadLeadLive(pl); } liveAll(); setInterval(function(){ if(!document.hidden){ liveAll(); } },300000); document.addEventListener("visibilitychange",function(){ if(!document.hidden){ liveAll(); } }); } },function(){}); } }catch(e){} })();
 
   // When the live connection is off, a banner across the top of EVERY tab says so and offers one tap to allow it
   // (the page asks the viewer for access to Attio, PlusVibe and CloudTalk). It disappears the moment the connection is on.
@@ -1336,7 +1370,7 @@
       btn.disabled=true; btn.textContent="Asking…";
       var P=window.claude && window.claude.use ? window.claude.use("permissions") : Promise.resolve(null);
       P.then(function(p){ return p && p.request ? p.request() : null; }).then(function(){ return window.claude.use("mcp"); }).then(function(m){
-        if (m) { MCP=wrapMcp(m); bn.hidden=true; liveSync(); liveNumbers(); liveDials(); }
+        if (m) { MCP=wrapMcp(m); bn.hidden=true; liveAll(); }
         else { btn.disabled=false; btn.textContent="Try again"; msg.textContent="Still off. Check that Attio, PlusVibe and CloudTalk are connected in claude.ai: Settings, then Connectors. Then open this page again."; }
       }).catch(function(){ btn.disabled=false; btn.textContent="Try again"; msg.textContent="Could not turn it on from here. Check claude.ai: Settings, then Connectors."; });
     });
