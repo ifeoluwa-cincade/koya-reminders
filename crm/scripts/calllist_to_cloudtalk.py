@@ -233,6 +233,14 @@ def main() -> int:
 
     print(f"to tag: {len(plan_add)} | to create in CloudTalk: {len(plan_create)} | to untag: {len(plan_remove)} | numbers to add to existing contacts: {len(plan_fill)}")
 
+    # ---- GUARD (Ife 2026-10-13, after the 'This number can't be dialed' incident): a tagged contact with no phone number gets into the
+    # dialler queue and cannot be rung. Count them on every run. They are reported, never ignored; this must always be 0.
+    nonum_tagged = {t: sorted(cid for cid in ids if cid not in has_number and cid not in filled) for t, ids in tagged_now.items()}
+    nonum_total = sum(len(v) for v in nonum_tagged.values())
+    print(f"GUARD tagged contacts with NO phone number (must be 0): {nonum_total} {({t: len(v) for t, v in nonum_tagged.items() if v})}")
+    if nonum_total and a.commit:
+        alert(f"Call list labels: GUARD FAILED: {nonum_total} tagged contacts have no phone number and would show 'This number can't be dialed'. Check the call lists.")
+
     # ---- the campaign check (Ife 2026-10-12): a label is only useful if a campaign that uses it is ACTIVE. Never switch an inactive one on.
     legacy_st, dialer_st = campaign_statuses(H)
     new_by_tag = Counter(tag for _, tag, _, _ in plan_add) + Counter(tag for *_, tag in plan_create)
@@ -258,14 +266,20 @@ def main() -> int:
         print("DRY RUN: nothing written"); return 0
 
     nfill = nfill_bad = 0
+    failed_fill = set()
     for cid, e164 in plan_fill:
         if req("POST", f"/contacts/edit/{cid}.json", H, json={"ContactNumber": [{"public_number": e164}]}).status_code < 300:
             nfill += 1
         else:
             nfill_bad += 1
+            failed_fill.add(cid)       # never tag a contact whose number could not be set
     print(f"numbers added to existing contacts: {nfill}, failed {nfill_bad}")
+    if failed_fill:
+        alert(f"Call list labels: {len(failed_fill)} contacts could not be given a phone number and were NOT tagged.")
     ok = bad = 0
     for cid, tag, lid, eid in plan_add:
+        if cid in failed_fill:
+            continue
         r = req("PUT", f"/contacts/addTags/{cid}.json", H, json={"tags": [tag]})
         if r.status_code < 300:
             ok += 1
