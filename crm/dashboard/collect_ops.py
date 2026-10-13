@@ -93,7 +93,7 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
                 r = row(pid)
                 r["deals"].append({"stage": val(d, "stage"), "url": d.get("web_url"),
                                    "last": val(d, "last_activity_at"),
-                                   "next": val(d, "next_action_at"), "created": d.get("created_at"),
+                                   "next": val(d, "next_action_at"), "missed": val(d, "missed_followup_at"), "created": d.get("created_at"),
                                    "channel": val(d, "source_channel"), "campaign": val(d, "source_campaign"),
                                    "reason": val(d, "lost_reason"), "close": val(d, "close_date")})
                 r["src"].add("email" if (val(d, "source_channel") or "").lower() == "cold email" else "deal")
@@ -171,6 +171,7 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
         last_touch = max([t for t in touches if t], default=None)
         nxt = next((parse(dl["next"]) for dl in r["deals"] if dl["next"]), None)
         due = nxt or ((last_touch + timedelta(days=DUE_DAYS[bucket])) if last_touch else None)
+        missed = None if nxt else next((parse(dl["missed"]) for dl in r["deals"] if dl.get("missed")), None)      # a follow-up that came due and was not done: shown as overdue
         comp = comps.get(val(p, "company")) or {}
         cname = val(comp, "name") if comp else None
         email = val(p, "email_addresses")
@@ -184,7 +185,7 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
             "reason": next((dl["reason"] for dl in r["deals"] if dl.get("reason")), None),
             "closed_at": next((dl["close"] for dl in r["deals"] if dl.get("close")), None),
             "last_touch": last_touch.isoformat() if last_touch else None,
-            "due": due.isoformat() if due else None, "due_set": bool(nxt),
+            "due": due.isoformat() if due else None, "due_set": bool(nxt), "missed": missed.isoformat() if missed else None,
             "created": min([z for z in (dl["created"] for dl in r["deals"]) if z], default=None),
             "summary": (last_call or {}).get("summary") or val(p, "last_reply_summary"),
             "call_at": (last_call or {}).get("at"), "attempts": (last_call or {}).get("attempts"),
