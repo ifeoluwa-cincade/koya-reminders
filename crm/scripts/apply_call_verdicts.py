@@ -87,14 +87,18 @@ def main() -> int:
     numbers = {str((x.get("Cdr") or {}).get("id")): (x.get("Cdr") or {}).get("public_external")
                for x in raw}
     if pend is None:
+        def is_shell(p):          # 2026-10-13: an EMPTY duplicate made by the CloudTalk link must never win over the real person
+            v = p["values"]
+            return not ((v.get("relationship_stage") or [{}])[0].get("option")) and not v.get("company") and not v.get("email_addresses")
+
         byem, byph = {}, {}
         for p in c.query_all("people"):
             for e in p["values"].get("email_addresses", []):
                 byem[e.get("email_address", "").lower()] = p
             for ph in p["values"].get("phone_numbers", []):
                 d = dig(ph.get("original_phone_number") or ph.get("phone_number"))
-                if len(d) == 10:
-                    byph.setdefault(d, p)
+                if len(d) == 10 and (d not in byph or (is_shell(byph[d]) and not is_shell(p))):
+                    byph[d] = p
         scope = v
     else:
         scope = {cid: r for cid, r in v.items() if cid in pend}

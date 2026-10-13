@@ -21,6 +21,12 @@ def _first(c, flt, want=None):
     rows = r.json().get("data", [])
     if want:
         rows = [p for p in rows if want(p)]
+    # 2026-10-13: the CloudTalk link makes an EMPTY second person (no stage, company or email) for a number whose Attio person has no
+    # email. When two people share a number the real one must win, so a call verdict never lands on the empty shell.
+    def is_shell(p):
+        v = p["values"]
+        return not ((v.get("relationship_stage") or [{}])[0].get("option")) and not v.get("company") and not v.get("email_addresses")
+    rows = sorted(rows, key=is_shell)
     return rows[0] if rows else None
 
 
