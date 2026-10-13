@@ -379,6 +379,8 @@
   .cmsg.forme .cbub{border-color:var(--violet); box-shadow:0 0 0 2px rgba(110,86,240,.18);}
   .chead #chatDesk{border:1px solid rgba(255,255,255,.35); background:transparent; color:#fff; border-radius:999px; padding:4px 12px; font:500 12px var(--font); cursor:pointer;}
   .cacitem.hint{cursor:default; color:var(--ink-3); background:#fff;} .cacitem.hint b{font-weight:500;}
+  .cdel{align-self:flex-end; border:0; background:none; color:var(--ink-3); font:12px var(--font); cursor:pointer; padding:2px 4px; opacity:0; transition:opacity .15s;} .cmsg:hover .cdel, .cdel:focus{opacity:1;}
+  @media (hover:none){ .cdel{opacity:1;} }
   .cping{margin:3px 4px 0; font-size:11px; color:var(--ink-3);} .cping.bad{color:var(--down);}
   /* chat look: a proper conversation, own messages on the right */
   .chead{background:var(--grad-ink); color:#fff; border-bottom:0; padding:16px 16px 14px;}
@@ -2610,7 +2612,7 @@
   }
   // ----- team chat: ONE channel for the team. A message can tag people (@) and leads (@ or #); a lead tag is a link that opens that lead.
   // Stored in the shared db (collection "chat"); names come from the viewer's own sign-in (the user capability), nothing is typed in or remembered per device.
-  var CHAT=[], CHAT_READY=false, CHAT_OPEN=false, CHAT_LAST=0, CHAT_ME={id:null,name:""}, CHAT_USER=null, CHAT_PEOPLE=[], CHAT_NAMES={}, CHAT_ROSTER={}, CHAT_RENAMING=false, CHAT_TAGS=[], CHAT_AC=[], CHAT_ACI=0;
+  var CHAT=[], CHAT_READY=false, CHAT_OPEN=false, CHAT_LAST=0, CHAT_ME={id:null,name:""}, CHAT_USER=null, CHAT_PEOPLE=[], CHAT_NAMES={}, CHAT_ROSTER={}, CHAT_RENAMING=false, CHAT_DELARM=null, CHAT_TAGS=[], CHAT_AC=[], CHAT_ACI=0;
   try{ CHAT_LAST=+localStorage.getItem("koya-chat-last")||0; }catch(e){}
   function chatSeenLead(){}
   function chatInit(n){ return String(n||"?").trim().slice(0,2).toUpperCase(); }
@@ -2619,7 +2621,7 @@
   function chatResolve(ids){ if(!CHAT_USER||!CHAT_USER.profiles) return Promise.resolve(); var need=ids.filter(function(i){ return i&&!CHAT_NAMES[i]; }); if(!need.length) return Promise.resolve();
     return CHAT_USER.profiles(need).then(function(ps){ Object.keys(ps||{}).forEach(function(k){ var p=ps[k]; if(p&&p.name) CHAT_NAMES[k]=p.name; }); }).catch(function(){}); }
   function chatUserInit(){ try{ if(!(window.claude&&window.claude.use)) return; window.claude.use("user").then(function(u){ if(!u) return; CHAT_USER=u;
-      return u.me().then(function(m){ CHAT_ME={id:m.id||null,name:m.name||""}; if(m.id&&m.name) CHAT_NAMES[m.id]=m.name; return u.search?u.search(""):[]; }).then(function(hits){
+      return u.me().then(function(m){ CHAT_ME={id:m.id||null,name:m.name||"",admin:!!m.canEdit}; if(m.id&&m.name) CHAT_NAMES[m.id]=m.name; return u.search?u.search(""):[]; }).then(function(hits){
         CHAT_PEOPLE=(hits||[]).filter(function(h){ return h&&h.id; }).map(function(h){ if(h.name) CHAT_NAMES[h.id]=h.name; return {id:h.id,name:h.name||""}; }); chatRegisterSelf(); chatRedraw(); }); }).catch(function(){}); }catch(e){} }
   function chatUnread(){ return CHAT.filter(function(m){ return m.fromId!==CHAT_ME.id && Date.parse(m.t)>CHAT_LAST; }); }
   function chatBadge(){ var n=(tab==="chat")?0:chatUnread().length, b=document.getElementById("chatBadge"); if(b){ b.textContent=n; b.hidden=!n; } var tc=document.getElementById("tabcnt-chat"); if(tc){ tc.textContent=n; tc.hidden=!n; } try{ document.title=(n?"("+n+") ":"")+"Koya Outbound"; }catch(e){} }
@@ -2629,7 +2631,7 @@
       if(p.t==="user") return '<span class="cto'+(p.id&&p.id===CHAT_ME.id?" me":"")+'">@'+esc((p.id&&CHAT_NAMES[p.id])||p.n||"Someone")+'</span>';
       return esc(p.v).replace(/\n/g,"<br>"); }).join(""); }
   function chatMsgHTML(m){ var mine=m.fromId===CHAT_ME.id, nm=mine?(CHAT_ME.name||"You"):chatName(m.fromId);
-    return '<div class="cmsg'+(mine?" mine":"")+((m.tagIds||[]).indexOf(CHAT_ME.id)>=0?" forme":"")+'">'+(mine?'':'<span class="cav">'+esc(chatInit(nm))+'</span>')+'<div class="ccol"><div class="cwho">'+(mine?'':esc(nm)+' ')+'<span>'+esc(chatWhen(m.t))+'</span></div><div class="cbub">'+chatPartsHTML(m)+'</div>'+'</div></div>'; }
+    return '<div class="cmsg'+(mine?" mine":"")+((m.tagIds||[]).indexOf(CHAT_ME.id)>=0?" forme":"")+'">'+(mine?'':'<span class="cav">'+esc(chatInit(nm))+'</span>')+'<div class="ccol"><div class="cwho">'+(mine?'':esc(nm)+' ')+'<span>'+esc(chatWhen(m.t))+'</span></div><div class="cbub">'+chatPartsHTML(m)+'</div>'+((mine||CHAT_ME.admin)?'<button type="button" class="cdel" data-cdel="'+esc(m.id)+'">'+(CHAT_DELARM===m.id?"Click again to delete":"Delete")+'</button>':'')+'</div></div>'; }
   function chatDayLabel(t){ var d=new Date(t); if(isNaN(d)) return ""; var n=new Date(), y=new Date(Date.now()-864e5), k=function(x){ return x.getFullYear()+"-"+x.getMonth()+"-"+x.getDate(); }; return k(d)===k(n)?"Today":k(d)===k(y)?"Yesterday":d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}); }
   function chatPageBuild(){ var m=document.getElementById("chatMount"); if(!m||m.firstChild) return m;
     m.innerHTML='<div class="chead"><div class="ctitle"><b>Team chat</b><span id="chatSub">Tag a person or a lead. Tagged people are alerted the moment this page is open in their browser.</span></div><button type="button" id="chatDesk" hidden>Turn on desktop alerts</button></div><div id="chatFeed" class="cfeed"></div><div class="cwrite"><div id="chatAc" class="cac" hidden></div><div class="ctools"><button type="button" data-ctool="@">@ Person</button><button type="button" data-ctool="#"># Lead</button><span class="csub" id="chatWho"></span></div><div class="cbox"><textarea id="chatText" rows="1" placeholder="Message the team"></textarea><button type="button" class="csendi" id="chatSend" aria-label="Send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div></div>';
@@ -2650,7 +2652,7 @@
   function chatAcFind(q,kind){ q=(q||"").toLowerCase().trim(); var out=[];
     if(kind==="@"){ chatPeopleAll().filter(function(p){ return !q||p.name.toLowerCase().indexOf(q)>=0; }).slice(0,4).forEach(function(p){ out.push({type:"user",id:p.id,label:"@"+p.name,show:p.name,sub:"Person"}); });
       if(q.length>=2&&!out.length) out.push({type:"hint",show:"Nobody called \""+q+"\" has opened the dashboard yet",sub:"Ask them to open Team chat once"}); }
-    var seen={}; OPPS.concat(CLOSED).forEach(function(o){ if(out.length>=9||seen[o.id]) return; var hay=((o.name||"")+" "+(o.company||"")).toLowerCase(); if(!q||hay.indexOf(q)>=0){ seen[o.id]=1; out.push({type:"lead",id:o.id,label:"#"+chatLeadLabel(o),show:chatLeadLabel(o),sub:"Lead"}); } });
+    var seen={}; if(kind==="#") OPPS.concat(CLOSED).forEach(function(o){ if(out.length>=9||seen[o.id]) return; var hay=((o.name||"")+" "+(o.company||"")).toLowerCase(); if(!q||hay.indexOf(q)>=0){ seen[o.id]=1; out.push({type:"lead",id:o.id,label:"#"+chatLeadLabel(o),show:chatLeadLabel(o),sub:"Lead"}); } });
     return out; }
   function chatAcUpdate(){ var ta=document.getElementById("chatText"), ac=document.getElementById("chatAc"); if(!ta||!ac) return; var before=ta.value.slice(0,ta.selectionStart), m=before.match(/([@#])([^@#\n]{0,30})$/);
     if(!m||(m.index>0&&!/\s/.test(before.charAt(m.index-1)))){ ac.hidden=true; CHAT_AC=[]; return; }
@@ -2679,7 +2681,7 @@
       else if(!mine.at||now-Date.parse(mine.at)>6*3600000) db.collection("roster").doc(CHAT_ME.id).update({at:new Date().toISOString()}).catch(function(){});
       if(mine&&mine.label) CHAT_ME.name=mine.label; }catch(e){} }
   var CHAT_ROSTER_READY=false;
-  function chatRename(label){ label=String(label||"").trim().slice(0,30); if(!label||!db||!CHAT_ME.id) return; db.collection("roster").doc(CHAT_ME.id).set({id:CHAT_ME.id,label:label,at:new Date().toISOString()}).then(function(){ CHAT_RENAMING=false; toast("You are now "+label+" in Team chat"); },function(){ toast("Could not save the name"); }); }
+  function chatRename(label){ label=String(label||"").trim().slice(0,30); if(!label||!db||!CHAT_ME.id) return; db.collection("roster").doc(CHAT_ME.id).set({id:CHAT_ME.id,label:label,at:new Date().toISOString()}).then(function(){ CHAT_RENAMING=false; CHAT_ME.name=label; chatDraw(); toast("You are now "+label+" in Team chat"); },function(){ toast("Could not save the name"); }); }
   function chatListen(){ if(!db) return;
     try{ db.collection("roster").onSnapshot(function(snap){ CHAT_ROSTER={}; snap.docs.forEach(function(d){ var v=d.data()||{}; CHAT_ROSTER[d.id]={label:v.label||"",at:v.at||""}; }); CHAT_ROSTER_READY=true; chatRegisterSelf(); chatRedraw(); },function(){}); }catch(e){}
     try{ db.collection("chat").onSnapshot(function(snap){
@@ -2689,9 +2691,10 @@
       chatResolve(ids).then(function(){
         if(CHAT_READY){ CHAT.forEach(function(m){ if(!prev[m.id]&&m.fromId!==CHAT_ME.id&&Date.now()-Date.parse(m.t)<120000&&!(tab==="chat"&&!document.hidden&&(m.tagIds||[]).indexOf(CHAT_ME.id)<0)) chatNotify(m); }); }
         CHAT_READY=true; if(CHAT_OPEN) chatMarkSeen(); chatRedraw(); }); },function(){}); }catch(e){} }
-  document.addEventListener("click",function(e){ var t=e.target.closest&&e.target.closest("#chatBtn,#chatSend,#chatDesk,#chatRename,#chatNameSave,[data-clead],[data-cpick],[data-chatlead],[data-ctool]");
+  document.addEventListener("click",function(e){ var t=e.target.closest&&e.target.closest("#chatBtn,#chatSend,#chatDesk,#chatRename,#chatNameSave,[data-cdel],[data-clead],[data-cpick],[data-chatlead],[data-ctool]");
     if(!t){ var ac=document.getElementById("chatAc"); if(ac&&!ac.hidden&&!e.target.closest("#chatAc,#chatText")) ac.hidden=true; return; }
     if(t.id==="chatBtn"){ chatOpen(); return; }
+    if(t.dataset.cdel){ var mid=t.dataset.cdel; if(CHAT_DELARM===mid){ CHAT_DELARM=null; if(db) db.collection("chat").doc(mid).delete().then(function(){ toast("Message deleted"); },function(){ toast("Could not delete it"); }); } else { CHAT_DELARM=mid; chatDraw(); setTimeout(function(){ if(CHAT_DELARM===mid){ CHAT_DELARM=null; chatDraw(); } },4000); } return; }
     if(t.id==="chatRename"){ CHAT_RENAMING=true; chatDraw(); var ni=document.getElementById("chatNameIn"); if(ni){ ni.focus(); ni.select(); } return; }
     if(t.id==="chatNameSave"){ chatRename((document.getElementById("chatNameIn")||{}).value); return; }
     if(t.id==="chatDesk"){ try{ Notification.requestPermission().then(chatDeskUpdate,chatDeskUpdate); }catch(x){ chatDeskUpdate(); } return; }

@@ -114,6 +114,8 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
                 ev = x.get("entry_values") or {}
                 g = lambda k: (ev.get(k) or [{}])[0]
                 out = (g("call_outcome").get("option") or {}).get("title")
+                if g("called_at").get("value") and x["parent_record_id"] in people:      # any call attempt on a person we already list is a touch, answered or not
+                    people[x["parent_record_id"]].setdefault("touch_calls", []).append(g("called_at").get("value"))
                 if out in REAL_CALL:
                     n_entries += 1
                     r = row(x["parent_record_id"])
@@ -166,7 +168,7 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
         if bucket is None:
             continue
         # last touch = the most recent of: a deal activity, a call, the last reply
-        touches = [parse(dl["last"]) for dl in r["deals"]] + [parse(z["at"]) for z in calls] + [
+        touches = [parse(dl["last"]) for dl in r["deals"]] + [parse(z["at"]) for z in calls] + [parse(t) for t in r.get("touch_calls", [])] + [
             parse(val(p, "last_reply_at")), parse(val(p, "last_contacted_at"))]
         last_touch = max([t for t in touches if t], default=None)
         nxt = next((parse(dl["next"]) for dl in r["deals"] if dl["next"]), None)
