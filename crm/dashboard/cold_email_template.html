@@ -376,6 +376,8 @@
   .clead{border:1px solid var(--line); background:#fff; color:var(--violet); font:600 13px var(--font); border-radius:7px; padding:0 6px; cursor:pointer;}
   .clead:hover{background:var(--band);}
   .cto.me{background:var(--band);}
+  .cmsg.forme .cbub{border-color:var(--violet); box-shadow:0 0 0 2px rgba(110,86,240,.18);}
+  .chead #chatDesk{border:1px solid rgba(255,255,255,.35); background:transparent; color:#fff; border-radius:999px; padding:4px 12px; font:500 12px var(--font); cursor:pointer;}
   .cping{margin:3px 4px 0; font-size:11px; color:var(--ink-3);} .cping.bad{color:var(--down);}
   /* chat look: a proper conversation, own messages on the right */
   .chead{background:var(--grad-ink); color:#fff; border-bottom:0; padding:16px 16px 14px;}
@@ -2626,12 +2628,13 @@
       if(p.t==="user") return '<span class="cto'+(p.id&&p.id===CHAT_ME.id?" me":"")+'">@'+esc((p.id&&CHAT_NAMES[p.id])||p.n||"Someone")+'</span>';
       return esc(p.v).replace(/\n/g,"<br>"); }).join(""); }
   function chatMsgHTML(m){ var mine=m.fromId===CHAT_ME.id, nm=mine?(CHAT_ME.name||"You"):chatName(m.fromId);
-    return '<div class="cmsg'+(mine?" mine":"")+'">'+(mine?'':'<span class="cav">'+esc(chatInit(nm))+'</span>')+'<div class="ccol"><div class="cwho">'+(mine?'':esc(nm)+' ')+'<span>'+esc(chatWhen(m.t))+'</span></div><div class="cbub">'+chatPartsHTML(m)+'</div>'+(mine&&m.pinged===true?'<div class="cping">Also sent to Discord</div>':mine&&m.pinged===false?'<div class="cping bad">Discord was not told, the message is saved here</div>':'')+'</div></div>'; }
+    return '<div class="cmsg'+(mine?" mine":"")+((m.tagIds||[]).indexOf(CHAT_ME.id)>=0?" forme":"")+'">'+(mine?'':'<span class="cav">'+esc(chatInit(nm))+'</span>')+'<div class="ccol"><div class="cwho">'+(mine?'':esc(nm)+' ')+'<span>'+esc(chatWhen(m.t))+'</span></div><div class="cbub">'+chatPartsHTML(m)+'</div>'+'</div></div>'; }
   function chatDayLabel(t){ var d=new Date(t); if(isNaN(d)) return ""; var n=new Date(), y=new Date(Date.now()-864e5), k=function(x){ return x.getFullYear()+"-"+x.getMonth()+"-"+x.getDate(); }; return k(d)===k(n)?"Today":k(d)===k(y)?"Yesterday":d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}); }
   function chatPageBuild(){ var m=document.getElementById("chatMount"); if(!m||m.firstChild) return m;
-    m.innerHTML='<div class="chead"><div class="ctitle"><b>Team chat</b><span id="chatSub">Tag a person or a lead. Tagged people are told here and on Discord.</span></div></div><div id="chatFeed" class="cfeed"></div><div class="cwrite"><div id="chatAc" class="cac" hidden></div><div class="ctools"><button type="button" data-ctool="@">@ Person</button><button type="button" data-ctool="#"># Lead</button><span class="csub" id="chatWho"></span></div><div class="cbox"><textarea id="chatText" rows="1" placeholder="Message the team"></textarea><button type="button" class="csendi" id="chatSend" aria-label="Send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div></div>';
+    m.innerHTML='<div class="chead"><div class="ctitle"><b>Team chat</b><span id="chatSub">Tag a person or a lead. Tagged people are alerted the moment this page is open in their browser.</span></div><button type="button" id="chatDesk" hidden>Turn on desktop alerts</button></div><div id="chatFeed" class="cfeed"></div><div class="cwrite"><div id="chatAc" class="cac" hidden></div><div class="ctools"><button type="button" data-ctool="@">@ Person</button><button type="button" data-ctool="#"># Lead</button><span class="csub" id="chatWho"></span></div><div class="cbox"><textarea id="chatText" rows="1" placeholder="Message the team"></textarea><button type="button" class="csendi" id="chatSend" aria-label="Send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div></div>';
     return m; }
-  function chatShow(){ if(!CHAT) return; chatPageBuild(); CHAT_OPEN=true; chatMarkSeen(); chatDraw(); var f=document.getElementById("chatFeed"); if(f) f.scrollTop=f.scrollHeight; }
+  function chatDeskUpdate(){ var b=document.getElementById("chatDesk"); if(b) b.hidden=!(window.Notification&&Notification.permission==="default"); }
+  function chatShow(){ if(!CHAT) return; chatPageBuild(); chatDeskUpdate(); CHAT_OPEN=true; chatMarkSeen(); chatDraw(); var f=document.getElementById("chatFeed"); if(f) f.scrollTop=f.scrollHeight; }
   function chatDraw(){ if(tab!=="chat") return; chatPageBuild(); var f=document.getElementById("chatFeed"); if(!f) return; var  atEnd=f.scrollHeight-f.scrollTop-f.clientHeight<80;
     var list=CHAT.slice().sort(function(a,b){ return String(a.t).localeCompare(String(b.t)); }).slice(-120);
     var last="", html=list.map(function(m){ var dl=chatDayLabel(m.t), sep=dl!==last?'<div class="cday"><span>'+esc(dl)+'</span></div>':""; last=dl; return sep+chatMsgHTML(m); }).join("");
@@ -2661,23 +2664,26 @@
     if(!CHAT_ME.id){ toast("Sign in to Claude to post here"); return; } if(!db){ toast("Chat is not connected right now"); return; }
     var parts=chatBuildParts(text), id=Date.now().toString(36)+Math.random().toString(36).slice(2,6); btn.disabled=true;
     db.collection("chat").doc(id).set({fromId:CHAT_ME.id,text:text,parts:parts,t:new Date().toISOString(),tagIds:parts.filter(function(p){ return p.t==="user"&&p.id; }).map(function(p){ return p.id; }),leads:parts.filter(function(p){ return p.t==="lead"; }).map(function(p){ return p.id; })})
-      .then(function(){ ta.value=""; CHAT_TAGS=[]; btn.disabled=false; document.getElementById("chatAc").hidden=true; chatPing(id,parts,text); },function(){ btn.disabled=false; toast("Could not send, try again"); }); }
-  // a tagged person who is not on the page is told on Discord: the message is handed to Attio as a small marker note (the same path the pull-to-refresh uses), the Lead Actions script sees it and posts to the lead follow-up channel
-  function chatPing(mid,parts,text){ try{ var tagged=parts.filter(function(p){ return p.t==="user"&&p.id&&p.id!==CHAT_ME.id; }).map(function(p){ return CHAT_NAMES[p.id]||p.n||"Someone"; }); if(!tagged.length) return; if(!MCP){ db.collection("chat").doc(mid).update({pinged:false}); return; }
-    var lead=parts.filter(function(p){ return p.t==="lead"; })[0], body={mid:mid,from:CHAT_ME.name||"Someone",to:tagged,lead:lead?lead.l:"",leadId:lead?lead.id:"",text:String(text).slice(0,600)};
-    MCP.callTool("Attio","create-note",{title:"koya chat",content:JSON.stringify(body),parent_object:"companies",parent_record_id:"72483d3c-6d5f-4df8-91c7-63cfcce772d4"},{cache:false})
-      .then(function(){ return db.collection("chat").doc(mid).update({pinged:true}); },function(){ return db.collection("chat").doc(mid).update({pinged:false}); }).catch(function(){}); }catch(e){} }
+      .then(function(){ ta.value=""; CHAT_TAGS=[]; btn.disabled=false; document.getElementById("chatAc").hidden=true; },function(){ btn.disabled=false; toast("Could not send, try again"); }); }
+  function chatBeep(){ try{ var ac=new (window.AudioContext||window.webkitAudioContext)(), o=ac.createOscillator(), g=ac.createGain(); o.type="sine"; o.frequency.value=880; g.gain.value=.05; o.connect(g); g.connect(ac.destination); o.start(); setTimeout(function(){ try{ o.stop(); ac.close(); }catch(e){} },180); }catch(e){} }
+  var CHAT_FLASH=null;
+  function chatFlash(txt){ clearInterval(CHAT_FLASH); var on=false, n=0; CHAT_FLASH=setInterval(function(){ on=!on; try{ document.title=on?txt:"Koya Outbound"; }catch(e){} if(++n>60||(!document.hidden&&tab==="chat")){ clearInterval(CHAT_FLASH); chatBadge(); } },1200); }
+  function chatDesktop(t,b){ try{ if(window.Notification&&Notification.permission==="granted") new Notification(t,{body:b}); }catch(e){} }
+  // a new message from someone else: a notice on the page, and when it tags ME also a sound, a flashing tab title and (if allowed) a desktop alert, so it is seen even from another tab
+  function chatNotify(m){ var me=(m.tagIds||[]).indexOf(CHAT_ME.id)>=0, who=chatName(m.fromId); toast(who+(me?" tagged you in Team chat":" wrote in Team chat"));
+    if(me){ chatBeep(); chatFlash(who+" tagged you"); chatDesktop(who+" tagged you in Team chat",String(m.text||"").slice(0,140)); } }
   function chatListen(){ if(!db) return;
     try{ db.collection("chat").onSnapshot(function(snap){
       var prev={}; CHAT.forEach(function(m){ prev[m.id]=1; });
       CHAT=snap.docs.map(function(d){ return Object.assign({id:d.id},d.data()); });
       var ids=[]; CHAT.forEach(function(m){ ids.push(m.fromId); (m.tagIds||[]).forEach(function(x){ ids.push(x); }); });
       chatResolve(ids).then(function(){
-        if(CHAT_READY&&!CHAT_OPEN){ CHAT.forEach(function(m){ if(!prev[m.id]&&m.fromId!==CHAT_ME.id){ toast(chatName(m.fromId)+" wrote in Team chat"); } }); }
+        if(CHAT_READY){ CHAT.forEach(function(m){ if(!prev[m.id]&&m.fromId!==CHAT_ME.id&&Date.now()-Date.parse(m.t)<120000&&!(tab==="chat"&&!document.hidden&&(m.tagIds||[]).indexOf(CHAT_ME.id)<0)) chatNotify(m); }); }
         CHAT_READY=true; if(CHAT_OPEN) chatMarkSeen(); chatRedraw(); }); },function(){}); }catch(e){} }
-  document.addEventListener("click",function(e){ var t=e.target.closest&&e.target.closest("#chatBtn,#chatSend,[data-clead],[data-cpick],[data-chatlead],[data-ctool]");
+  document.addEventListener("click",function(e){ var t=e.target.closest&&e.target.closest("#chatBtn,#chatSend,#chatDesk,[data-clead],[data-cpick],[data-chatlead],[data-ctool]");
     if(!t){ var ac=document.getElementById("chatAc"); if(ac&&!ac.hidden&&!e.target.closest("#chatAc,#chatText")) ac.hidden=true; return; }
     if(t.id==="chatBtn"){ chatOpen(); return; }
+    if(t.id==="chatDesk"){ try{ Notification.requestPermission().then(chatDeskUpdate,chatDeskUpdate); }catch(x){ chatDeskUpdate(); } return; }
     if(t.dataset.ctool){ var tb=document.getElementById("chatText"); if(tb){ var v=tb.value, pos=tb.selectionStart||v.length, pre=v.slice(0,pos), sp=(pre&&!/\s$/.test(pre))?" ":""; tb.value=pre+sp+t.dataset.ctool+v.slice(pos); var np=(pre+sp+t.dataset.ctool).length; tb.focus(); tb.setSelectionRange(np,np); chatAcUpdate(); } return; }
     if(t.id==="chatSend"){ chatSend(); return; }
     if(t.dataset.cpick!==undefined){ chatPick(+t.dataset.cpick); return; }
