@@ -1369,6 +1369,8 @@
     on:function(){ return !!MCP; },
     ask:function(){ var ab=document.getElementById("allowLive"); if(ab && !ab.disabled) ab.click(); },
     refresh:function(){
+      // a pull also starts the jobs that normally wait for a timer: a marker note on a hidden system record in Attio tells the Google script, which runs the call watcher at once and starts the GitHub jobs
+      try{ MCP.callTool("Attio","create-note",{title:"koya refresh",content:"pull "+new Date().toISOString(),parent_object:"companies",parent_record_id:"72483d3c-6d5f-4df8-91c7-63cfcce772d4"},{cache:false}).catch(function(){}); }catch(e){}
       var inv; try{ inv=(typeof MCP.invalidate==="function")?MCP.invalidate():null; }catch(e){ inv=null; }
       return Promise.resolve(inv).catch(function(){}).then(function(){
         return Promise.all([liveSync,liveNumbers,liveDials,liveDiscover].map(function(f){ var job; try{ job=Promise.resolve(f()).then(function(){ return true; },function(){ return false; }); }catch(e){ job=Promise.resolve(false); } return Promise.race([job,new Promise(function(r){ setTimeout(function(){ r(false); },35000); })]); }));
