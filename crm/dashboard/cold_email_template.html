@@ -553,7 +553,6 @@
   <button class="qsbtn" id="qsbtn" type="button" aria-label="Search leads"><span class="lbl">Search leads</span><kbd>Ctrl K</kbd></button>
 </div></div>
 
-<div id="schemaBox" hidden style="position:fixed;inset:0;z-index:9998;background:#fff;color:#111;overflow:auto;padding:16px"><div style="max-width:760px;margin:0 auto"><p style="font:600 16px system-ui">Attio tool formats</p><p style="font:14px system-ui;margin:6px 0 12px">Tap Allow if it asks, wait a few seconds, then tap Copy and paste it back to Claude.</p><div style="display:flex;gap:8px;margin-bottom:10px"><button type="button" class="pbtn" id="schAllow">Allow new Attio tools</button><button type="button" class="pbtn" id="schCopy">Copy</button><button type="button" class="pbtn ghost" id="schClose">Close</button></div><pre id="schTxt" style="white-space:pre-wrap;word-break:break-word;font-size:12px;margin:0"></pre></div></div>
 <div id="liveBanner" class="livebanner" role="status" hidden><div class="wrap"><span id="liveBannerTxt">Live connection is off, so this page is only showing the hourly data.</span><button type="button" class="pbtn" id="allowLive">Allow live access</button></div></div>
 <div id="ptr" role="status" aria-live="polite"><span class="pa" aria-hidden="true">↓</span><span class="psp" aria-hidden="true"></span><span id="ptrtxt">Pull to refresh</span></div>
 <div id="tab-dash" class="tabpanel">
@@ -1279,7 +1278,7 @@
       var key="meta/schema_"+t.replace(/-/g,"_");
       MCP.describeTool("Attio",t).then(function(d){ db.doc(key).set({tool:t,schema:JSON.stringify(d.inputSchema||{}).slice(0,30000),at:new Date().toISOString()}).catch(function(){}); },
         function(e){ db.doc(key).set({tool:t,error:String((e&&e.code)||e).slice(0,80),at:new Date().toISOString()}).catch(function(){}); }); }); }
-  function wrapMcp(m){ if(!m) return m; var w={}; Object.keys(m).forEach(function(k){ w[k]=m[k]; }); if(m.describeTool) w.describeTool=m.describeTool.bind(m); var cc=m.callTool, READS={"cloudtalk_search_calls":1,"get_analytics_stats":1,"find_lead_by_email":1,"get-records-by-ids":1,"search-emails-by-metadata":1,"get-email-content":1}; w.callTool=function(sv,tl,inp,opt){ var first=cc.call(m,sv,tl,inp,opt); return first.catch(function(e0){ var msg=String((e0&&e0.message)||""); if(READS[tl] && (/connection lost|-32000/i.test(msg) || (e0&&e0.retryable))) return new Promise(function(r){ setTimeout(r,1500+Math.random()*1000); }).then(function(){ return cc.call(m,sv,tl,inp,opt); }); throw e0; }).catch(function(e){ (window.__liveErrs=window.__liveErrs||[]).unshift({t:new Date().toISOString().slice(11,19),tool:sv+"."+tl,code:e&&e.code,msg:String((e&&e.message)||"").slice(0,300)}); window.__liveErrs=window.__liveErrs.slice(0,8); throw e; }); }; return w; }
+  function wrapMcp(m){ if(!m) return m; var w={}; Object.keys(m).forEach(function(k){ w[k]=m[k]; }); if(m.describeTool) w.describeTool=m.describeTool.bind(m); var cc=m.callTool, READS={"cloudtalk_search_calls":1,"get_analytics_stats":1,"find_lead_by_email":1,"get-records-by-ids":1,"search-emails-by-metadata":1,"get-email-content":1}; w.callTool=function(sv,tl,inp,opt){ if(READS[tl] && typeof AbortSignal!=="undefined" && AbortSignal.timeout && !(opt&&opt.signal)){ opt=Object.assign({},opt||{},{signal:AbortSignal.timeout(25000)}); } var first=cc.call(m,sv,tl,inp,opt); return first.catch(function(e0){ var msg=String((e0&&e0.message)||""); if(READS[tl] && (/connection lost|-32000/i.test(msg) || (e0&&e0.retryable))) return new Promise(function(r){ setTimeout(r,1500+Math.random()*1000); }).then(function(){ return cc.call(m,sv,tl,inp,opt); }); throw e0; }).catch(function(e){ (window.__liveErrs=window.__liveErrs||[]).unshift({t:new Date().toISOString().slice(11,19),tool:sv+"."+tl,code:e&&e.code,msg:String((e&&e.message)||"").slice(0,300)}); window.__liveErrs=window.__liveErrs.slice(0,8); throw e; }); }; return w; }
   function liveSync(){
     if (!MCP || !OPPS.length) return Promise.resolve();
     var deals=OPPS.map(dealIdOf).filter(Boolean), people=OPPS.map(function(o){ return o.id; });
@@ -1333,7 +1332,7 @@
     refresh:function(){
       var inv; try{ inv=(typeof MCP.invalidate==="function")?MCP.invalidate():null; }catch(e){ inv=null; }
       return Promise.resolve(inv).catch(function(){}).then(function(){
-        return Promise.all([liveSync,liveNumbers,liveDials,liveDiscover].map(function(f){ try{ return Promise.resolve(f()).then(function(){ return true; },function(){ return false; }); }catch(e){ return Promise.resolve(false); } }));
+        return Promise.all([liveSync,liveNumbers,liveDials,liveDiscover].map(function(f){ var job; try{ job=Promise.resolve(f()).then(function(){ return true; },function(){ return false; }); }catch(e){ job=Promise.resolve(false); } return Promise.race([job,new Promise(function(r){ setTimeout(function(){ r(false); },35000); })]); }));
       }).then(function(rs){ var o=openId?oppById(openId):null; if(o) refreshSeq(o); markLive(); return rs.some(Boolean); });
     }
   };
@@ -1666,21 +1665,6 @@
   }
   document.addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest("#copyLeadLink"); if(!b||!openId) return; var u=ARTIFACT_URL+"#lead-"+openId; function ok(){ b.innerHTML=svgIcon("check"); b.setAttribute("data-tip","Link copied"); setTimeout(function(){ b.innerHTML=svgIcon("link"); b.setAttribute("data-tip","Copy link to this lead"); },1800); }
     try{ navigator.clipboard.writeText(u).then(ok,function(){ b.setAttribute("data-tip",u); }); }catch(x){ b.setAttribute("data-tip",u); } });
-  // one-off page for setting up the live lookup: open the page address followed by #schemas, it shows the input format of the Attio read tools with a Copy button
-  (function(){
-    if (location.hash!=="#schemas") return;
-    var bx=document.getElementById("schemaBox"), tx=document.getElementById("schTxt"); if(!bx) return; bx.hidden=false;
-    function J(x){ try{ return JSON.stringify(x); }catch(e){ return String(x); } }
-    function run(){ tx.textContent="Reading…"; var out=[], t0=Date.now();
-      (function wait(){ if(!MCP && Date.now()-t0<12000){ return setTimeout(wait,500); }
-        if(!MCP){ tx.textContent="Live connection is off. Allow live access first, then reload with #schemas."; return; }
-        Promise.all(["list-records","list-records-in-list","search-records","query-particle-sql","list-objects"].map(function(t){
-          return MCP.describeTool("Attio",t).then(function(d){ out.push("== "+t+"\n"+J(d.inputSchema).slice(0,6000)); },function(e){ out.push("== "+t+"\nERROR "+((e&&e.code)||e)+" "+String((e&&e.message)||"").slice(0,160)); }); })).then(function(){ tx.textContent=out.join("\n\n"); }); })(); }
-    document.getElementById("schAllow").addEventListener("click",function(){ var P=window.claude&&window.claude.use?window.claude.use("permissions"):Promise.resolve(null); P.then(function(p){ return p&&p.request?p.request(["mcp:Attio"]):null; }).then(function(){ run(); },function(){ run(); }); });
-    document.getElementById("schCopy").addEventListener("click",function(){ var b=this, t=tx.textContent; try{ navigator.clipboard.writeText(t).then(function(){ b.textContent="Copied"; },function(){ var r=document.createRange(); r.selectNodeContents(tx); var se=getSelection(); se.removeAllRanges(); se.addRange(r); b.textContent="Selected: copy it"; }); }catch(e){ b.textContent="Select and copy"; } });
-    document.getElementById("schClose").addEventListener("click",function(){ bx.hidden=true; });
-    run();
-  })();
   var RZSTATE=null;
   function rzOpen(act){
     var o=oppById(openId), z=document.getElementById("rzone"); if(!o||!z) return;
