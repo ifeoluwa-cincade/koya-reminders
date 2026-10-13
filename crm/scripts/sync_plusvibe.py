@@ -224,6 +224,8 @@ def main() -> int:
             vals |= {"email_status": [{"option": "BOUNCED"}],
                      "outreach_status": [{"option": "PAUSED"}],
                      "last_outreach_result": [{"option": "BOUNCED"}]}
+            if cur_rel == "COLD":     # 2026-10-13: a first-send bounce stayed COLD with a last_contacted date, which audit_crm.py flags as cold_but_contacted
+                vals["relationship_stage"] = [{"option": "CONTACTED"}]
             stats["bounced -> held"] += 1
         elif L["label"] in LABEL:
             rel, out, nur, _, res = LABEL[L["label"]]
