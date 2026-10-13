@@ -1276,10 +1276,10 @@
     function ask(inp){ return MCP.callTool("Attio","list-records",inp,{cache:false}); }
     return ask({object:"deals",filter:flt,limit:100}).catch(function(){ return ask({object:"deals",filter:flt}); }).then(function(r){
       var B=attioBlocks(txt(r)), ids=Object.keys(B);
-      if (!ids.length){ LIVE_DISC_ERR="the list came back in a format the page could not read"; return; }
+      if (!ids.length){ LIVE_DISC_ERR="the list came back in a format the page could not read: "+String(txt(r)).replace(/\s+/g," ").slice(0,140); var n0=document.getElementById("liveNote"); if(n0) n0.textContent="New leads could not be read live ("+LIVE_DISC_ERR+")"; return; }
       var known={}; OPPS.concat(CLOSED).forEach(function(o){ known[o.id]=1; });
       var fresh=[]; ids.forEach(function(did){ var b=B[did], m=b.match(/people,[0-9a-f-]{36},([0-9a-f-]{36})/), pid=m&&m[1], st=attioVal(b,"stage"); if (pid && !known[pid] && OPEN.indexOf(st)>=0){ known[pid]=1; fresh.push({pid:pid,did:did,b:b,st:st}); } });
-      LIVE_DISC_ERR=null; if (!fresh.length) return;
+      LIVE_DISC_ERR=null; var nn=document.getElementById("liveNote"); if (nn) nn.textContent=ids.length+" open deals read live from Attio, "+fresh.length+" new"; if (!fresh.length) return;
       return MCP.callTool("Attio","get-records-by-ids",{object:"people",record_ids:fresh.map(function(f){ return f.pid; })},{cache:false}).then(function(r2){
         var P=attioBlocks(txt(r2)), added=0;
         fresh.forEach(function(f){ var pb=P[f.pid]; if(!pb) return;
@@ -1290,7 +1290,7 @@
             links:{attio:"https://app.attio.com/koya-talent/person/"+f.pid,deal:"https://app.attio.com/koya-talent/deals/record/"+f.did,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[],live_new:true}); added++; });
         if (added){ var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=OPPS.length; if(tab==="opps") renderOpps(); var n=document.getElementById("liveNote"); if(n) n.textContent=added+" new lead"+(added>1?"s":"")+" found live in Attio"; }
       });
-    }).catch(function(e){ LIVE_DISC_ERR=errText(e); });
+    }).catch(function(e){ LIVE_DISC_ERR=errText(e); var n1=document.getElementById("liveNote"); if(n1) n1.textContent="New leads could not be read live ("+LIVE_DISC_ERR+")"; });
   }
   // the header says "updated just now" only when every live read worked; otherwise it names what could not be read
   function markLive(){
