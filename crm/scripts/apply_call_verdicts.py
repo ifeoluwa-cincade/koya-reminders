@@ -29,7 +29,8 @@ WHAT IT WILL NOT DO:
     python crm/scripts/apply_call_verdicts.py --commit
 """
 from __future__ import annotations
-import argparse, collections, json, os, re, sys
+import argparse, collections, json, os, re, sys, threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, date
 from pathlib import Path
 
@@ -76,22 +77,34 @@ def main() -> int:
     def dig(x):
         return re.sub(r"\D", "", x or "")[-10:]
 
-    byem, byph = {}, {}
-    for p in c.query_all("people"):
-        for e in p["values"].get("email_addresses", []):
-            byem[e.get("email_address", "").lower()] = p
-        for ph in p["values"].get("phone_numbers", []):
-            d = dig(ph.get("original_phone_number") or ph.get("phone_number"))
-            if len(d) == 10:
-                byph.setdefault(d, p)
-
-    # --- bring in the outbound calls that produced a real conversation with someone we do not hold
+    # which calls does this run have to apply? Only the ones marked new in live_state.json: their people are looked up one by one (seconds),
+    # instead of reading all 16,000 people (7 minutes). No flags or FULL_INDEX=1 means the old full read.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import attio_fast as AF
+    pend = AF.pending_cids(WORK, "applied_a")
     raw = json.loads((WORK / "cloudtalk_calls.json").read_text())
     direction = {str((x.get("Cdr") or {}).get("id")): (x.get("Cdr") or {}).get("type") for x in raw}
     numbers = {str((x.get("Cdr") or {}).get("id")): (x.get("Cdr") or {}).get("public_external")
                for x in raw}
+    if pend is None:
+        byem, byph = {}, {}
+        for p in c.query_all("people"):
+            for e in p["values"].get("email_addresses", []):
+                byem[e.get("email_address", "").lower()] = p
+            for ph in p["values"].get("phone_numbers", []):
+                d = dig(ph.get("original_phone_number") or ph.get("phone_number"))
+                if len(d) == 10:
+                    byph.setdefault(d, p)
+        scope = v
+    else:
+        scope = {cid: r for cid, r in v.items() if cid in pend}
+        byem, byph = AF.index_people(c, [e for r in scope.values() for e in (r.get("emails") or [])],
+                                     [AF.dig10(numbers.get(cid)) for cid in scope])
+        print(f"   targeted: {len(scope)} new calls, {len(byem)} emails and {len(byph)} phones matched to people (no full read)")
+
+    # --- bring in the outbound calls that produced a real conversation with someone we do not hold
     made = matched_by_phone = 0
-    for cid, r in v.items():
+    for cid, r in scope.items():
         if r["verdict"] == "NO_CONVERSATION" or direction.get(cid) != "outgoing":
             continue
         ems = [e for e in (r.get("emails") or [])]
@@ -199,8 +212,16 @@ def main() -> int:
     comp_name = {}
     deals_made = 0
 
-    written = skipped = moved = 0
-    for p, calls, best, cur in plan:
+    ctr = {"w": 0, "s": 0, "m": 0, "d": 0}
+    lock = threading.Lock()
+    failed = set()                      # people whose writes did not all go through: their calls stay pending for the next run
+
+    def bump(k, n=1):
+        with lock:
+            ctr[k] += n
+
+    def one(item):
+        p, calls, best, cur = item
         rid = p["id"]["record_id"]
         if best and best["verdict"] == "MEETING_BOOKED" and cur not in PROTECTED and rid not in has_deal:
             cr = p["values"].get("company") or []
@@ -220,9 +241,9 @@ def main() -> int:
                 "source_channel": [{"option": "Cold call"}],
                 "associated_people": [{"target_object": "people", "target_record_id": rid}]}}})
             if rd.status_code >= 300:
-                print(f"   DEAL FAIL: {rd.status_code}")
+                print(f"   DEAL FAIL: {rd.status_code}"); failed.add(rid)
             else:
-                deals_made += 1
+                bump("d")
                 has_deal.add(rid)
         notes_now = c.req("GET", "/notes", params={
             "parent_object": "people", "parent_record_id": rid, "limit": 50}).json().get("data", [])
@@ -233,7 +254,7 @@ def main() -> int:
             # date AND time in the title, because the same person can be rung several times a day with the same result
             title = f"Call · {(x.get('started') or '')[:10]} {(x.get('started') or '')[11:16]} · {x['verdict'].replace('_',' ').title()}"
             if title in have:
-                skipped += 1
+                bump("s")
                 continue
             # a corrected result for the SAME call (the caller's note arrived or changed): replace the old note instead of leaving two that disagree
             prefix = title.rsplit(" · ", 1)[0] + " · "
@@ -246,10 +267,12 @@ def main() -> int:
             r = c.req("POST", "/notes", json={"data": {
                 "parent_object": "people", "parent_record_id": rid,
                 "title": title, "format": "plaintext", "content": head + "\n\n" + body}})
-            written += r.status_code < 300
+            bump("w", int(r.status_code < 300))
             fresh += r.status_code < 300
+            if r.status_code >= 300:
+                failed.add(rid)
         if not best or cur in PROTECTED or not fresh:
-            continue
+            return
         rel, out, nur, paused, res, _ = STATE[best["verdict"]]
         vals = {"relationship_stage": [{"option": rel}], "outreach_status": [{"option": out}],
                 "nurture_status": [{"option": nur}], "outreach_paused": [{"value": paused}],
@@ -268,9 +291,16 @@ def main() -> int:
                      "dnc_evidence": [{"value": (best.get("summary") or "")[:900]}]}
         rr = c.req("PATCH", f"/objects/people/records/{rid}", json={"data": {"values": vals}})
         if rr.status_code >= 300:
-            print(f"   FAIL: {rr.status_code}")
+            print(f"   FAIL: {rr.status_code}"); failed.add(rid)
         else:
-            moved += 1
+            bump("m")
+
+    with ThreadPoolExecutor(max_workers=6) as ex:       # people are independent: write six at a time
+        list(ex.map(one, plan))
+    written, skipped, moved, deals_made = ctr["w"], ctr["s"], ctr["m"], ctr["d"]
+    if pend is not None:                                 # the calls of people whose writes all worked are done; the rest are tried again next run
+        failed_cids = {x["cid"] for p, calls, best, cur in plan if p["id"]["record_id"] in failed for x in calls}
+        print(f"   {AF.mark_done(WORK, 'applied_a', pend - failed_cids)} calls marked as applied, {len(failed_cids)} left for the next run")
     print(f"\n{written} notes written, {skipped} already there, {moved} people updated, {deals_made} deals opened from booked calls")
     return 0
 

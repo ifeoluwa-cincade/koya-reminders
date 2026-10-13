@@ -119,8 +119,26 @@ def main() -> int:
         print("no calls to write yet")
         return 0
 
-    print("loading Attio people...")
-    people = {p["id"]["record_id"]: p for p in c.query_all("people")}
+    # only the calls this run has to apply (marked new in live_state.json) matter: look up their people one by one (seconds) instead of reading all 16,000 (3 minutes).
+    # No flags or FULL_INDEX=1 means the old full read.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import attio_fast as AF
+    pend = AF.pending_cids(WORK, "applied_l")
+    if pend is None:
+        print("loading Attio people...")
+        people = {p["id"]["record_id"]: p for p in c.query_all("people")}
+    else:
+        all_v = json.loads(VERDICTS.read_text())
+        new_emails, new_phones = set(), set()
+        for cid in pend:
+            vv = all_v.get(str(cid)) or {}
+            new_emails |= {e.strip().lower() for e in (vv.get("emails") or [])}
+            ctc = (calls_by_id.get(str(cid)) or {}).get("Contact") or {}
+            new_emails |= {e.strip().lower() for e in (ctc.get("contact_emails") or [])}
+            new_phones |= {phone_key(n) for n in (ctc.get("contact_numbers") or [])}
+        byem, byph = AF.index_people(c, new_emails, new_phones)
+        people = {p["id"]["record_id"]: p for p in list(byem.values()) + list(byph.values())}
+        print(f"targeted: {len(pend)} new calls -> {len(people)} people looked up (no full read)")
     emails_of = {}
     phones_of = {}
     for rid, p in people.items():
@@ -148,6 +166,8 @@ def main() -> int:
 
         for e in ents:
             rid = e["parent_record_id"]
+            if pend is not None and rid not in people:
+                continue                                 # not touched by a new call
             ev = e.get("entry_values") or {}
             entry_phone = phone_key((ev.get("phone") or [{}])[0].get("value"))
             keys = [k for k in emails_of.get(rid, []) + phones_of.get(rid, []) + [entry_phone] if k]
@@ -204,6 +224,8 @@ def main() -> int:
     res = c.map(stamp, plan, label="entries ")
     bad = [x for x in res if x >= 300]
     print(f"{len(res)-len(bad):,} entries stamped, {len(bad)} failed")
+    if pend is not None and not bad:                     # everything went through: these calls are done for this writer
+        print(f"   {AF.mark_done(WORK, 'applied_l', pend)} calls marked as applied")
 
     def close(it):
         rid, (rel, out) = it

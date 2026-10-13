@@ -1006,7 +1006,7 @@
   var BUCKET_NAME={meeting:"Meeting booked", followup:"Follow up", chasing:"Multi-touch", callback:"Callback", later:"Later", lost:"Lost", won:"Won"};
   var PVWS="6a6e634971ad0f0e174a5471";
   var ACTIONS_URL="__LEAD_ACTIONS_URL__";   // the Lead Actions web app address; empty = the Resolve section stays hidden
-  var fStatus="all", fSource="all", fNotes="all", fReview="all", fSort="recent", fNode=null, openId=null, qsSel=0, qsHits=[];
+  var fStatus="all", fSource="all", fNotes="all", fReview="all", fSort="priority", fNode=null, openId=null, qsSel=0, qsHits=[];
   var SEV={bad:3, warn:2, ok:1, info:0};
 
   function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
@@ -1085,7 +1085,10 @@
   // ----- opportunities
   function T(v){ return v?new Date(v).getTime():null; }
   var BORDER={meeting:0,followup:1,chasing:2,callback:3,later:4};
+  // "Needs attention first": brand-new leads, then leads with no follow-up date (Pending), then overdue (the most overdue first), due today, and the rest by date
+  function prio(o){ if (o.live_new) return 0; var d=dueInfo(o); if (d.n==null) return 1; if (d.cls==="over") return 2; if (d.cls==="today") return 3; return 4; }
   var SORTS={
+    priority:function(a,b){ var x=prio(a), y=prio(b); if (x!==y) return x-y; if (x===0||x===1) return (T(b.last_touch)||0)-(T(a.last_touch)||0); var da=dueInfo(a).n, db=dueInfo(b).n; return (da==null?9e9:da)-(db==null?9e9:db); },
     recent:function(a,b){ var x=T(a.last_touch), y=T(b.last_touch); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1; return y-x; },   // newest first
     due:function(a,b){ var x=a.due_set&&T(a.due)!=null?T(a.due):9e15, y=b.due_set&&T(b.due)!=null?T(b.due):9e15; return x-y; },                                                          // earliest first
     tag:function(a,b){ var d=(BORDER[a.bucket]||0)-(BORDER[b.bucket]||0); return d||SORTS.recent(a,b); },
@@ -1100,7 +1103,7 @@
     try{ localStorage.setItem("koya-opps-order",JSON.stringify(ORDER)); }catch(e){}
     if (db){ try{ db.doc("prefs/opps_order").set({ids:ORDER,updated:Date.now()}).catch(function(){}); }catch(e){} }
   }
-  var SORTNAME={recent:"Last touch",due:"Follow-up due",tag:"Tag",name:"Name",notes:"Most notes",mine:"My order"}, SDEF={recent:"desc",due:"asc",tag:"asc",name:"asc",notes:"asc",mine:"asc"}, fDir="desc";
+  var SORTNAME={priority:"Needs attention first",recent:"Last touch",due:"Follow-up due",tag:"Tag",name:"Name",notes:"Most notes",mine:"My order"}, SDEF={priority:"asc",recent:"desc",due:"asc",tag:"asc",name:"asc",notes:"asc",mine:"asc"}, fDir="asc";
   function filtered(){
     var base=fView==="open"?OPPS:CLOSED.filter(function(o){ return o.bucket===fView; });
     var arr=base.filter(function(o){

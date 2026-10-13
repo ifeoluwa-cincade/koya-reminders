@@ -329,7 +329,7 @@ def main() -> int:
             state[cid] = {"name": ctc.get("name"), "company": ctc.get("company"),
                           "talk": int(cdr.get("talking_time") or 0), "started": cdr.get("started_at"),
                           "agent": (row.get("Agent") or {}).get("fullname"), "emails": emails,
-                          "type": cdr.get("type"), "agent_note": call_note(row), **v}
+                          "type": cdr.get("type"), "agent_note": call_note(row), "applied_a": False, "applied_l": False, **v}      # the two Attio writers look up only calls still marked False (attio_fast.py)
             STATE.write_text(json.dumps(state, indent=1))        # save after every call
             done += 1
             if v["verdict"] not in ("VOICEMAIL", "NO_ANSWER", "NO_CONVERSATION"):

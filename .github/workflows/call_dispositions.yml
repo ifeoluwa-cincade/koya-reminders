@@ -20,6 +20,9 @@ on:
       dry_run:
         description: "true = report what would happen, no transcripts and no CRM writes"
         default: "true"
+      recheck:
+        description: "a number N: also put the last N real-conversation calls through the fast Attio writers again (their notes already exist, so nothing is duplicated; it proves the lookups)"
+        default: "0"
 
 permissions: {}
 
@@ -41,6 +44,7 @@ jobs:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       ENC_CACHE_KEY: ${{ secrets.ENC_CACHE_KEY }}
       DRY: ${{ github.event.inputs.dry_run }}
+      RECHECK: ${{ github.event.inputs.recheck }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,7 +61,7 @@ jobs:
           npm install -g @anthropic-ai/claude-code
       - name: Give the recording a moment to be ready
         if: ${{ github.event_name == 'repository_dispatch' }}
-        run: sleep 45
+        run: sleep 12
       - name: Decide dry run or real run
         run: |
           # a manual run with dry_run=true changes nothing; every automatic run is real
@@ -79,6 +83,17 @@ jobs:
           fi
       - name: Work out an outcome for every new call
         run: python crm/scripts/live_call_dispositions.py --since "$SINCE" $COMMIT
+      - name: Put the last few real calls through the fast writers again (manual check)
+        if: ${{ env.DRY != 'true' && github.event.inputs.recheck != '' && github.event.inputs.recheck != '0' }}
+        run: |
+          python - <<'PY'
+          import json, os
+          f = "data/working/live/live_state.json"
+          st = json.load(open(f)); n = int(os.environ["RECHECK"])
+          real = sorted([c for c, r in st.items() if isinstance(r, dict) and r.get("verdict") in ("MEETING_BOOKED","SEND_FOLLOW_UP","CALLBACK","NOT_NOW","NOT_INTERESTED","WRONG_PERSON","DO_NOT_CALL")], key=lambda c: st[c].get("started") or "")[-n:]
+          for c in real: st[c]["applied_a"] = False; st[c]["applied_l"] = False
+          json.dump(st, open(f, "w"), indent=1); print("re-queued", len(real), "calls")
+          PY
       - name: Write the outcomes onto the people in the CRM
         if: ${{ env.DRY != 'true' }}
         run: python crm/scripts/apply_call_verdicts.py --commit
