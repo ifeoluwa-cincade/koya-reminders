@@ -337,6 +337,41 @@
   .odot{width:9px; height:9px; border-radius:50%; background:var(--ink-3); flex:none;}
   .odot.over{background:var(--down);} .odot.today{background:var(--amber);} .odot.soon{background:var(--violet);} .odot.later{background:var(--ink-3);}
   .omain{display:flex; flex-direction:column; min-width:0;}
+  .oname{display:flex; align-items:center; gap:7px; min-width:0;}
+  /* messages between teammates */
+  .chatbell{position:relative;}
+  .chatbell .cbadge{position:absolute; top:-6px; right:-6px; min-width:18px; padding:1px 5px; border-radius:999px; background:var(--violet); color:#fff; font:600 10.5px var(--mono); text-align:center; line-height:15px;}
+  .chatbell .cbadge[hidden]{display:none;}
+  #chatPop{position:fixed; top:62px; right:max(16px,calc((100vw - 1180px)/2)); z-index:900; width:min(400px,calc(100vw - 32px)); max-height:min(70vh,560px); overflow:auto; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 40px -16px rgba(20,23,26,.35);}
+  #chatPop[hidden]{display:none;}
+  .ctabs{display:flex; gap:6px; padding:12px 14px 8px; position:sticky; top:0; background:#fff;}
+  .ctabs button{font:500 12.5px var(--font); padding:5px 11px; border-radius:999px; border:0; background:transparent; color:var(--ink-2); cursor:pointer;}
+  .ctabs button.on{background:var(--ink); color:#fff;}
+  .citem{display:flex; gap:11px; padding:12px 14px; border-top:1px solid var(--line); width:100%; text-align:left; background:none; border-left:0; border-right:0; border-bottom:0; cursor:pointer; font:inherit; color:inherit;}
+  .citem:hover{background:var(--bg-soft);}
+  .cdot{width:8px; height:8px; border-radius:50%; background:var(--violet); margin-top:7px; flex:none;}
+  .cdot.read{background:transparent; border:1.5px solid var(--line);}
+  .cav{width:30px; height:30px; border-radius:50%; background:var(--band); color:var(--violet); display:grid; place-items:center; font:600 12px var(--font); flex:none;}
+  .cmeta{font:500 11px var(--mono); color:var(--ink-3); margin-top:3px; letter-spacing:.03em; text-transform:uppercase;}
+  .cempty{padding:22px 16px; color:var(--ink-3); text-align:center;}
+  .cthread{display:flex; flex-direction:column; gap:10px; margin-bottom:10px;}
+  .cmsg{display:flex; gap:9px;}
+  .cbub{background:var(--bg-soft); border-radius:12px; padding:9px 12px; max-width:100%; min-width:0; line-height:1.45; overflow-wrap:anywhere;}
+  .cmsg.mine .cbub{background:var(--band);}
+  .cwho{font-weight:600; font-size:12.5px; margin-bottom:2px;}
+  .cwho span{font:500 10.5px var(--mono); color:var(--ink-3); margin-left:6px;}
+  .cto{background:#fff; border:1px solid var(--line); color:var(--violet); font-weight:600; border-radius:6px; padding:0 5px;}
+  .cdone{margin-top:7px; font:500 12.5px var(--font); padding:4px 10px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer;}
+  .cdone.ok{background:var(--up-bg); color:var(--up); border-color:#cfe9da; cursor:default;}
+  .ccomp{border:1px solid var(--line); border-radius:12px; overflow:hidden;}
+  .ccomp .ctop{display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--line); color:var(--ink-3); font-size:13px;}
+  .ccomp select{font:500 13px var(--font); border:0; background:var(--bg-soft); border-radius:8px; padding:3px 8px; color:var(--ink);}
+  .ccomp textarea{display:block; width:100%; border:0; outline:0; padding:10px 12px; font:14px var(--font); min-height:58px; resize:vertical; color:var(--ink); background:#fff;}
+  .ccomp .cbot{display:flex; justify-content:flex-end; padding:7px 10px; background:#fafbfa; border-top:1px solid var(--line);}
+  .csend{background:var(--ink); color:#fff; border:0; border-radius:9px; padding:7px 16px; font:500 13px var(--font); cursor:pointer;}
+  .cwho2{display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 8px;}
+  .cwho2 button{font:500 12.5px var(--font); padding:5px 11px; border-radius:999px; border:1px solid var(--line); background:#fff; cursor:pointer;}
+  .oname .newtag{margin-left:0; flex:none;}
   .omain b{font-weight:600; font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .ocomp{font-size:12.5px; color:var(--ink-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .ostage{display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-width:0;}
@@ -544,6 +579,7 @@
   <div class="hrow">
     <div><div class="eyebrow">// Outbound · email and cold calling</div><h1>Koya Outbound</h1></div>
     <div class="hright"><div class="updated" id="updated">—</div>
+      <button class="tgbtn round chatbell" id="chatBtn" type="button" aria-label="Messages" data-tip="Messages"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0112 0c0 6 2 7 2 7H4s2-1 2-7M10 20a2 2 0 004 0"/></svg><span class="cbadge" id="chatBadge" hidden>0</span></button>
       <button class="tgbtn round" id="themeBtn" type="button" aria-label="Colour theme" data-tip="Theme: automatic"></button>
       <button class="tgbtn round" id="tourbtn" type="button" aria-label="Take a tour of this page">?</button>
       <button class="tgbtn" id="tgbtn" type="button" aria-expanded="false" aria-controls="targets"><span id="tgtxt">Show targets</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" id="tgchev"><path d="M6 9l6 6 6-6"/></svg></button></div>
@@ -1000,7 +1036,14 @@
   // ---------- tabs, opportunities, systems & operations (added 2026-10-09) ----------
   // The data below is baked into the page by the hourly build (collect_ops.py). The page cannot call Attio, PlusVibe or
   // CloudTalk itself, so everything here is read-only for now and says how old it is.
-  var ALLOPPS=(DATA.opps||[]).slice(), CLOSED=ALLOPPS.filter(function(o){ return o.bucket==="lost"||o.bucket==="won"; }), OPPS=ALLOPPS.filter(function(o){ return o.bucket!=="lost"&&o.bucket!=="won"; }), fView="open", CHECKS=(DATA.checks||[]).slice(), OPS_AT=DATA.ops_at||null;
+  // names shown the way a person would write them: no credentials after the name, no ALL CAPS, company names that came in all lowercase get capitals
+  function titleCase(x){ return String(x).toLowerCase().replace(/(^|[\s'\u2019])([a-z\u00e0-\u00ff])/g,function(m,a,b){ return a+b.toUpperCase(); }); }
+  function cleanName(n){ if(!n) return n; var s=String(n).replace(/\s+/g," ").trim(); s=s.split(/\s[-\u2013|~]\s|,\s*/)[0].trim();
+    var t=s.split(" "); while(t.length>2 && /^[A-Z]{2,6}$/.test(t[t.length-1]) && !/^(JR|SR|II|III|IV)$/.test(t[t.length-1])) t.pop();
+    s=t.join(" "); if(s.length>3 && s===s.toUpperCase() && /[A-Z]/.test(s)) s=titleCase(s); return s; }
+  function cleanCo(c){ if(!c) return c; var s=String(c).trim(); return /^[a-z ]+$/.test(s)?titleCase(s):s; }
+  function tidyOpp(o){ o.name=cleanName(o.name); o.company=cleanCo(o.company); return o; }
+  var ALLOPPS=(DATA.opps||[]).slice().map(tidyOpp), CLOSED=ALLOPPS.filter(function(o){ return o.bucket==="lost"||o.bucket==="won"; }), OPPS=ALLOPPS.filter(function(o){ return o.bucket!=="lost"&&o.bucket!=="won"; }), fView="open", CHECKS=(DATA.checks||[]).slice(), OPS_AT=DATA.ops_at||null;
   var HASH={dash:"", opps:"opps", plan:"plan", sys:"systems"}, TABKEYS=["dash","opps","plan","sys"], tab="dash";
   var RULE={meeting:3, followup:2, chasing:2, callback:1, later:30};
   var BUCKET_NAME={meeting:"Meeting booked", followup:"Follow up", chasing:"Multi-touch", callback:"Callback", later:"Later", lost:"Lost", won:"Won"};
@@ -1016,6 +1059,7 @@
     if(m<2) return "just now"; if(m<90) return m+" min ago"; var h=Math.round(m/60); if(h<36) return h+" h ago"; return Math.round(h/24)+" d ago"; }
   function fmtDate(iso){ if(!iso) return "—"; var d=new Date(iso); if(isNaN(d.getTime())) return "—"; return DOW[d.getDay()]+" "+d.getDate()+" "+MON[d.getMonth()]; }
   function dueInfo(o){ if (o.bucket==="lost"||o.bucket==="won") return {n:null,label:(o.bucket==="won"?"Won":"Lost")+(o.closed_at?" "+fmtDate(o.closed_at):""),cls:"later"};
+    if(!o.due_set && o.missed){ var mn=daysFromNow(o.missed); return {n:Math.min(mn==null?-1:mn,-1),label:"Overdue "+Math.max(1,mn==null?1:-mn)+"d",cls:"over"}; }       // a follow-up that came due and was not done: overdue, and the follow-up field is free for a new one
     var n=o.due_set?daysFromNow(o.due):null;          // no follow-up date unless one was set: the "30 days after last touch" guess is never shown as a due date
     if(n==null) return {n:null,label:"Pending",cls:"later nodate"};
     if(n<0) return {n:n,label:"Overdue "+(-n)+"d",cls:"over"};
@@ -1069,11 +1113,11 @@
       var dm=pb.match(/associated_deals[^\n]*\n\s+deals,[0-9a-f-]{36},([0-9a-f-]{36})/), did=dm?dm[1]:null;
       var p2=did?MCP.callTool("Attio","get-records-by-ids",{object:"deals",record_ids:[did]},{cache:false}):Promise.resolve(null);
       return p2.then(function(r2){
-        var db=r2?attioBlocks(txt(r2))[did]:null, dname=attioVal(db,"name")||"", stage=attioVal(db,"stage")||"", nx=attioVal(db,"next_action_at");
+        var db=r2?attioBlocks(txt(r2))[did]:null, dname=attioVal(db,"name")||"", stage=attioVal(db,"stage")||"", nx=attioVal(db,"next_action_at"), ms=nx?null:attioVal(db,"missed_followup_at");
         var em=(pb.match(/email_addresses\[\d+\]:\s*(\S+)/)||[])[1]||null, li=attioVal(pb,"linkedin");
         var bk=stageBucket(stage)||"followup", parts=dname.split("/");
         var o={id:id,name:attioVal(pb,"name")||dname,company:parts.length>1?parts.slice(1).join("/").trim():null,email:em,phone:null,linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:stage,source:"Email",
-          last_touch:null,due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,summary:null,call_at:null,attempts:null,campaign:null,
+          last_touch:null,due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,missed:ms||null,summary:null,call_at:null,attempts:null,campaign:null,
           links:{attio:"https://app.attio.com/koya-talent/person/"+id,deal:did?"https://app.attio.com/koya-talent/deals/record/"+did:null,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[]};
         OPPS.push(o); var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=OPPS.length; if(note) note.textContent="";
         openPanel(id);
@@ -1086,7 +1130,11 @@
   function T(v){ return v?new Date(v).getTime():null; }
   var BORDER={meeting:0,followup:1,chasing:2,callback:3,later:4};
   // "Needs attention first": brand-new leads, then leads with no follow-up date (Pending), then overdue (the most overdue first), due today, and the rest by date
-  function prio(o){ if (o.live_new) return 0; var d=dueInfo(o); if (d.n==null) return 1; if (d.cls==="over") return 2; if (d.cls==="today") return 3; return 4; }
+  // the New tag goes away once the lead has been opened, or after a day; the next hourly build also drops it for good
+  var NEWSEEN={}; try{ NEWSEEN=JSON.parse(localStorage.getItem("koya-new-seen")||"{}"); }catch(e){}
+  function newSeen(id){ return !!(NEWSEEN&&NEWSEEN[id]); }
+  function markNewSeen(id){ if(!NEWSEEN||NEWSEEN[id]) return; NEWSEEN[id]=Date.now(); try{ localStorage.setItem("koya-new-seen",JSON.stringify(NEWSEEN)); }catch(e){} }
+  function prio(o){ if (o.live_new && !newSeen(o.id)) return 0; var d=dueInfo(o); if (d.n==null) return 1; if (d.cls==="over") return 2; if (d.cls==="today") return 3; return 4; }
   var SORTS={
     priority:function(a,b){ var x=prio(a), y=prio(b); if (x!==y) return x-y; if (x===0||x===1) return (T(b.last_touch)||0)-(T(a.last_touch)||0); var da=dueInfo(a).n, db=dueInfo(b).n; return (da==null?9e9:da)-(db==null?9e9:db); },
     recent:function(a,b){ var x=T(a.last_touch), y=T(b.last_touch); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1; return y-x; },   // newest first
@@ -1166,7 +1214,7 @@
     var IC={Email:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 7l8.5 6 8.5-6"/></svg>',Call:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>'};
     function srcIcons(o){ var t=String(o.source||""), r=""; if(t.indexOf("Email")>=0) r+='<span data-tip="Email">'+IC.Email+'</span>'; if(t.indexOf("Call")>=0) r+='<span data-tip="Cold call">'+IC.Call+'</span>'; return r||'<span class="oseen">'+esc(t)+'</span>'; }
     var h=list.map(function(o){ var d=dueInfo(o);
-      return '<button class="orow ogrid" draggable="true" data-id="'+esc(o.id)+'"><span class="olead"><span class="odot '+d.cls+'"></span><span class="omain"><b>'+esc(o.name||o.email)+'</b>'+(o.live_new?'<span class="newtag">New</span>':'')+'<span class="ocomp">'+esc(o.company||o.email||"")+'</span></span></span>'+
+      return '<button class="orow ogrid" draggable="true" data-id="'+esc(o.id)+'"><span class="olead"><span class="odot '+d.cls+'"></span><span class="omain"><span class="oname"><b>'+esc(o.name||o.email)+'</b>'+(o.live_new&&!newSeen(o.id)?'<span class="newtag">New</span>':'')+'</span><span class="ocomp">'+esc(o.company||o.email||"")+'</span></span></span>'+
         '<span class="ostage"><span class="tag '+o.bucket+'">'+esc(o.status)+'</span>'+'</span>'+
         '<span class="osrc">'+srcIcons(o)+'</span>'+
         '<span class="oseen">'+esc(relAgo(o.last_touch))+'</span><span class="odue '+d.cls+'">'+esc(d.label)+'</span>'+
@@ -1209,7 +1257,8 @@
   var LOGO={pv:"data:image/png;base64,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",ct:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAMAAAD04JH5AAAANlBMVEVHcEz///8AIf/t8P8EJv8EJv8EJ/8EJv8EJv8EJv87Uf/Z3v8AF/9Xa/8gPv+gq/9/jv+/x/9qWw/bAAAACnRSTlMA////E2//0jecKQRQqAAABOJJREFUeJztW9mSrCAMdaDdWf//Zy+orS2QALbIfejU1NTUuOSQhIDkpGmS5DW07dj3XYr0fT+27fBKe3Oa8jFN9SpkwzHeAuI1ZCl3jTF+iWFov9C+YWiH6+q/GfzJDBfV36F9lQsQXjeqXyBkxsL3vnelbzPU32n9Q9L9MNw+/FX6NAR3e/9TUiKhpP4UBKXM/5aYG0rrjyEorx9H8IR+DMHrEf1wJJaN/w8hAIKn9BsZgwHwnP6uC4TBMwH4lkAgZjqAAJL6vOeENkt1J4xMYnJ+zD+363FxVufEGUgIIxNXUus5LFprqbgwt8Ve1Z9nQpIDCBFcakr/IkJnraYuZoeTE1JmAOm4nGO6DzEYIhCGLAMwxnV06I4h5IR6YswwgBl9xuAPkagVhmQDsElmjv6wQgcj2E0QyUFm+BfVW9EcRLBnIzwHECGvq7dGUKAR2pQcwIT+Sj/mhi0XoCHIrkXfWTSEYIiGIJlu0G9mgwgjGGMeuEm/QRB+/+IDxANE3KT/j05hEwzoHCDku/j/FMWCKlp0Jwjpn+2KZ9fet9jF2Aq3C+UcTBoAgBELARbMP1TalY6ddiDHfsQkf8FVYOLyMAATBHAIkEAAUJvdI+usuT65CxcFpoEJAjAEiPL1a3x9+8DAz1ZQ0GMwgNAMVNA4Ao+fEjiUB2wUQjHoRyDlacPfnme7BamCHxwbIAYDKQBe1oBXqDUQkPXQRCEEgHkRAEwkDMEkzTYV91vfQFfcqQQuKBgC1oku4jcAAHFzAJRLoxhiN4QB+Ek43wGJAgBwdyFXDXAZwOR4QJbSDwBg3E0BTwNwQmBOT4E3AXBCoJwHIABOGiw2B8A84MRguRAIAyDCyQLlQgAAMDkALqThWwHQcvoBAG4aeBqAl4d+FvhZ4GeBnwV+FnjcAtUXo+rLce0NibclK/ZZ8t9uSutvy6t/mDjHE49/mnnHA09/nHqf5+V8AJ2QVD6g8H0wl0oFwCkZ6dxTOuDEHxV7dBw5oyp7TCeUnjVHFxIQABHuUXn2VGRqtaLGvNdnHNXOmUe1exjNiPHGvMPq9GWZdJ/FVgXe1yIVm8BxfaQcfahn0ymRUPC4voULFv5EWN4kUgoWwq01g4lsQEo2Xi5YIciFIOGhOGo2kwoU+oEItnU7pG4ZLlpZggSfrJ2P2DJ/LtWrpWoVegguWqGla6xsTCk9klO0wAuX7dDCZaRw+k4NCQVOpHCJlm4jI5Nsuy1GMNDh96/lc6x4Ha4d7jJvd8UqrFAyHKPle4IPbvOBu4f1cMKTMIHAgMbBslPyvmPcmyIEhgiFw0lqZ9F2bKES5yEIj+VN54qSWBToBuuDYMrcZeZg5jwodVEaDweNYOY3FiZUCmwlTCcyCQWMcmbM37vsgu9GPrhcUSoXYZ0KEwOkgkhOVHOG7aI+2WwJZDbCRBabbJb4XsyhdabR+Tq7yUsAQWe7ZObQ+ZIJjcamG5+RhsRSGqWlWLAoq9IhNKZTOjdG5wSIEF0CnbLzKJ2ZpNaDPXL6lcFr9ZnF1Wm91YnN9andz5Hb4UaPh8LAnYFPB2LtFovaTSaxNpvCbR4k3u9Vu9GpfqtXwUBIbHZr6rf7NdUbHpvbI6HPbflsqje9rhCqtv0uEOo2Plup3Pq9Ychrft+V39iB/8pp/++y2v//AaZsL4/QRRgMAAAAAElFTkSuQmCC",at:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAFMUlEQVRYheWXbUyVZRjHf8/huB0ThGGrIZQKLt/KhYX4kh/UkgNFmTI11wLKZWq1Fa5UzITxqlmGIb3Ylvmy1YDipYl9qA+aCyudSxYaHEo7aBEpHCaMA/z7IOcMeM4jWB+9tvPh/t/X/75enuu67vvArS7GzRIk3QlEWWz/YRjGn//PJWvD4ySVS+qVtfRKKpM0bqTnjigDkoKAb4EFXV1d/Hz2LF1dXYN0HA4H9917Lw6HA+AYsNAwjN7hzraP0NENwAK3u5nlKSm43c0BlSIjx1NWWkpk5PgF/Zyi4Q62DacgKQLIBtiSmWlpfMyYMaSnpbElM9MH5UiyqpWROwC8B4RWVVfzzTffWipt3JjB2rXPExoaSlV1NUAIsHsE51uLpGRJ8ng8ejAuXlF3TQj4W5LglNfrlSS1trZq8cNL1NbW5ivMxBvZsMyApGCuR09+QSGXL18OqBcUFMTOHYXY7dfLKTw8nOeeTeedd/zBv/KfHACygLtPnTrNwYOHLJXSUlOZOXPmIGzlyhV8d+KEbznjph2QFAu83NPTw6bNm+nr6wtIjoiIYOPGDBP+ww8/Ej0p2rd038iBQMaDJJ2UpL17Syy/e9RdE1RTc9Q0ibq7u+V0JqmhodEHrb/ZDKwH4tzuZt4t2mNJXLRoIQkJS0x4cfFeEhOdxMREA/wO/CPpSUlTRhJ9pKQ2SXomNc0y8ilTp8vtbjZF73K55HQmqbu722pUl/YXt1+GTsIiYOxwPZ+R8Srjx0eY8Myt23jjja1cuHCRX+p/8eMOh4M58fEEBwcvB3qAVSYH+vt1WUdHB9nZOZbGp02bSnpaqgkvLSsjKiqS2bPjcCY+yrlz5wbtT46JobLyS0JCQlZKOmwYRiX014Ck24BiuHHP22w2CvLz/T3vk6tXr1JcXMKm11/jgw8/MhmPjb2f1aufIr+g0Aft8X0KXxFmA5POnDnDoUOHLaNPT0tj1qxYE56Tm8dLL27gWmcnRUMK1263k5eXy5o1z9HkauLHn34CuBvYTn/00yV5vV6vnM4ky8Kb9UCc2tvbTVVVW1urFStXqa+vT6mp6SZebl6+X7ehoVFJjyb7xrZX0nQkFUnS/v2f3rDnjxypsex5l8uliopKE2fO3Pm6du3aIM6OnW/pk0/2+5a7bUA0wLHjxy1THxwcjNOZYMJLSt4nMdFJeHg427OyTfuPJyczevToQVjK8mUDx3SMDXABzJ83z9KBjo4Ojh79ehDW1NRETc1R1q17gYKCQlpaWky8yqoqOjs7B2GlZeXMmzvXt3QhaYakHq/Xq0eWJFh+grjZc+TxdPhT+dTqp/X997VqaflbEyZGW/JycvP8nPPnzw+sgR5JM2yGYdQBRXa7nR2FhdhsgS/IS5cusWvXLgDKysuJiookPn42t98+jpSU5ZbZ27fvY87W1SGJbdu2k5X1pq+N9xiGUWeAfw7UARO3ZG7lwIGDAQ8LCgqiuHgPb7+9m7LSzwkLCwPgypUrLFy0mNbWfwLyYmPvJ/mxx2j67TfycnMALgIzDMPw+F/Fkp4Avmxvb+fxJ5bS2OiydOL9kr2+ovyK6y/rpCNHali3fgO9vYEfwpNjYqio+IKxY8cCLDUMowKGPMslfQas8Hg81J48aXp6A0ybOs13010FfFPpNBDW0NhIfX29iTPgLgD4zDCMVSalfgeC+2+s4eSCpPkDeA9JujgC3ueSxgy0GfCPiaR7gOnAqADbfwEnDMPwDuGMAuYBdwTgeIE6wzB+DRj5LS3/Anp6mxxvGYKBAAAAAElFTkSuQmCC",li:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAADCUlEQVR4nO2bO2zaUBSGf1dFCh1CqDOkyUBaS+mQSDgrQ+Is2RDZyJg1nRjYgaEbA1Mzhm4ZG7FFlWKpEksqxZWaoZVcCUWlSxAxi5EY3KEFEWyIr2M4+PFNGN9rn/P5Pi2ZMwwDQeYZdQDUhAKoA6Dm+bgTXL5WBJADEJtZNNNBA1ABUDHK6fvRkyYBXL62BEAGkJx6aLMhBqAA4ACAOHrSqgvk4J/kh0n+b9UPGCfAr5hysxLg9T4/CVNu4SzgtKIk8JCEZQCArN5BVluuBTVLmAVIAo/q4TYS8ejgvwI20GjrODq79pwIpi4gCTwuj1MPku+TiEdxeZyCJPCuBTcLmARUD7ddKTNP2BYgCbzlkx8lEY96qhUwCFi2fVGWstQEfhq0LUBW72xflKUsNQwCWmi09UfLNdq6p6ZCpi5wdHbtSpl5gkmArLawd1K3bAmNto69k7qnnj7gYCUoqy2sv/8c3KVwH1lteTbpYRwLmDb9xZQkLENparjXewAApdkZ/HYDZgFGOT3xPJev2S5fuviJ4sWPwbEk8MjtvEFmc2XiPRptHdWrW1S+/HqyjLloAesvX6CaFbFrcwmdiEdR2N9Abuc1cuc3qF7dOr43uQBxdRHyuxRiCxHmurGFCE6z/95zOpVAuhQW15wnP8xpVnS8ASMVkNlceXLyfYr7bx3V881maFfgIa4uMtfzjQAAONh6xVyHfBAcRev2oPzuDI6XohEkbT5ZJ+PA3AjQur2xU5ok8Khkth4VIa55tAto3R6kD/WxU5mstmztMp0MqHMhIHd+A6XZmVhGaXbw8avzBc84yAX0l7V2GB4b3IJcwKfvf2yXVZqa6/cnF0C9pSYX4ObW1gnkAliYRmshFxD4LkBNKIA6AGpCAdQBUBMKoA6AmlAAdQDUhAKoA6CGG/1miMvXfP0RkVFOc8PHgW8BoQDqAKixEuD+i7f5wZSblYDKDAKhwpSbaRYAAC5fU+C/74a+GeW0rY+mAEACUII/uoMGoGSVPDCmBQSJcBagDoCawAv4CyJz5Ou100U7AAAAAElFTkSuQmCC"};
   function logoImg(k){ return '<img src="'+LOGO[k]+'" width="22" height="22" alt="" style="display:block;border-radius:5px">'; }
   function LINKICON(label){ return /conversation|PlusVibe/i.test(label)?logoImg("pv"):/LinkedIn/i.test(label)?logoImg("li"):/CloudTalk/i.test(label)?logoImg("ct"):/^Attio/.test(label)?logoImg("at"):svgIcon(/Website/i.test(label)?"globe":/^Deal/.test(label)?"deal":"link"); }
-  function openPanel(id,keepScroll){
+  function safeChat(o){ try{ return chatHTML(o); }catch(e){ return ''; } }      // a function declaration: it exists from the first line, even if the chat code further down has not run yet
+  function openPanel(id,keepScroll){ try{ markNewSeen(id); }catch(e){} try{ chatSeenLead(id); }catch(e){}
     var o=oppById(id); if(!o) return; mergeNotes(); openId=id; var prevScroll=keepScroll?[].map.call(document.querySelectorAll("#panel .pcol"),function(c){ return c.scrollTop; }):[], prevOuter=keepScroll?document.getElementById("panel").scrollTop:0;
     var d=dueInfo(o), L=o.links||{};
     function link(href,label){ var ic=LINKICON(label); return href ? '<a class="plink ico" href="'+esc(href)+'" target="_blank" rel="noopener noreferrer" data-tip="'+esc(label)+'" aria-label="'+esc(label)+'">'+ic+'<span class="vh">'+label+'</span></a>' : '<span class="plink ico off" data-tip="'+esc(label)+' (nothing to open yet)">'+ic+'<span class="vh">'+label+'</span></span>'; }
@@ -1222,6 +1271,7 @@
     var rows=[["Status",esc(o.status)+(o.stage?" · deal stage "+esc(o.stage):"")],["Source",esc(o.source)],
       ["Last touch",esc(fmtDate(o.last_touch))+" ("+esc(relAgo(o.last_touch))+")"],
       o.due_set ? ["Follow-up due",'<span class="'+(d.cls==="over"?"over":"")+'">'+esc(fmtWhen(o.due))+" \u00b7 "+esc(d.label)+'</span>'+(planOf(o)?'<br><span class="plan">Note: '+esc(planOf(o))+'</span>':'<br><span class="tnote">set on the deal in Attio</span>')]
+        : o.missed ? ["Follow-up",'<span class="over">Missed: it was due '+esc(fmtWhen(o.missed))+'</span><br><span class="tnote">A call or email clears it. Use Follow up on a date to set a new one.</span>']
         : ["Follow-up",'<span>No date set</span><br><span class="tnote">Use Follow up on a date to set one.</span>']];
     if (o.campaign) rows.push(["Campaign",esc(o.campaign)]);
     if (o.attempts) rows.push(["Call attempts",esc(o.attempts)]);
@@ -1237,6 +1287,7 @@
       (others.length?'<h4>Also at '+esc(o.company)+'</h4><div class="plinked">'+others.map(function(x){ return '<button type="button" data-id="'+esc(x.id)+'">'+esc(x.name)+'</button>'; }).join("")+'</div>':"")+
       '</div><div class="pcol pright">'+
       (MCP?'<h4>Calls in CloudTalk</h4><div id="ctcalls">'+callsHTML(o)+'</div>':"")+
+      '<h4>Messages</h4><div id="chatbox">'+safeChat(o)+'</div>'+
       '<h4>Notes in Attio</h4><div id="nlist">'+notesHTML(o)+'</div>'+
       (o.summary?'<h4>'+(o.call_at?"Call summary":"Latest reply")+'</h4><p class="ptext">'+esc(o.summary)+'</p>':"")+
       '<div id="seqwrap">'+seqAll(o)+'</div>'+
@@ -1256,6 +1307,7 @@
       if (openId!==o.id) return; var changed=false;
       if (n.deal && n.deal!==o.stage){ o.stage=n.deal; var bk=stageBucket(n.deal); if(bk){ o.bucket=bk; o.status=BUCKET_NAME[bk]; } changed=true; }
       var iso=nextIso(n.next); if (iso && iso!==o.due){ o.due=iso; o.due_set=true; changed=true; }
+      if (n.deal!==undefined){ if (!iso && o.due_set){ o.due_set=false; o.due=null; changed=true; } var mi=iso?null:(nextIso(n.missed)||null); if ((o.missed||null)!==mi){ o.missed=mi; changed=true; } }
       if ((n.conn||null)!==(o.li_conn||null)){ o.li_conn=n.conn||null; changed=true; }
       if (changed) openPanel(o.id,true);
     }).catch(function(){});
@@ -1273,25 +1325,35 @@
   function errText(e){ if (e && /was not found/i.test(String(e.message||""))) return "that lead no longer exists in Attio (it was deleted). Reload the page to refresh the list"; var c=(e&&e.code)||"error"; return ({server_not_connected:"the connector is not connected in your claude.ai",needs_reauth:"reconnect the connector in claude.ai Settings, Connectors",not_in_manifest:"the connector was not allowed for this page",blocked_by_policy:"blocked by your organisation",tool_error:(e&&e.message)||"the tool reported an error",server_unavailable:"the service did not answer, try again",upstream_error:"the service did not answer, try again"})[c]||(c+": "+((e&&e.message)||"")); }
   function stageBucket(st){ return ({"Meeting Booked":"meeting","Interested":"followup","Multi-touch":"chasing","Later":"later"})[st]||null; }
   // ----- live discovery: ask Attio for every open deal, so a lead that arrived since the hourly build shows up on a pull
-  var LIVE_DISC_ERR=null;
+  var LIVE_DISC_ERR=null, LIVE_COUNTS="";
   function liveDiscover(){
     if (!MCP) return Promise.resolve();
     var OPEN=["Interested","Multi-touch","Later","Meeting Booked","Profiles Sent","Trial"], flt={or:OPEN.map(function(x){ return {attribute:"stage",op:"eq",value:x}; })};
     function ask(inp){ return MCP.callTool("Attio","list-records",inp,{cache:false}); }
-    return ask({object:"deals",filter:flt,limit:100}).catch(function(){ return ask({object:"deals",filter:flt}); }).then(function(r){
-      var B=attioBlocks(txt(r)), ids=Object.keys(B);
-      if (!ids.length){ LIVE_DISC_ERR="the list came back in a format the page could not read: "+String(txt(r)).replace(/\s+/g," ").slice(0,140); var n0=document.getElementById("liveNote"); if(n0) n0.textContent="New leads could not be read live ("+LIVE_DISC_ERR+")"; return; }
+    // one read per stage, and further pages until a page brings nothing new: the tool returns a limited page, and one combined read missed the newest deals
+    var lastRaw="";
+    function pageStage(st){ var out={}, flt1={attribute:"stage",op:"eq",value:st};
+      function go(off,pg){ var inp={object:"deals",filter:flt1,limit:100}; if(off) inp.offset=off;
+        return ask(inp).catch(function(){ return off?null:ask({object:"deals",filter:flt1}); }).then(function(r){
+          if(!r) return out; lastRaw=String(txt(r)); var b=attioBlocks(txt(r)), got=Object.keys(b), fresh=0; got.forEach(function(i){ if(!out[i]){ out[i]=b[i]; fresh++; } });
+          return (fresh&&got.length>=20&&pg<4)?go(off+got.length,pg+1):out; }); }
+      return go(0,0); }
+    return Promise.all(OPEN.map(pageStage)).then(function(parts){
+      var B={}, counts=[]; parts.forEach(function(pt,i){ var k=Object.keys(pt); k.forEach(function(d){ B[d]=pt[d]; }); counts.push(OPEN[i]+" "+k.length); });
+      var ids=Object.keys(B);
+      if (!ids.length){ LIVE_DISC_ERR="the list came back in a format the page could not read: "+lastRaw.replace(/\s+/g," ").slice(0,140); var n0=document.getElementById("liveNote"); if(n0) n0.textContent="New leads could not be read live ("+LIVE_DISC_ERR+")"; return; }
+      LIVE_COUNTS=counts.join(", ");
       var known={}; OPPS.concat(CLOSED).forEach(function(o){ known[o.id]=1; });
       var fresh=[]; ids.forEach(function(did){ var b=B[did], m=b.match(/people,[0-9a-f-]{36},([0-9a-f-]{36})/), pid=m&&m[1], st=attioVal(b,"stage"); if (pid && !known[pid] && OPEN.indexOf(st)>=0){ known[pid]=1; fresh.push({pid:pid,did:did,b:b,st:st}); } });
-      LIVE_DISC_ERR=null; var nn=document.getElementById("liveNote"); if (nn) nn.textContent=ids.length+" open deals read live from Attio, "+fresh.length+" new"; if (!fresh.length) return;
+      LIVE_DISC_ERR=null; var nn=document.getElementById("liveNote"); if (nn) nn.textContent=ids.length+" open deals read live from Attio ("+LIVE_COUNTS+"), "+fresh.length+" new"; if (!fresh.length) return;
       return MCP.callTool("Attio","get-records-by-ids",{object:"people",record_ids:fresh.map(function(f){ return f.pid; })},{cache:false}).then(function(r2){
         var P=attioBlocks(txt(r2)), added=0;
         fresh.forEach(function(f){ var pb=P[f.pid]; if(!pb) return;
           var dname=attioVal(f.b,"name")||"", nx=attioVal(f.b,"next_action_at"), em=(pb.match(/email_addresses\[\d+\]:\s*(\S+)/)||[])[1]||null, li=attioVal(pb,"linkedin"), ch=attioVal(f.b,"source_channel")||"";
           var bk=stageBucket(f.st)||"followup", parts=dname.split("/");
-          OPPS.push({id:f.pid,name:attioVal(pb,"name")||dname,company:parts.length>1?parts.slice(1).join("/").trim():null,email:em,phone:((pb.match(/phone_numbers\[\d+\]:\s*(\S+)/)||[])[1]||null),linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:f.st,source:/call/i.test(ch)?"Call":"Email",
-            last_touch:new Date().toISOString(),due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,summary:null,call_at:null,attempts:null,campaign:null,
-            links:{attio:"https://app.attio.com/koya-talent/person/"+f.pid,deal:"https://app.attio.com/koya-talent/deals/record/"+f.did,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[],live_new:true}); added++; });
+          OPPS.push(tidyOpp({id:f.pid,name:attioVal(pb,"name")||dname,company:parts.length>1?parts.slice(1).join("/").trim():null,email:em,phone:((pb.match(/phone_numbers\[\d+\]:\s*(\S+)/)||[])[1]||null),linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:f.st,source:/call/i.test(ch)?"Call":"Email",
+            last_touch:new Date().toISOString(),due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,summary:attioVal(pb,"last_reply_summary")||null,call_at:null,attempts:null,campaign:null,
+            links:{attio:"https://app.attio.com/koya-talent/person/"+f.pid,deal:"https://app.attio.com/koya-talent/deals/record/"+f.did,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[],live_new:true})); added++; });
         OPPS.filter(function(o){ return o.live_new && o.email && !o.sequence; }).forEach(function(o){                       // PlusVibe: where this lead is in the sequences, straight away
           o.sequence=[];
           MCP.callTool("PlusVibe","find_lead_by_email",{workspace_id:PVWS_ID,email:o.email},{cache:false}).then(function(r){
@@ -1332,7 +1394,7 @@
         var db=D[dealIdOf(o)], pb=P[o.id], ds=attioVal(db,"stage"), ps=attioVal(pb,"relationship_stage");
         if ((ds&&/^(Won|Lost)/.test(ds)) || ps==="LOST" || ps==="CUSTOMER"){ o.closedAs=(/^Won/.test(ds||"")||ps==="CUSTOMER")?"won":"lost"; o.reason=attioVal(db,"lost_reason")||o.reason||null; if (o.id===openId){ o.resolved=true; return true; } toClosed(o); gone++; return false; }
         if (ds && ds!==o.stage){ o.stage=ds; var bk=stageBucket(ds); if(bk&&bk!==o.bucket){ o.bucket=bk; o.status=BUCKET_NAME[bk]; } changed++; }
-        var nx=nextIso(attioVal(db,"next_action_at")); if (nx){ o.due=nx; o.due_set=true; }
+        var nx=nextIso(attioVal(db,"next_action_at")); if (nx){ o.due=nx; o.due_set=true; o.missed=null; } else if (db){ if (o.due_set){ o.due_set=false; o.due=null; changed++; } var ms2=nextIso(attioVal(db,"missed_followup_at"))||null; if ((o.missed||null)!==ms2){ o.missed=ms2; changed++; } }
         o.li_conn=attioVal(pb,"linkedin_connection")||null;
         return true; });
       var oo=openId&&oppById(openId); if (oo&&oo.resolved){ var pt=document.querySelector("#panel .ptags"); if (pt&&!pt.querySelector(".closedtag")) pt.insertAdjacentHTML("afterbegin",'<span class="tag closedtag">Closed</span>'); }   // tag only: a full redraw would wipe a note being typed
@@ -1668,7 +1730,7 @@
     return Promise.all([did?MCP.callTool("Attio","get-records-by-ids",{object:"deals",record_ids:[did]},{cache:false}):Promise.resolve(null),
                         MCP.callTool("Attio","get-records-by-ids",{object:"people",record_ids:[o.id]},{cache:false})]).then(function(rs){
       var db=rs[0]?txt(rs[0]):"", pb=txt(rs[1]);
-      return {deal:attioVal(db,"stage"), next:attioVal(db,"next_action_at"), reason:attioVal(db,"lost_reason"), rel:attioVal(pb,"relationship_stage"), paused:attioVal(pb,"outreach_paused"), conn:attioVal(pb,"linkedin_connection")};
+      return {deal:attioVal(db,"stage"), next:attioVal(db,"next_action_at"), missed:attioVal(db,"missed_followup_at"), reason:attioVal(db,"lost_reason"), rel:attioVal(pb,"relationship_stage"), paused:attioVal(pb,"outreach_paused"), conn:attioVal(pb,"linkedin_connection")};
     });
   }
   // re-read where the lead is in every PlusVibe sequence (live) and redraw the box on the right; the main sequence and each subsequence are read separately
@@ -1866,7 +1928,7 @@
       if (all && (a.rel==="LOST"||a.rel==="CUSTOMER"||/^(Won|Lost)/.test(a.deal||""))){ o.resolved=true; o.closedAs=(a.rel==="CUSTOMER"||/^Won/.test(a.deal||""))?"won":"lost"; o.reason=reason||a.reason||null; var gb=document.querySelector("#rzone .rzb"); if(gb) gb.hidden=true; var wz=document.getElementById("rzres"); if(wz&&stop) wz.insertAdjacentHTML("beforeend",'<p class="tnote" id="rzwait">Waiting for PlusVibe to show the new tag on the right…</p>'); (stop?watchSeq(o,RZPICK,true):Promise.resolve(true)).then(function(){ var ww=document.getElementById("rzwait"); if(ww) ww.textContent="PlusVibe now shows this."; setTimeout(function(){ if(openId===o.id) closePanel(); },3500); }); }
       logAct(all?(a.date?"followup":"resolve"):"error", all?(a.date?"Follow-up set for "+leadLabel(o)+": "+fmtWhen(new Date(until+"T"+utime+":00+01:00").toISOString()):leadLabel(o)+": "+a.label+(stop?", emails and calls stopped":"")):"Close-out did not fully match for "+leadLabel(o)+" ("+a.label+")",o.id);
       return MCP.invalidate().catch(function(){}).then(function(){ return liveSync(); }).then(function(){
-        if (all && a.date){ var o2=oppById(o.id); if(o2){ o2.due=new Date(until+"T"+utime+":00+01:00").toISOString(); o2.due_set=true; } setTimeout(function(){ if(openId===o.id) openPanel(o.id,true); },1500); }
+        if (all && a.date){ var o2=oppById(o.id); if(o2){ o2.due=new Date(until+"T"+utime+":00+01:00").toISOString(); o2.due_set=true; o2.missed=null; } setTimeout(function(){ if(openId===o.id) openPanel(o.id,true); },1500); }
       });
     }).catch(function(e){ z.innerHTML='<p class="tnote" style="color:var(--down)">Read-back failed: '+esc(errText(e))+'. Check Attio before trying again.</p>'; });
   }
@@ -2483,6 +2545,58 @@
     if (preset!=="custom"){ var p=PRESETS.find(function(x){return x[0]===preset;}); if (p) R=p[2](); }
     render();
   }
+  // ----- messages between teammates: a note on a lead for a named person, a bell with a count, and a thread inside the lead. Stored in the shared db (collection "chat").
+  var TEAM=["Ife","Temi","Emeka","Chris"], CHAT=[], CHAT_READY=false, CHAT_DRAFT={}, CHAT_TO={}, CHAT_SEEN={}, CHAT_TAB="you", CHAT_ME="";
+  try{ CHAT_ME=localStorage.getItem("koya-me")||""; CHAT_SEEN=JSON.parse(localStorage.getItem("koya-chat-seen")||"{}")||{}; }catch(e){}
+  function chatSaveSeen(){ try{ localStorage.setItem("koya-chat-seen",JSON.stringify(CHAT_SEEN)); }catch(e){} }
+  function chatWhen(t){ var d=new Date(t); return isNaN(d)?"":d.toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }
+  function chatInit(n){ return String(n||"?").slice(0,2).toUpperCase(); }
+  function chatUnread(){ return CHAT.filter(function(m){ return m.to===CHAT_ME && !m.done && !CHAT_SEEN[m.id]; }); }
+  function chatBadge(){ var n=CHAT_ME?chatUnread().length:0, b=document.getElementById("chatBadge"); if(b){ b.textContent=n; b.hidden=!n; } try{ document.title=(n?"("+n+") ":"")+"Koya Outbound"; }catch(e){} }
+  function chatSeenLead(id){ var ch=false; CHAT.forEach(function(m){ if(m.lead===id && m.to===CHAT_ME && !CHAT_SEEN[m.id]){ CHAT_SEEN[m.id]=1; ch=true; } }); if(ch){ chatSaveSeen(); chatBadge(); } }
+  function chatMsgHTML(m){ var mine=m.from===CHAT_ME, body=esc(m.text).replace(/\n/g,"<br>");
+    return '<div class="cmsg'+(mine?" mine":"")+'"><span class="cav">'+esc(chatInit(m.from))+'</span><div class="cbub"><div class="cwho">'+esc(m.from)+'<span>'+esc(chatWhen(m.t))+'</span></div><span class="cto">@'+esc(m.to)+'</span> '+body+
+      (m.done?'<div><span class="cdone ok">Done'+(m.doneBy?" by "+esc(m.doneBy):"")+'</span></div>':(m.to===CHAT_ME?'<div><button type="button" class="cdone" data-chat="done" data-mid="'+esc(m.id)+'">Mark done</button></div>':""))+'</div></div>'; }
+  function chatHTML(o){
+    if(!TEAM||!CHAT) return '';
+    if(db===null && dbState!=="loading") return '<p class="tnote">Messages need the shared database, which is not connected right now.</p>';
+    var who=CHAT_ME?"":'<p class="tnote">Who are you? This is remembered on this device.</p><div class="cwho2">'+TEAM.map(function(n){ return '<button type="button" data-chat="me" data-name="'+esc(n)+'">'+esc(n)+'</button>'; }).join("")+'</div>';
+    var th=CHAT.filter(function(m){ return m.lead===o.id; }).sort(function(a,b){ return String(a.t).localeCompare(String(b.t)); });
+    var opts=TEAM.filter(function(n){ return n!==CHAT_ME; }), to=CHAT_TO[o.id]||opts[0];
+    return who+(th.length?'<div class="cthread">'+th.map(chatMsgHTML).join("")+'</div>':"")+
+      (CHAT_ME?'<div class="ccomp"><div class="ctop">To <select id="chatTo" data-lead="'+esc(o.id)+'">'+opts.map(function(n){ return '<option'+(n===to?" selected":"")+'>'+esc(n)+'</option>'; }).join("")+'</select></div><textarea id="chatText" data-lead="'+esc(o.id)+'" placeholder="Write a note about this lead">'+esc(CHAT_DRAFT[o.id]||"")+'</textarea><div class="cbot"><button type="button" class="csend" data-chat="send" data-lead="'+esc(o.id)+'">Send</button></div></div>':"");
+  }
+  function chatRedraw(){ chatBadge(); var bx=document.getElementById("chatbox"), o=openId&&oppById(openId); if(bx&&o&&!(document.activeElement&&document.activeElement.id==="chatText")) bx.innerHTML=safeChat(o); chatDrawPop(); }
+  function chatDrawPop(){ var pop=document.getElementById("chatPop"); if(!pop||pop.hidden) return;
+    var list=CHAT.filter(function(m){ return CHAT_TAB==="you"?(m.to===CHAT_ME&&!m.done):CHAT_TAB==="sent"?(m.from===CHAT_ME&&!m.done):((m.to===CHAT_ME||m.from===CHAT_ME)&&m.done); }).sort(function(a,b){ return String(b.t).localeCompare(String(a.t)); });
+    var nYou=CHAT.filter(function(m){ return m.to===CHAT_ME&&!m.done; }).length;
+    pop.innerHTML='<div class="ctabs"><button type="button" data-ctab="you" class="'+(CHAT_TAB==="you"?"on":"")+'">For you'+(nYou?" "+nYou:"")+'</button><button type="button" data-ctab="sent" class="'+(CHAT_TAB==="sent"?"on":"")+'">Sent by me</button><button type="button" data-ctab="done" class="'+(CHAT_TAB==="done"?"on":"")+'">Done</button></div>'+
+      (!CHAT_ME?'<div class="cempty">Open any lead and pick your name under Messages first.</div>':list.length?list.map(function(m){ var o=oppById(m.lead); return '<button type="button" class="citem" data-clead="'+esc(m.lead)+'"><span class="cdot'+(m.to===CHAT_ME&&!CHAT_SEEN[m.id]&&!m.done?"":" read")+'"></span><span class="cav">'+esc(chatInit(m.from))+'</span><div><div><b>'+esc(m.from)+'</b> on <b>'+esc(m.leadName||(o&&o.name)||"a lead")+(m.company?", "+esc(m.company):"")+'</b></div><div>'+esc(String(m.text).slice(0,140))+'</div><div class="cmeta">'+esc(chatWhen(m.t))+(m.stage?" · "+esc(m.stage):"")+'</div></div></button>'; }).join(""):'<div class="cempty">Nothing here.</div>');
+  }
+  function chatListen(){ if(!db) return;
+    try{ db.collection("chat").onSnapshot(function(snap){
+      var prev={}; CHAT.forEach(function(m){ prev[m.id]=1; });
+      CHAT=snap.docs.map(function(d){ return Object.assign({id:d.id},d.data()); });
+      if(CHAT_READY){ CHAT.forEach(function(m){ if(!prev[m.id] && m.to===CHAT_ME && m.from!==CHAT_ME && !m.done) toast(m.from+" left you a note on "+(m.leadName||"a lead")); }); }
+      CHAT_READY=true; chatRedraw();
+    },function(){}); }catch(e){} }
+  document.addEventListener("click",function(e){
+    var t=e.target.closest&&e.target.closest("[data-chat],[data-ctab],[data-clead],#chatBtn"); var pop=document.getElementById("chatPop");
+    if(!t){ if(pop&&!pop.hidden&&!e.target.closest("#chatPop")){ pop.hidden=true; } return; }
+    if(t.id==="chatBtn"){ if(!pop){ pop=document.createElement("div"); pop.id="chatPop"; pop.hidden=true; document.body.appendChild(pop); } pop.hidden=!pop.hidden; chatDrawPop(); return; }
+    if(t.dataset.ctab){ CHAT_TAB=t.dataset.ctab; chatDrawPop(); return; }
+    if(t.dataset.clead){ var id=t.dataset.clead; if(pop) pop.hidden=true; if(oppById(id)) openPanel(id); else toast("That lead is not on the page"); return; }
+    var a=t.dataset.chat;
+    if(a==="me"){ CHAT_ME=t.dataset.name; try{ localStorage.setItem("koya-me",CHAT_ME); }catch(x){} chatRedraw(); return; }
+    if(a==="done"){ var id2=t.dataset.mid; if(db) db.collection("chat").doc(id2).update({done:true,doneBy:CHAT_ME,doneAt:new Date().toISOString()}).then(function(){ CHAT_SEEN[id2]=1; chatSaveSeen(); },function(){ toast("Could not save, try again"); }); return; }
+    if(a==="send"){ var lead=t.dataset.lead, o=oppById(lead), ta=document.getElementById("chatText"), sel=document.getElementById("chatTo"), txt0=ta?ta.value.trim():"";
+      if(!txt0){ toast("Write a note first"); return; } if(!db||!o){ toast("Messages are not connected right now"); return; }
+      var to=sel?sel.value:TEAM[0], id3=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      t.disabled=true;
+      db.collection("chat").doc(id3).set({lead:lead,leadName:o.name||"",company:o.company||"",stage:o.stage||"",from:CHAT_ME,to:to,text:txt0,t:new Date().toISOString(),done:false}).then(function(){ CHAT_DRAFT[lead]=""; if(ta) ta.value=""; t.disabled=false; toast("Sent to "+to); },function(){ t.disabled=false; toast("Could not send, try again"); }); return; }
+  });
+  document.addEventListener("input",function(e){ var t=e.target; if(t&&t.id==="chatText") CHAT_DRAFT[t.dataset.lead]=t.value; });
+  document.addEventListener("change",function(e){ var t=e.target; if(t&&t.id==="chatTo") CHAT_TO[t.dataset.lead]=t.value; });
   var uc=window.claude && window.claude.use ? window.claude.use("db") : Promise.resolve(null);
   uc.then(function(x){
     if (!x){ dbState="off"; render(); return; }
@@ -2494,6 +2608,7 @@
     try{ db.collection("review").onSnapshot(function(snap){ REV={}; snap.docs.forEach(function(d){ var v=d.data()||{}; if(v.state) REV[d.id]=v.state; }); if(tab==="opps") renderOpps(); var oo=openId&&oppById(openId); if(oo){ [].forEach.call(document.querySelectorAll("#rrev .schip"),function(b){ b.setAttribute("aria-pressed",String(revState(oo.id)===b.dataset.rev)); }); } },function(){}); }catch(e){}
     try{ db.collection("hidden").onSnapshot(function(snap){ HIDDEN=snap.docs.map(function(d){ return Object.assign({id:d.id},d.data()); }); redrawNotes(); if(tab==="opps") renderOpps(); },function(){}); }catch(e){}
     try{ db.collection("notes").onSnapshot(function(snap){ NOTESDB=snap.docs.map(function(d){ return Object.assign({id:d.id},d.data()); }); mergeNotes(); if(tab==="opps") renderOpps(); redrawNotes(); },function(){}); }catch(e){}
+    chatListen();
     try{ db.collection("activity").orderBy("t","desc").limit(200).onSnapshot(function(snap){ ACT_DB=snap.docs.map(function(d){ return Object.assign({},d.data()); }); renderActivity(); },function(){}); }catch(e){}
   },function(){ dbState="off"; render(); });
 })();
