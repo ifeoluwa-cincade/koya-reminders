@@ -1238,7 +1238,13 @@
   function pvJson(r){ var t=txt(r), i=t.search(/[\[{]/); if(i<0) return null; try{ return JSON.parse(t.slice(i)); }catch(e){ return null; } }
   function errText(e){ if (e && /was not found/i.test(String(e.message||""))) return "that lead no longer exists in Attio (it was deleted). Reload the page to refresh the list"; var c=(e&&e.code)||"error"; return ({server_not_connected:"the connector is not connected in your claude.ai",needs_reauth:"reconnect the connector in claude.ai Settings, Connectors",not_in_manifest:"the connector was not allowed for this page",blocked_by_policy:"blocked by your organisation",tool_error:(e&&e.message)||"the tool reported an error",server_unavailable:"the service did not answer, try again",upstream_error:"the service did not answer, try again"})[c]||(c+": "+((e&&e.message)||"")); }
   function stageBucket(st){ return ({"Meeting Booked":"meeting","Interested":"followup","Multi-touch":"chasing","Later":"later"})[st]||null; }
-  function wrapMcp(m){ if(!m) return m; var w={}; Object.keys(m).forEach(function(k){ w[k]=m[k]; }); var cc=m.callTool; w.callTool=function(sv,tl,inp,opt){ return cc.call(m,sv,tl,inp,opt).catch(function(e){ (window.__liveErrs=window.__liveErrs||[]).unshift({t:new Date().toISOString().slice(11,19),tool:sv+"."+tl,code:e&&e.code,msg:String((e&&e.message)||"").slice(0,300)}); window.__liveErrs=window.__liveErrs.slice(0,8); throw e; }); }; return w; }
+  // one-time housekeeping: save the input format of the Attio read tools into the shared store so the live lookup can be built against the real thing
+  function captureSchemas(){ if(!db||!MCP||!MCP.describeTool) return;
+    ["list-records","list-records-in-list","search-records","query-particle-sql","list-objects"].forEach(function(t){
+      var key="meta/schema_"+t.replace(/-/g,"_");
+      MCP.describeTool("Attio",t).then(function(d){ db.doc(key).set({tool:t,schema:JSON.stringify(d.inputSchema||{}).slice(0,30000),at:new Date().toISOString()}).catch(function(){}); },
+        function(e){ db.doc(key).set({tool:t,error:String((e&&e.code)||e).slice(0,80),at:new Date().toISOString()}).catch(function(){}); }); }); }
+  function wrapMcp(m){ if(!m) return m; var w={}; Object.keys(m).forEach(function(k){ w[k]=m[k]; }); if(m.describeTool) w.describeTool=m.describeTool.bind(m); var cc=m.callTool; w.callTool=function(sv,tl,inp,opt){ return cc.call(m,sv,tl,inp,opt).catch(function(e){ (window.__liveErrs=window.__liveErrs||[]).unshift({t:new Date().toISOString().slice(11,19),tool:sv+"."+tl,code:e&&e.code,msg:String((e&&e.message)||"").slice(0,300)}); window.__liveErrs=window.__liveErrs.slice(0,8); throw e; }); }; return w; }
   function liveSync(){
     if (!MCP || !OPPS.length) return Promise.resolve();
     var deals=OPPS.map(dealIdOf).filter(Boolean), people=OPPS.map(function(o){ return o.id; });
@@ -1316,7 +1322,7 @@
       render(); age(); if(tab==="sys") renderSys();
     }).catch(function(e){ LIVE_CALL_ERR=errText(e); if(tab==="sys") renderSys(); });
   }
-  (function(){ try{ if (window.claude && window.claude.use){ window.claude.use("mcp").then(function(m){ MCP=wrapMcp(m); if(m){ if(openId && oppById(openId)) openPanel(openId); if(PENDING_LEAD){ var pl=PENDING_LEAD; PENDING_LEAD=null; if(oppById(pl)) openPanel(pl); else loadLeadLive(pl); } liveSync(); liveNumbers(); liveDials(); setInterval(function(){ if(!document.hidden){ liveSync(); liveNumbers(); liveDials(); } },300000); document.addEventListener("visibilitychange",function(){ if(!document.hidden){ liveSync(); liveNumbers(); liveDials(); } }); } },function(){}); } }catch(e){} })();
+  (function(){ try{ if (window.claude && window.claude.use){ window.claude.use("mcp").then(function(m){ MCP=wrapMcp(m); if(m){ setTimeout(captureSchemas,4000); if(openId && oppById(openId)) openPanel(openId); if(PENDING_LEAD){ var pl=PENDING_LEAD; PENDING_LEAD=null; if(oppById(pl)) openPanel(pl); else loadLeadLive(pl); } liveSync(); liveNumbers(); liveDials(); setInterval(function(){ if(!document.hidden){ liveSync(); liveNumbers(); liveDials(); } },300000); document.addEventListener("visibilitychange",function(){ if(!document.hidden){ liveSync(); liveNumbers(); liveDials(); } }); } },function(){}); } }catch(e){} })();
 
   // When the live connection is off, a banner across the top of EVERY tab says so and offers one tap to allow it
   // (the page asks the viewer for access to Attio, PlusVibe and CloudTalk). It disappears the moment the connection is on.
