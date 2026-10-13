@@ -15,6 +15,9 @@ on:
       test:
         description: "true = post to the TEST channel"
         default: "true"
+      channel:
+        description: "system = post to the Systems and ops channel"
+        default: ""
 
 permissions: {}
 
@@ -28,6 +31,8 @@ jobs:
     env:
       LIVE_URL: ${{ secrets.HOT_LEADS_WEBHOOK_URL }}
       TEST_URL: ${{ secrets.TEST_WEBHOOK_URL }}
+      SYSTEM_URL: ${{ secrets.SYSTEM_WEBHOOK_URL }}
+      CHANNEL: ${{ github.event.client_payload.channel || github.event.inputs.channel }}
       LEAD_ACTIONS_URL: ${{ secrets.LEAD_ACTIONS_URL }}
       LEAD_ACTIONS_HOOK: ${{ secrets.LEAD_ACTIONS_HOOK }}
       MESSAGE: ${{ github.event.client_payload.message || github.event.inputs.message }}
@@ -40,12 +45,13 @@ jobs:
           python3 - <<'PY'
           import os, json, time, urllib.request, urllib.error, urllib.parse
           test = os.environ.get("TEST") == "true"
-          url = os.environ["TEST_URL" if test else "LIVE_URL"]
+          system = os.environ.get("CHANNEL") == "system" and not test      # system alerts never go to the Hot Leads channel
+          url = os.environ["SYSTEM_URL" if system else ("TEST_URL" if test else "LIVE_URL")]
           msg = os.environ.get("MESSAGE", "").strip()
           if not msg:
               raise SystemExit("no message to post")
           def post():
-              req = urllib.request.Request(url, data=json.dumps({"content": msg, "username": "Koya follow-ups" + (" (TEST)" if test else "")}).encode(),
+              req = urllib.request.Request(url, data=json.dumps({"content": msg, "username": "Koya systems" if system else "Koya follow-ups" + (" (TEST)" if test else "")}).encode(),
                                            headers={"Content-Type": "application/json", "User-Agent": "DiscordBot (https://koya.dev, 1.0)"})
               return urllib.request.urlopen(req, timeout=30).status
           result, err = None, ""
@@ -59,8 +65,8 @@ jobs:
               except Exception as e:
                   err = type(e).__name__; time.sleep(3 * (i + 1))
           ok = result is not None and result < 300
-          where = "the TEST channel" if test else "Hot Leads"
-          kind, text, level = ("reminder", f"Reminder posted in {where} from GitHub", "info") if ok else ("error", f"GitHub could not post to {where}: {err}", "bad")
+          where = "the Systems channel" if system else ("the TEST channel" if test else "Hot Leads")
+          kind, text, level = ("reminder" if not system else "heal", f"Reminder posted in {where} from GitHub", "info") if ok else ("error", f"GitHub could not post to {where}: {err}", "bad")
           if test: text = "[TEST] " + text
           label = os.environ.get("LABEL", "")
           try:
