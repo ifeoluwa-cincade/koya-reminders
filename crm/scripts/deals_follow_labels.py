@@ -141,14 +141,20 @@ def main() -> int:
     labels = live_labels({"x-api-key": secret("PLUS_VIBE_API_KEY")})
     print(f"{len(labels)} replied leads with a live label in AI agency campaigns")
 
-    c = AttioClient(workers=4)
-    emails = {p["id"]["record_id"]: [e.get("email_address", "").lower() for e in p["values"].get("email_addresses") or []]
-              for p in c.query_all("people")}
+    c = AttioClient(workers=6)
+    # only the deals this script owns need their people's emails: fetch those people one by one, in parallel, instead of reading all 16,000
+    deals = [d for d in c.query_all("deals") if one(d, "source_channel") == "Cold email" and one(d, "stage") in OWNED]
+    want = sorted({x.get("target_record_id") for d in deals for x in (d["values"].get("associated_people") or []) if x.get("target_record_id")})
+    def _get(rid):
+        r = c.req("GET", f"/objects/people/records/{rid}")
+        return rid, ([e.get("email_address", "").lower() for e in r.json()["data"]["values"].get("email_addresses") or []] if r.status_code < 300 else [])
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        emails = dict(ex.map(_get, want))
+    print(f"{len(deals)} owned deals, {len(want)} people read (no full read)")
     plan, held = [], []
-    for d in c.query_all("deals"):
+    for d in deals:
         stage = one(d, "stage")
-        if one(d, "source_channel") != "Cold email" or stage not in OWNED:
-            continue
         hit = None
         for x in d["values"].get("associated_people") or []:
             for e in emails.get(x.get("target_record_id"), []):

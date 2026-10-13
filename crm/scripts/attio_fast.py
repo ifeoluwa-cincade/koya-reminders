@@ -34,6 +34,31 @@ def by_phone10(c, d10: str):
     return _first(c, {"phone_numbers": {"$contains": d10}}, ok)
 
 
+_COMPANY = {}
+
+
+def company_name(c, cid: str) -> str:
+    if cid not in _COMPANY:
+        r = c.req("GET", f"/objects/companies/records/{cid}")
+        _COMPANY[cid] = ((r.json()["data"]["values"].get("name") or [{}])[0].get("value") or "") if r.status_code < 300 else ""
+    return _COMPANY[cid]
+
+
+def by_namecomp(c, first: str, company: str, norm):
+    """The person whose FIRST NAME and COMPANY match (the old code's second try when the email is not on file)."""
+    if not first or not company:
+        return None
+    r = c.req("POST", "/objects/people/records/query", json={"filter": {"name": {"first_name": {"$contains": first}}}, "limit": 50})
+    if r.status_code >= 300:
+        return None
+    for p in r.json().get("data", []):
+        nm = ((p["values"].get("name") or [{}])[0].get("first_name") or "")
+        cr = p["values"].get("company") or []
+        if norm(nm) == norm(first) and cr and norm(company_name(c, cr[0]["target_record_id"])) == norm(company):
+            return p
+    return None
+
+
 def index_people(c, emails=(), phones=(), workers: int = 6):
     """Returns (byem, byph): email -> person record (every email the person has), last-10-digits -> person record."""
     emails = sorted({e.strip().lower() for e in emails if e and "@" in e})

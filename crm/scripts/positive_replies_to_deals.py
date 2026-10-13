@@ -251,22 +251,47 @@ def main() -> int:
 
     c = AttioClient(workers=6)
     owner = c.req("GET", "/workspace_members").json()["data"][0]["id"]["workspace_member_id"]
-    people = c.query_all("people")
-    pid = {}
-    for p in people:
-        for x in (p["values"].get("email_addresses") or []):
-            pid.setdefault((x.get("email_address") or "").lower(), p["id"]["record_id"])
     def norm(s):
         return "".join(ch for ch in (s or "").lower() if ch.isalnum())
-    comp = {co["id"]["record_id"]: (co["values"].get("name") or [{}])[0].get("value") or ""
-            for co in c.query_all("companies")}
-    by_namecomp = {}
-    for p in people:
-        nm = ((p["values"].get("name") or [{}])[0].get("first_name") or "")
-        cr = p["values"].get("company") or []
-        cn = comp.get(cr[0]["target_record_id"], "") if cr else ""
-        if nm and cn:
-            by_namecomp.setdefault((norm(nm), norm(cn)), p["id"]["record_id"])
+    rid_of, closed_people = {}, set()
+    if os.environ.get("FULL_INDEX"):
+        people = c.query_all("people")                    # the old way: read everyone (kept to compare against)
+        pid = {}
+        for p in people:
+            for x in (p["values"].get("email_addresses") or []):
+                pid.setdefault((x.get("email_address") or "").lower(), p["id"]["record_id"])
+        comp = {co["id"]["record_id"]: (co["values"].get("name") or [{}])[0].get("value") or ""
+                for co in c.query_all("companies")}
+        by_namecomp = {}
+        for p in people:
+            nm = ((p["values"].get("name") or [{}])[0].get("first_name") or "")
+            cr = p["values"].get("company") or []
+            cn = comp.get(cr[0]["target_record_id"], "") if cr else ""
+            if nm and cn:
+                by_namecomp.setdefault((norm(nm), norm(cn)), p["id"]["record_id"])
+        for e, l in by_email.items():
+            rid_of[e] = pid.get(e) or by_namecomp.get((norm(l.get("first_name")), norm(l.get("company_name"))))
+        closed_people = {p["id"]["record_id"] for p in people if one(p, "relationship_stage") in ("LOST", "CUSTOMER")}
+    else:
+        # look up only the people who replied (about 140), one by one in parallel, instead of reading all 16,000 people and companies
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import attio_fast as AF
+        from concurrent.futures import ThreadPoolExecutor
+        emails = list(by_email)
+        found = {}
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            for e, p in zip(emails, ex.map(lambda e: AF.by_email(c, e), emails)):
+                if p:
+                    found[e] = p
+            miss = [e for e in emails if e not in found]
+            for e, p in zip(miss, ex.map(lambda e: AF.by_namecomp(c, by_email[e].get("first_name"), by_email[e].get("company_name"), norm), miss)):
+                if p:
+                    found[e] = p
+        for e, p in found.items():
+            rid_of[e] = p["id"]["record_id"]
+            if one(p, "relationship_stage") in ("LOST", "CUSTOMER"):
+                closed_people.add(p["id"]["record_id"])
+        print(f"  {len(found)} of {len(emails)} replied people found in Attio by looking them up (no full read)")
     has_deal = set()
     closed_ext = set()                    # deals already Lost or Won: the PUT below matches on this id and would reopen them (found 2026-10-11: Papa, Ben)
     for d in c.query_all("deals"):
@@ -276,11 +301,10 @@ def main() -> int:
                 continue
         for x in d["values"].get("associated_people") or []:
             has_deal.add(x.get("target_record_id"))
-    closed_people = {p["id"]["record_id"] for p in people if one(p, "relationship_stage") in ("LOST", "CUSTOMER")}
 
     todo, skipped = [], 0
     for e, l in by_email.items():
-        rid = pid.get(e) or by_namecomp.get((norm(l.get("first_name")), norm(l.get("company_name"))))
+        rid = rid_of.get(e)
         if rid and (rid in has_deal or rid in closed_people):
             skipped += 1
             continue
