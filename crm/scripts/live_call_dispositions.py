@@ -134,6 +134,24 @@ def agent_verdict(note: str) -> dict | None:
     return {"verdict": v, "summary": "Caller's note: " + n[:300], "objection": None, "judged_by": "agent"}
 
 
+def call_tags(row: dict) -> list:
+    return [str(t.get("name") or "").strip() for t in (row.get("Tags") or []) if isinstance(t, dict) and t.get("name")]
+
+
+def tag_verdict(row: dict) -> dict | None:
+    """The tag the caller picked in CloudTalk. It is an explicit choice, so it outranks the note wording and the recording.
+    Tags that only describe how the call ended (Voicemail, Ring Out, Reschedule, Line Busy ...) say nothing about the lead and are ignored."""
+    v = None
+    for n in call_tags(row):
+        low = n.lower()
+        if re.search(r"meeting|booked", low): v = "MEETING_BOOKED"
+        elif re.search(r"send.?follow", low) and v != "MEETING_BOOKED": v = "SEND_FOLLOW_UP"
+        elif re.search(r"do not call|dnc", low) and v not in ("MEETING_BOOKED", "SEND_FOLLOW_UP"): v = "DO_NOT_CALL"
+        elif re.search(r"wrong person|bad data", low) and v not in ("MEETING_BOOKED", "SEND_FOLLOW_UP"): v = "WRONG_PERSON"
+        elif re.fullmatch(r"not interested", low) and v is None: v = "NOT_INTERESTED"
+    return {"verdict": v, "summary": "Caller's tag in CloudTalk: " + ", ".join(call_tags(row)), "objection": None, "judged_by": "agent"} if v else None
+
+
 def call_note(row: dict) -> str:
     return " ".join((x.get("note") or "").strip() for x in (row.get("Notes") or []) if isinstance(x, dict)).strip()
 
@@ -276,9 +294,9 @@ def main() -> int:
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     rows = fetch_calls(H, since)
     byid = {str((r.get("Cdr") or {}).get("id")): r for r in rows}
-    agent = {cid: av for cid, r in byid.items() for av in [agent_verdict(call_note(r))] if av}
+    agent = {cid: av for cid, r in byid.items() for av in [tag_verdict(r) or agent_verdict(call_note(r))] if av}      # the caller's tag first, then the wording of the note
     todo = [cid for cid in byid if cid not in state or state[cid].get("retry")
-            or (cid in agent and state[cid].get("agent_note") != call_note(byid[cid]))]      # a note added or changed after the call is picked up too
+            or (cid in agent and (state[cid].get("agent_note") != call_note(byid[cid]) or state[cid].get("agent_tags", []) != call_tags(byid[cid])))]      # a note or tag added or changed after the call is picked up too
     if a.limit:
         todo = todo[:a.limit]
     print(f"{len(rows)} calls since {since}  |  already done {len(byid) - len(todo)}  |  to do {len(todo)}")
@@ -329,7 +347,7 @@ def main() -> int:
             state[cid] = {"name": ctc.get("name"), "company": ctc.get("company"),
                           "talk": int(cdr.get("talking_time") or 0), "started": cdr.get("started_at"),
                           "agent": (row.get("Agent") or {}).get("fullname"), "emails": emails,
-                          "type": cdr.get("type"), "agent_note": call_note(row), "applied_a": False, "applied_l": False, **v}      # the two Attio writers look up only calls still marked False (attio_fast.py)
+                          "type": cdr.get("type"), "agent_note": call_note(row), "agent_tags": call_tags(row), "applied_a": False, "applied_l": False, **v}      # the two Attio writers look up only calls still marked False (attio_fast.py)
             STATE.write_text(json.dumps(state, indent=1))        # save after every call
             done += 1
             if v["verdict"] not in ("VOICEMAIL", "NO_ANSWER", "NO_CONVERSATION"):
