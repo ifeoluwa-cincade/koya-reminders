@@ -1374,10 +1374,13 @@
   };
   // Dials read straight from CloudTalk: every outgoing call for each day since 8 Oct (cloudtalk_search_calls, newest first, 200 a page)
   var LIVE_CALL_AT=null, LIVE_CALL_ERR=null, LIVE_CALL_DIFF=null;
+  // one day of outgoing calls from CloudTalk: how many were dialled, and how many turned into a conversation (talk time above zero)
+  function talkOf(c){ var v=[c.talking_time,c.talk_time,c.talk_duration,c.talking_seconds,c.billsec,(c.Cdr||{}).talking_time,(c.cdr||{}).talking_time]; for (var i=0;i<v.length;i++){ if (v[i]!=null && v[i]!=="" && !isNaN(+v[i])) return +v[i]; } return null; }
   function ctDay(d,page,acc){
+    acc=acc||{n:0,conv:0,known:0};
     return MCP.callTool("CloudTalk","cloudtalk_search_calls",{date_from:d+" 00:00:00",date_to:d+" 23:59:59",direction:"outgoing",limit:200,page:page},{cache:{staleTime:60000}}).then(function(r){
       var j=pvJson(r); if(!j||!j.pagination||!j.calls) throw {code:"upstream_error",message:"CloudTalk returned nothing readable"};
-      acc+=j.calls.length;
+      if(!acc.keys&&j.calls[0]) acc.keys=Object.keys(j.calls[0]).slice(0,14).join(", "); acc.n+=j.calls.length; j.calls.forEach(function(c){ var t=talkOf(c); if (t!==null){ acc.known++; if (t>0) acc.conv++; } });
       return (j.pagination.next_page && page<20) ? ctDay(d,page+1,acc) : acc;
     });
   }
@@ -1387,7 +1390,8 @@
     for (var i=6;i>=0;i--){ var d=iso(t-i); if (N(d)>=CSTART) days.push(d); }
     return Promise.all(days.map(function(d){ return ctDay(d,1,0).then(function(n){ return [d,n]; }); })).then(function(rs){
       var diffs=0, worst=0;
-      rs.forEach(function(x){ var row=BY[N(x[0])]; if(!row) return; var g=Math.abs(row.dials-x[1]); if(g>2) diffs++; worst=Math.max(worst,g); row.dials=x[1]; });
+      rs.forEach(function(x){ var row=BY[N(x[0])]; if(!row) return; var n=x[1].n, g=Math.abs(row.dials-n); if(g>2) diffs++; worst=Math.max(worst,g); row.dials=n; if (x[1].known && x[1].known>=n*0.8) row.conversations=x[1].conv; });      // conversations only when CloudTalk gave a talk time for nearly every call
+      var nokey=rs.filter(function(x){ return x[1].n>0 && !x[1].known; })[0]; if (nokey){ var nk=document.getElementById("liveNote"); if(nk) nk.textContent="Conversations are not counted live yet: CloudTalk call fields are "+nokey[1].keys; }
       LIVE_CALL_AT=Date.now(); LIVE_CALL_ERR=null; LIVE_CALL_DIFF={days:rs.length,diffs:diffs,worst:worst};
       render(); age(); if(tab==="sys") renderSys();
     }).catch(function(e){ LIVE_CALL_ERR=errText(e); if(tab==="sys") renderSys(); });
