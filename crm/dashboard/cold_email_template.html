@@ -355,25 +355,6 @@
   .odot.over{background:var(--down);} .odot.today{background:var(--amber);} .odot.soon{background:var(--violet);} .odot.later{background:var(--ink-3);}
   .omain{display:flex; flex-direction:column; min-width:0;}
   .oname{display:flex; align-items:center; gap:7px; min-width:0;}
-  .nact{display:flex; flex-wrap:wrap; align-items:center; gap:6px 18px; margin-top:4px;}
-  #chatDrawer{position:fixed; top:0; right:0; bottom:0; z-index:99990; width:min(420px,100vw); background:#fff; border-left:1px solid var(--line); box-shadow:-24px 0 60px -30px rgba(20,23,26,.4); display:flex; flex-direction:column;}
-  #chatDrawer[hidden]{display:none;}
-  .chead{display:flex; align-items:center; gap:10px; padding:16px 16px 12px; border-bottom:1px solid var(--line);}
-  .chead b{font-size:16px;} .chead .chint{flex:1; color:var(--ink-3); font-size:12px; min-width:0;}
-  .chead button{border:0; background:transparent; font-size:22px; line-height:1; cursor:pointer; color:var(--ink-2);}
-  .cfeed{flex:1; overflow:auto; padding:14px 16px; display:flex; flex-direction:column; gap:10px;}
-  .cwrite{position:relative; border-top:1px solid var(--line); padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px)); background:#fafbfa;}
-  .cwrite textarea{display:block; width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font:14px var(--font); resize:none; outline:0; background:#fff; color:var(--ink);}
-  .cwrite .cbot{display:flex; align-items:center; justify-content:space-between; padding:8px 0 0; background:none; border:0;}
-  .csub{color:var(--ink-3); font-size:12px;}
-  .cac{position:absolute; left:12px; right:12px; bottom:calc(100% - 4px); background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 34px -14px rgba(20,23,26,.4); overflow:hidden; max-height:260px; overflow-y:auto;}
-  .cac[hidden]{display:none;}
-  .cacitem{display:flex; justify-content:space-between; gap:10px; width:100%; padding:9px 12px; border:0; background:#fff; font:13.5px var(--font); text-align:left; cursor:pointer;}
-  .cacitem span{color:var(--ink-3); font:500 11px var(--mono); text-transform:uppercase; letter-spacing:.04em;}
-  .cacitem.on, .cacitem:hover{background:var(--band);}
-  .clead{border:1px solid var(--line); background:#fff; color:var(--violet); font:600 13px var(--font); border-radius:7px; padding:0 6px; cursor:pointer;}
-  .clead:hover{background:var(--band);}
-  .cto.me{background:var(--band);}
   /* messages between teammates */
   .chatbell{position:relative;}
   .chatbell .cbadge{position:absolute; top:-6px; right:-6px; min-width:18px; padding:1px 5px; border-radius:999px; background:var(--violet); color:#fff; font:600 10.5px var(--mono); text-align:center; line-height:15px;}
@@ -1316,13 +1297,14 @@
     if (nolink) rows.push(["LinkedIn",'<span class="tnote">no LinkedIn address is saved for this person in Attio or PlusVibe, so the button searches their name and company</span>']);
     var html='<div class="phd"><div class="phead"><div><div class="ptitle">'+esc(o.name||o.email)+'</div><div class="psub">'+esc(o.company||"")+'</div></div><button class="pclose" id="pclose" type="button" aria-label="Close">✕</button></div>'+
       '<div class="ptags">'+(o.resolved?'<span class="tag closedtag">Closed</span>':'')+'<span class="tag '+o.bucket+'">'+esc(o.status)+'</span><span class="tag src">'+esc(o.source)+'</span><span class="tag">'+esc(d.label)+'</span></div>'+
-      '<div class="plinks">'+link(pv,L.plusvibe?"Open conversation":"PlusVibe")+link(li,liLabel)+link(L.website,"Website")+link(L.attio,"Attio")+link(L.deal,"Deal")+link(L.cloudtalk,"CloudTalk")+(ARTIFACT_URL?'<button type="button" class="plink ico cplink" id="copyLeadLink" data-tip="Copy link to this lead" aria-label="Copy link to this lead">'+svgIcon("link")+'</button>':'')+'<button type="button" class="plink ico cplink" data-chatlead="'+esc(o.id)+'" data-tip="Message the team about this lead" aria-label="Message the team about this lead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 01-11.6 7.1L4 20l1-4.6A8 8 0 1121 12z"/></svg></button></div></div>'+
+      '<div class="plinks">'+link(pv,L.plusvibe?"Open conversation":"PlusVibe")+link(li,liLabel)+link(L.website,"Website")+link(L.attio,"Attio")+link(L.deal,"Deal")+link(L.cloudtalk,"CloudTalk")+(ARTIFACT_URL?'<button type="button" class="plink ico cplink" id="copyLeadLink" data-tip="Copy link to this lead" aria-label="Copy link to this lead">'+svgIcon("link")+'</button>':'')+'</div></div>'+
       '<div class="pgrid"><div class="pcol pleft">'+
       reviewHTML(o)+((o.bucket==="lost"||o.bucket==="won")?closedHTML(o):resolveHTML(o))+editHTML(o)+liConnHTML(o)+
       '<h4>Properties</h4><dl class="props">'+rows.map(function(r){ return '<dt>'+r[0]+'</dt><dd'+'>'+r[1]+'</dd>'; }).join("")+'</dl>'+
       (others.length?'<h4>Also at '+esc(o.company)+'</h4><div class="plinked">'+others.map(function(x){ return '<button type="button" data-id="'+esc(x.id)+'">'+esc(x.name)+'</button>'; }).join("")+'</div>':"")+
       '</div><div class="pcol pright">'+
       (MCP?'<h4>Calls in CloudTalk</h4><div id="ctcalls">'+callsHTML(o)+'</div>':"")+
+      '<h4>Messages</h4><div id="chatbox">'+safeChat(o)+'</div>'+
       '<h4>Notes in Attio</h4><div id="nlist">'+notesHTML(o)+'</div>'+
       (o.summary?'<h4>'+(o.call_at?"Call summary":"Latest reply")+'</h4><p class="ptext">'+esc(o.summary)+'</p>':"")+
       '<div id="seqwrap">'+seqAll(o)+'</div>'+
@@ -2581,82 +2563,58 @@
     if (preset!=="custom"){ var p=PRESETS.find(function(x){return x[0]===preset;}); if (p) R=p[2](); }
     render();
   }
-  // ----- team chat: ONE channel for the team. A message can tag people (@) and leads (@ or #); a lead tag is a link that opens that lead.
-  // Stored in the shared db (collection "chat"); names come from the viewer's own sign-in (the user capability), nothing is typed in or remembered per device.
-  var CHAT=[], CHAT_READY=false, CHAT_OPEN=false, CHAT_LAST=0, CHAT_ME={id:null,name:""}, CHAT_USER=null, CHAT_PEOPLE=[], CHAT_NAMES={}, CHAT_TAGS=[], CHAT_AC=[], CHAT_ACI=0;
-  try{ CHAT_LAST=+localStorage.getItem("koya-chat-last")||0; }catch(e){}
-  function chatSeenLead(){}
-  function chatInit(n){ return String(n||"?").trim().slice(0,2).toUpperCase(); }
+  // ----- messages between teammates: a note on a lead for a named person, a bell with a count, and a thread inside the lead. Stored in the shared db (collection "chat").
+  var TEAM=["Ife","Temi","Emeka","Chris"], CHAT=[], CHAT_READY=false, CHAT_DRAFT={}, CHAT_TO={}, CHAT_SEEN={}, CHAT_TAB="you", CHAT_ME="";
+  try{ CHAT_ME=localStorage.getItem("koya-me")||""; CHAT_SEEN=JSON.parse(localStorage.getItem("koya-chat-seen")||"{}")||{}; }catch(e){}
+  function chatSaveSeen(){ try{ localStorage.setItem("koya-chat-seen",JSON.stringify(CHAT_SEEN)); }catch(e){} }
   function chatWhen(t){ var d=new Date(t); return isNaN(d)?"":d.toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }
-  function chatName(id){ return CHAT_NAMES[id]||"Someone"; }
-  function chatResolve(ids){ if(!CHAT_USER||!CHAT_USER.profiles) return Promise.resolve(); var need=ids.filter(function(i){ return i&&!CHAT_NAMES[i]; }); if(!need.length) return Promise.resolve();
-    return CHAT_USER.profiles(need).then(function(ps){ Object.keys(ps||{}).forEach(function(k){ var p=ps[k]; if(p&&p.name) CHAT_NAMES[k]=p.name; }); }).catch(function(){}); }
-  function chatUserInit(){ try{ if(!(window.claude&&window.claude.use)) return; window.claude.use("user").then(function(u){ if(!u) return; CHAT_USER=u;
-      return u.me().then(function(m){ CHAT_ME={id:m.id||null,name:m.name||""}; if(m.id&&m.name) CHAT_NAMES[m.id]=m.name; return u.search?u.search(""):[]; }).then(function(hits){
-        CHAT_PEOPLE=(hits||[]).filter(function(h){ return h&&h.id; }).map(function(h){ if(h.name) CHAT_NAMES[h.id]=h.name; return {id:h.id,name:h.name||""}; }); chatRedraw(); }); }).catch(function(){}); }catch(e){} }
-  function chatUnread(){ return CHAT.filter(function(m){ return m.fromId!==CHAT_ME.id && Date.parse(m.t)>CHAT_LAST; }); }
-  function chatBadge(){ var n=CHAT_OPEN?0:chatUnread().length, b=document.getElementById("chatBadge"); if(b){ b.textContent=n; b.hidden=!n; } try{ document.title=(n?"("+n+") ":"")+"Koya Outbound"; }catch(e){} }
-  function chatMarkSeen(){ CHAT_LAST=Date.now(); try{ localStorage.setItem("koya-chat-last",String(CHAT_LAST)); }catch(e){} chatBadge(); }
-  function chatPartsHTML(m){ var ps=m.parts&&m.parts.length?m.parts:[{t:"x",v:m.text||""}];
-    return ps.map(function(p){ if(p.t==="lead") return '<button type="button" class="clead" data-clead="'+esc(p.id)+'">#'+esc(p.l||"lead")+'</button>';
-      if(p.t==="user") return '<span class="cto'+(p.id===CHAT_ME.id?" me":"")+'">@'+esc(chatName(p.id))+'</span>';
-      return esc(p.v).replace(/\n/g,"<br>"); }).join(""); }
-  function chatMsgHTML(m){ var mine=m.fromId===CHAT_ME.id, nm=mine?(CHAT_ME.name||"You"):chatName(m.fromId);
-    return '<div class="cmsg'+(mine?" mine":"")+'"><span class="cav">'+esc(chatInit(nm))+'</span><div class="cbub"><div class="cwho">'+esc(nm)+'<span>'+esc(chatWhen(m.t))+'</span></div>'+chatPartsHTML(m)+'</div></div>'; }
-  function chatDrawerBuild(){ var d=document.getElementById("chatDrawer"); if(d) return d; d=document.createElement("div"); d.id="chatDrawer"; d.hidden=true;
-    d.innerHTML='<div class="chead"><b>Team chat</b><span class="chint">Type @ to tag a person or a lead, # for a lead</span><button type="button" id="chatClose" aria-label="Close chat">&times;</button></div><div id="chatFeed" class="cfeed"></div><div class="cwrite"><div id="chatAc" class="cac" hidden></div><textarea id="chatText" rows="2" placeholder="Write a message"></textarea><div class="cbot"><span class="csub" id="chatWho"></span><button type="button" class="csend" id="chatSend">Send</button></div></div>';
-    document.body.appendChild(d); return d; }
-  function chatDraw(){ var d=document.getElementById("chatDrawer"); if(!d||d.hidden) return; var f=document.getElementById("chatFeed"), atEnd=f.scrollHeight-f.scrollTop-f.clientHeight<80;
-    var list=CHAT.slice().sort(function(a,b){ return String(a.t).localeCompare(String(b.t)); }).slice(-120);
-    f.innerHTML=list.length?list.map(chatMsgHTML).join(""):'<div class="cempty">No messages yet. Write the first one below.</div>'; if(atEnd) f.scrollTop=f.scrollHeight;
-    var w=document.getElementById("chatWho"); if(w) w.textContent=CHAT_ME.id?"Posting as "+(CHAT_ME.name||"you"):"Sign in to Claude to post"; }
-  function chatRedraw(){ chatBadge(); chatDraw(); }
-  function chatOpen(pre){ var d=chatDrawerBuild(); d.hidden=false; CHAT_OPEN=true; chatMarkSeen(); chatDraw(); var f=document.getElementById("chatFeed"); f.scrollTop=f.scrollHeight;
-    var ta=document.getElementById("chatText"); if(pre){ var cur=ta.value.trim(); ta.value=(cur?cur+" ":"")+pre.label+" "; CHAT_TAGS.push(pre); } setTimeout(function(){ ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length); },50); }
-  function chatClose(){ var d=document.getElementById("chatDrawer"); if(d) d.hidden=true; CHAT_OPEN=false; chatBadge(); }
-  function chatLeadLabel(o){ return (o.name||"lead")+(o.company?" ("+o.company+")":""); }
-  function chatAcFind(q,kind){ q=(q||"").toLowerCase().trim(); var out=[];
-    if(kind==="@") CHAT_PEOPLE.filter(function(p){ return p.id!==CHAT_ME.id && p.name && (!q||p.name.toLowerCase().indexOf(q)>=0); }).slice(0,4).forEach(function(p){ out.push({type:"user",id:p.id,label:"@"+p.name,show:p.name,sub:"Person"}); });
-    var seen={}; OPPS.concat(CLOSED).forEach(function(o){ if(out.length>=9||seen[o.id]) return; var hay=((o.name||"")+" "+(o.company||"")).toLowerCase(); if(!q||hay.indexOf(q)>=0){ seen[o.id]=1; out.push({type:"lead",id:o.id,label:"#"+chatLeadLabel(o),show:chatLeadLabel(o),sub:"Lead"}); } });
-    return out; }
-  function chatAcUpdate(){ var ta=document.getElementById("chatText"), ac=document.getElementById("chatAc"); if(!ta||!ac) return; var before=ta.value.slice(0,ta.selectionStart), m=before.match(/([@#])([^@#\n]{0,30})$/);
-    if(!m||(m.index>0&&!/\s/.test(before.charAt(m.index-1)))){ ac.hidden=true; CHAT_AC=[]; return; }
-    CHAT_AC=chatAcFind(m[2],m[1]); CHAT_ACI=0; if(!CHAT_AC.length){ ac.hidden=true; return; }
-    ac.innerHTML=CHAT_AC.map(function(c,i){ return '<button type="button" class="cacitem'+(i===0?" on":"")+'" data-cpick="'+i+'"><b>'+esc(c.show)+'</b><span>'+c.sub+'</span></button>'; }).join(""); ac.hidden=false; }
-  function chatPick(i){ var c=CHAT_AC[i], ta=document.getElementById("chatText"), ac=document.getElementById("chatAc"); if(!c||!ta) return; var pos=ta.selectionStart, before=ta.value.slice(0,pos), m=before.match(/([@#])([^@#\n]{0,30})$/); if(!m) return;
-    ta.value=before.slice(0,m.index)+c.label+" "+ta.value.slice(pos); CHAT_TAGS.push({type:c.type,id:c.id,label:c.label}); var np=m.index+c.label.length+1; ta.focus(); ta.setSelectionRange(np,np); ac.hidden=true; CHAT_AC=[]; }
-  function chatBuildParts(text){ var tags=CHAT_TAGS.filter(function(t){ return text.indexOf(t.label)>=0; }).sort(function(a,b){ return b.label.length-a.label.length; }); if(!tags.length) return [{t:"x",v:text}];
-    var parts=[], rest=text; while(rest.length){ var best=null, bi=-1; tags.forEach(function(t){ var k=rest.indexOf(t.label); if(k>=0&&(bi<0||k<bi||(k===bi&&t.label.length>best.label.length))){ best=t; bi=k; } });
-      if(!best){ parts.push({t:"x",v:rest}); break; } if(bi>0) parts.push({t:"x",v:rest.slice(0,bi)});
-      parts.push(best.type==="lead"?{t:"lead",id:best.id,l:best.label.replace(/^#/,"")}:{t:"user",id:best.id}); rest=rest.slice(bi+best.label.length); } return parts; }
-  function chatSend(){ var ta=document.getElementById("chatText"), btn=document.getElementById("chatSend"); if(!ta) return; var text=ta.value.trim(); if(!text){ toast("Write a message first"); return; }
-    if(!CHAT_ME.id){ toast("Sign in to Claude to post here"); return; } if(!db){ toast("Chat is not connected right now"); return; }
-    var parts=chatBuildParts(text), id=Date.now().toString(36)+Math.random().toString(36).slice(2,6); btn.disabled=true;
-    db.collection("chat").doc(id).set({fromId:CHAT_ME.id,text:text,parts:parts,t:new Date().toISOString(),tagIds:parts.filter(function(p){ return p.t==="user"; }).map(function(p){ return p.id; }),leads:parts.filter(function(p){ return p.t==="lead"; }).map(function(p){ return p.id; })})
-      .then(function(){ ta.value=""; CHAT_TAGS=[]; btn.disabled=false; document.getElementById("chatAc").hidden=true; },function(){ btn.disabled=false; toast("Could not send, try again"); }); }
+  function chatInit(n){ return String(n||"?").slice(0,2).toUpperCase(); }
+  function chatUnread(){ return CHAT.filter(function(m){ return m.to===CHAT_ME && !m.done && !CHAT_SEEN[m.id]; }); }
+  function chatBadge(){ var n=CHAT_ME?chatUnread().length:0, b=document.getElementById("chatBadge"); if(b){ b.textContent=n; b.hidden=!n; } try{ document.title=(n?"("+n+") ":"")+"Koya Outbound"; }catch(e){} }
+  function chatSeenLead(id){ var ch=false; CHAT.forEach(function(m){ if(m.lead===id && m.to===CHAT_ME && !CHAT_SEEN[m.id]){ CHAT_SEEN[m.id]=1; ch=true; } }); if(ch){ chatSaveSeen(); chatBadge(); } }
+  function chatMsgHTML(m){ var mine=m.from===CHAT_ME, body=esc(m.text).replace(/\n/g,"<br>");
+    return '<div class="cmsg'+(mine?" mine":"")+'"><span class="cav">'+esc(chatInit(m.from))+'</span><div class="cbub"><div class="cwho">'+esc(m.from)+'<span>'+esc(chatWhen(m.t))+'</span></div><span class="cto">@'+esc(m.to)+'</span> '+body+
+      (m.done?'<div><span class="cdone ok">Done'+(m.doneBy?" by "+esc(m.doneBy):"")+'</span></div>':(m.to===CHAT_ME?'<div><button type="button" class="cdone" data-chat="done" data-mid="'+esc(m.id)+'">Mark done</button></div>':""))+'</div></div>'; }
+  function chatHTML(o){
+    if(!TEAM||!CHAT) return '';
+    if(db===null && dbState!=="loading") return '<p class="tnote">Messages need the shared database, which is not connected right now.</p>';
+    var who=CHAT_ME?"":'<p class="tnote">Who are you? This is remembered on this device.</p><div class="cwho2">'+TEAM.map(function(n){ return '<button type="button" data-chat="me" data-name="'+esc(n)+'">'+esc(n)+'</button>'; }).join("")+'</div>';
+    var th=CHAT.filter(function(m){ return m.lead===o.id; }).sort(function(a,b){ return String(a.t).localeCompare(String(b.t)); });
+    var opts=TEAM.filter(function(n){ return n!==CHAT_ME; }), to=CHAT_TO[o.id]||opts[0];
+    return who+(th.length?'<div class="cthread">'+th.map(chatMsgHTML).join("")+'</div>':"")+
+      (CHAT_ME?'<div class="ccomp"><div class="ctop">To <select id="chatTo" data-lead="'+esc(o.id)+'">'+opts.map(function(n){ return '<option'+(n===to?" selected":"")+'>'+esc(n)+'</option>'; }).join("")+'</select></div><textarea id="chatText" data-lead="'+esc(o.id)+'" placeholder="Write a note about this lead">'+esc(CHAT_DRAFT[o.id]||"")+'</textarea><div class="cbot"><button type="button" class="csend" data-chat="send" data-lead="'+esc(o.id)+'">Send</button></div></div>':"");
+  }
+  function chatRedraw(){ chatBadge(); var bx=document.getElementById("chatbox"), o=openId&&oppById(openId); if(bx&&o&&!(document.activeElement&&document.activeElement.id==="chatText")) bx.innerHTML=safeChat(o); chatDrawPop(); }
+  function chatDrawPop(){ var pop=document.getElementById("chatPop"); if(!pop||pop.hidden) return;
+    var list=CHAT.filter(function(m){ return CHAT_TAB==="you"?(m.to===CHAT_ME&&!m.done):CHAT_TAB==="sent"?(m.from===CHAT_ME&&!m.done):((m.to===CHAT_ME||m.from===CHAT_ME)&&m.done); }).sort(function(a,b){ return String(b.t).localeCompare(String(a.t)); });
+    var nYou=CHAT.filter(function(m){ return m.to===CHAT_ME&&!m.done; }).length;
+    pop.innerHTML='<div class="ctabs"><button type="button" data-ctab="you" class="'+(CHAT_TAB==="you"?"on":"")+'">For you'+(nYou?" "+nYou:"")+'</button><button type="button" data-ctab="sent" class="'+(CHAT_TAB==="sent"?"on":"")+'">Sent by me</button><button type="button" data-ctab="done" class="'+(CHAT_TAB==="done"?"on":"")+'">Done</button></div>'+
+      (!CHAT_ME?'<div class="cempty">Open any lead and pick your name under Messages first.</div>':list.length?list.map(function(m){ var o=oppById(m.lead); return '<button type="button" class="citem" data-clead="'+esc(m.lead)+'"><span class="cdot'+(m.to===CHAT_ME&&!CHAT_SEEN[m.id]&&!m.done?"":" read")+'"></span><span class="cav">'+esc(chatInit(m.from))+'</span><div><div><b>'+esc(m.from)+'</b> on <b>'+esc(m.leadName||(o&&o.name)||"a lead")+(m.company?", "+esc(m.company):"")+'</b></div><div>'+esc(String(m.text).slice(0,140))+'</div><div class="cmeta">'+esc(chatWhen(m.t))+(m.stage?" · "+esc(m.stage):"")+'</div></div></button>'; }).join(""):'<div class="cempty">Nothing here.</div>');
+  }
   function chatListen(){ if(!db) return;
     try{ db.collection("chat").onSnapshot(function(snap){
       var prev={}; CHAT.forEach(function(m){ prev[m.id]=1; });
       CHAT=snap.docs.map(function(d){ return Object.assign({id:d.id},d.data()); });
-      var ids=[]; CHAT.forEach(function(m){ ids.push(m.fromId); (m.tagIds||[]).forEach(function(x){ ids.push(x); }); });
-      chatResolve(ids).then(function(){
-        if(CHAT_READY&&!CHAT_OPEN){ CHAT.forEach(function(m){ if(!prev[m.id]&&m.fromId!==CHAT_ME.id){ toast(chatName(m.fromId)+" wrote in Team chat"); } }); }
-        CHAT_READY=true; if(CHAT_OPEN) chatMarkSeen(); chatRedraw(); }); },function(){}); }catch(e){} }
-  document.addEventListener("click",function(e){ var t=e.target.closest&&e.target.closest("#chatBtn,#chatClose,#chatSend,[data-clead],[data-cpick],[data-chatlead]"); var d=document.getElementById("chatDrawer");
-    if(!t){ var ac=document.getElementById("chatAc"); if(ac&&!ac.hidden&&!e.target.closest("#chatAc,#chatText")) ac.hidden=true; return; }
-    if(t.id==="chatBtn"){ if(d&&!d.hidden) chatClose(); else chatOpen(); return; }
-    if(t.id==="chatClose"){ chatClose(); return; }
-    if(t.id==="chatSend"){ chatSend(); return; }
-    if(t.dataset.cpick!==undefined){ chatPick(+t.dataset.cpick); return; }
-    if(t.dataset.clead){ var id=t.dataset.clead; if(oppById(id)){ chatClose(); openPanel(id); } else toast("That lead is not on the page"); return; }
-    if(t.dataset.chatlead){ var o=oppById(t.dataset.chatlead); if(o) chatOpen({type:"lead",id:o.id,label:"#"+chatLeadLabel(o)}); return; } });
-  document.addEventListener("input",function(e){ if(e.target&&e.target.id==="chatText") chatAcUpdate(); });
-  document.addEventListener("keydown",function(e){ if(!e.target||e.target.id!=="chatText") return; var ac=document.getElementById("chatAc"), open=ac&&!ac.hidden&&CHAT_AC.length;
-    if(open&&(e.key==="ArrowDown"||e.key==="ArrowUp")){ e.preventDefault(); CHAT_ACI=(CHAT_ACI+(e.key==="ArrowDown"?1:CHAT_AC.length-1))%CHAT_AC.length; [].forEach.call(ac.querySelectorAll(".cacitem"),function(b,i){ b.classList.toggle("on",i===CHAT_ACI); }); return; }
-    if(open&&(e.key==="Enter"||e.key==="Tab")){ e.preventDefault(); chatPick(CHAT_ACI); return; }
-    if(e.key==="Escape"){ if(open){ ac.hidden=true; } else chatClose(); return; }
-    if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); chatSend(); } });
-  chatUserInit();
+      if(CHAT_READY){ CHAT.forEach(function(m){ if(!prev[m.id] && m.to===CHAT_ME && m.from!==CHAT_ME && !m.done) toast(m.from+" left you a note on "+(m.leadName||"a lead")); }); }
+      CHAT_READY=true; chatRedraw();
+    },function(){}); }catch(e){} }
+  document.addEventListener("click",function(e){
+    var t=e.target.closest&&e.target.closest("[data-chat],[data-ctab],[data-clead],#chatBtn"); var pop=document.getElementById("chatPop");
+    if(!t){ if(pop&&!pop.hidden&&!e.target.closest("#chatPop")){ pop.hidden=true; } return; }
+    if(t.id==="chatBtn"){ if(!pop){ pop=document.createElement("div"); pop.id="chatPop"; pop.hidden=true; document.body.appendChild(pop); } pop.hidden=!pop.hidden; chatDrawPop(); return; }
+    if(t.dataset.ctab){ CHAT_TAB=t.dataset.ctab; chatDrawPop(); return; }
+    if(t.dataset.clead){ var id=t.dataset.clead; if(pop) pop.hidden=true; if(oppById(id)) openPanel(id); else toast("That lead is not on the page"); return; }
+    var a=t.dataset.chat;
+    if(a==="me"){ CHAT_ME=t.dataset.name; try{ localStorage.setItem("koya-me",CHAT_ME); }catch(x){} chatRedraw(); return; }
+    if(a==="done"){ var id2=t.dataset.mid; if(db) db.collection("chat").doc(id2).update({done:true,doneBy:CHAT_ME,doneAt:new Date().toISOString()}).then(function(){ CHAT_SEEN[id2]=1; chatSaveSeen(); },function(){ toast("Could not save, try again"); }); return; }
+    if(a==="send"){ var lead=t.dataset.lead, o=oppById(lead), ta=document.getElementById("chatText"), sel=document.getElementById("chatTo"), txt0=ta?ta.value.trim():"";
+      if(!txt0){ toast("Write a note first"); return; } if(!db||!o){ toast("Messages are not connected right now"); return; }
+      var to=sel?sel.value:TEAM[0], id3=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      t.disabled=true;
+      db.collection("chat").doc(id3).set({lead:lead,leadName:o.name||"",company:o.company||"",stage:o.stage||"",from:CHAT_ME,to:to,text:txt0,t:new Date().toISOString(),done:false}).then(function(){ CHAT_DRAFT[lead]=""; if(ta) ta.value=""; t.disabled=false; toast("Sent to "+to); },function(){ t.disabled=false; toast("Could not send, try again"); }); return; }
+  });
+  document.addEventListener("input",function(e){ var t=e.target; if(t&&t.id==="chatText") CHAT_DRAFT[t.dataset.lead]=t.value; });
+  document.addEventListener("change",function(e){ var t=e.target; if(t&&t.id==="chatTo") CHAT_TO[t.dataset.lead]=t.value; });
   var uc=window.claude && window.claude.use ? window.claude.use("db") : Promise.resolve(null);
   uc.then(function(x){
     if (!x){ dbState="off"; render(); return; }
