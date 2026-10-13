@@ -1,5 +1,22 @@
 <title>Koya Outbound</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<script>
+/* error catcher: if anything on this page fails, show what failed (with a Copy button) so it can be fixed instead of guessed */
+(function(){ var errs=[], shown=false;
+  function esc(x){ return String(x).replace(/[&<>]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c]; }); }
+  function show(){ var root=document.body||document.documentElement; var b=document.getElementById("koyaErr");
+    if(!b){ b=document.createElement("div"); b.id="koyaErr"; b.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483000;background:#fdecea;color:#7a1c14;border:1px solid #f3b8b1;border-radius:12px;padding:10px 12px;font:13px/1.45 system-ui,sans-serif;max-height:42vh;overflow:auto;box-shadow:0 10px 30px -10px rgba(0,0,0,.35)"; root.appendChild(b); }
+    b.innerHTML='<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><b style="flex:1">Something on this page failed</b><button type="button" id="koyaErrCopy" style="border:1px solid #d99;background:#fff;border-radius:8px;padding:4px 10px;font:inherit;cursor:pointer">Copy</button><button type="button" id="koyaErrX" style="border:0;background:transparent;font:inherit;cursor:pointer;font-size:16px">&times;</button></div><pre style="margin:0;white-space:pre-wrap;word-break:break-word;font:12px/1.4 ui-monospace,monospace">'+esc(errs.join("\n"))+'</pre>';
+    document.getElementById("koyaErrCopy").onclick=function(){ var t=errs.join("\n"); try{ navigator.clipboard.writeText(t).then(function(){ document.getElementById("koyaErrCopy").textContent="Copied"; },function(){ fb(t); }); }catch(e){ fb(t); } };
+    document.getElementById("koyaErrX").onclick=function(){ b.remove(); }; }
+  function fb(t){ var r=document.createRange(), p=document.querySelector("#koyaErr pre"); if(p){ r.selectNodeContents(p); var s=window.getSelection(); s.removeAllRanges(); s.addRange(r); } }
+  function add(m){ if(errs.length<12){ errs.push(new Date().toISOString().slice(11,19)+" "+m); } show(); }
+  window.addEventListener("error",function(e){ add("error: "+(e.message||"?")+(e.filename?" ("+String(e.filename).split("/").pop()+":"+e.lineno+")":"")); });
+  window.addEventListener("unhandledrejection",function(e){ var r=e.reason; add("promise: "+String((r&&r.message)||r).slice(0,200)); });
+  document.addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest("#olist [data-id]"); if(!b) return; var id=b.dataset.id;
+    setTimeout(function(){ var w=document.getElementById("panelwrap"); if(w&&w.hidden) add("A lead was clicked but its window did not open (lead id "+String(id).slice(0,8)+")"); },700); },true);
+})();
+</script>
 <style>
   :root{
     color-scheme:light;
