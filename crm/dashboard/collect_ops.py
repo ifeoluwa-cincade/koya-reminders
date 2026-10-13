@@ -519,6 +519,42 @@ def attio_checks(c: AttioClient, n_opps: int) -> list[dict]:
                f"{n_opps} open opportunities read" if ok else "Attio did not answer")]
 
 
+def watchdog_checks(c: AttioClient) -> list[dict]:
+    """The two things that can stop quietly: the call watcher (the Google script that opens a deal the moment a call books a meeting) and Attio's webhooks
+    (the reminders webhook went 'degraded' for days once and nobody saw it)."""
+    out = []
+    url, hook = os.environ.get("LEAD_ACTIONS_URL"), os.environ.get("LEAD_ACTIONS_HOOK")
+    if url and hook:
+        try:
+            last = int(float(requests.get(url, params={"cwlast": hook}, timeout=60).text.strip() or 0))
+            age = (now().timestamp() * 1000 - last) / 60000 if last else None
+        except Exception:
+            age = None
+        if age is None:
+            out.append(mk("call_watch", "cloudtalk", "Call watcher (meetings from calls)", "warn", "could not read when the watcher last ran"))
+        elif age > 5:
+            out.append(mk("call_watch", "cloudtalk", "Call watcher (meetings from calls)", "bad",
+                          f"has not run for {int(age)} minutes: a meeting booked on a call will not open a deal until it runs again", None))
+        else:
+            out.append(mk("call_watch", "cloudtalk", "Call watcher (meetings from calls)", "ok", f"ran {max(0, int(age * 60))} s ago, checks every minute"))
+    try:
+        r = c.req("GET", "/webhooks")
+        rows = r.json().get("data", []) if r.status_code < 300 else None
+    except Exception:
+        rows = None
+    if rows is None:
+        out.append(mk("attio_webhooks", "attio", "Attio webhooks", "warn", "could not read the webhook list"))
+    else:
+        bad = [w for w in rows if w.get("status") != "active"]
+        if bad:
+            kinds = ", ".join(sorted({(x.get("subscriptions") or [{}])[0].get("event_type", "?") for x in bad}))
+            out.append(mk("attio_webhooks", "attio", "Attio webhooks", "bad",
+                          f"{len(bad)} of {len(rows)} webhooks are not active ({kinds}). Attio disables a webhook that keeps failing, and what depends on it stops"))
+        else:
+            out.append(mk("attio_webhooks", "attio", "Attio webhooks", "ok", f"all {len(rows)} webhooks active"))
+    return out
+
+
 def fetch_activity() -> list:
     """What the reminder script (Apps Script) did recently: follow-ups set, reminders sent, Monday list, errors."""
     url, hook = os.environ.get("LEAD_ACTIONS_URL"), os.environ.get("LEAD_ACTIONS_HOOK")
@@ -650,7 +686,7 @@ def main() -> int:
         res["errors"].append(f"reminder check: {type(ex).__name__}: {ex}")
     spec = yaml.safe_load(SCHEMA.read_text())
     for fn, args in ((github_checks, ()), (lambda: attio_checks(c, len(res["opps"])), ()),
-                     (lambda: plusvibe_checks(key or ""), ()), (lambda: cloudtalk_checks(spec, res["opps"]), ())):
+                     (lambda: plusvibe_checks(key or ""), ()), (lambda: cloudtalk_checks(spec, res["opps"]), ()), (lambda: watchdog_checks(c), ())):
         try:
             res["checks"] += fn(*args)
         except Exception as ex:
