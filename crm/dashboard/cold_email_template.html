@@ -374,6 +374,23 @@
   .clead{border:1px solid var(--line); background:#fff; color:var(--violet); font:600 13px var(--font); border-radius:7px; padding:0 6px; cursor:pointer;}
   .clead:hover{background:var(--band);}
   .cto.me{background:var(--band);}
+  /* chat look: a proper conversation, own messages on the right */
+  .chead{background:var(--grad-ink); color:#fff; border-bottom:0; padding:16px 16px 14px;}
+  .chead .ctitle{flex:1; display:flex; flex-direction:column; gap:2px;} .chead .ctitle b{font-size:16px;} .chead .ctitle span{font-size:12px; color:rgba(255,255,255,.65);}
+  .chead button{color:#fff;}
+  .cfeed{background:var(--bg-soft); gap:6px; padding:14px 14px;}
+  .cday{display:flex; justify-content:center; margin:8px 0 4px;} .cday span{font:500 11px var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); background:#fff; border:1px solid var(--line); border-radius:999px; padding:2px 10px;}
+  .cmsg{display:flex; gap:8px; align-items:flex-end; max-width:100%;} .cmsg.mine{justify-content:flex-end;}
+  .ccol{display:flex; flex-direction:column; min-width:0; max-width:82%;} .cmsg.mine .ccol{align-items:flex-end;}
+  .cwho{font-weight:600; font-size:12px; margin:0 4px 2px; color:var(--ink-2);} .cwho span{font:500 10.5px var(--mono); color:var(--ink-3); margin-left:4px;}
+  .cbub{background:#fff; border:1px solid var(--line); border-radius:14px 14px 14px 4px; padding:9px 12px; line-height:1.45; overflow-wrap:anywhere; font-size:14px;}
+  .cmsg.mine .cbub{background:var(--violet); color:#fff; border-color:var(--violet); border-radius:14px 14px 4px 14px;}
+  .cmsg.mine .cto{background:rgba(255,255,255,.2); color:#fff; border-color:rgba(255,255,255,.35);} .cmsg.mine .clead{background:#fff;}
+  .cwrite{background:#fff; padding:8px 12px calc(10px + env(safe-area-inset-bottom,0px));}
+  .ctools{display:flex; align-items:center; gap:6px; padding:0 0 6px;} .ctools button{font:500 12.5px var(--font); border:1px solid var(--line); background:var(--bg-soft); color:var(--ink-2); border-radius:999px; padding:3px 10px; cursor:pointer;} .ctools .csub{margin-left:auto;}
+  .cbox{display:flex; gap:8px; align-items:flex-end; border:1px solid var(--line); border-radius:14px; background:#fff; padding:6px 6px 6px 12px;} .cbox:focus-within{border-color:var(--violet);}
+  .cbox textarea{border:0; padding:6px 0; min-height:22px; max-height:120px; flex:1; background:transparent;}
+  .csendi{border:0; background:var(--ink); color:#fff; width:34px; height:34px; border-radius:10px; display:grid; place-items:center; cursor:pointer; flex:none;}
   /* messages between teammates */
   .chatbell{position:relative;}
   .chatbell .cbadge{position:absolute; top:-6px; right:-6px; min-width:18px; padding:1px 5px; border-radius:999px; background:var(--violet); color:#fff; font:600 10.5px var(--mono); text-align:center; line-height:15px;}
@@ -1173,7 +1190,7 @@
   function prio(o){ if (o.live_new && !newSeen(o.id)) return 0; var d=dueInfo(o); if (d.n==null) return 1; if (d.cls==="over") return 2; if (d.cls==="today") return 3; return 4; }
   var SORTS={
     priority:function(a,b){ var x=prio(a), y=prio(b); if (x!==y) return x-y; if (x===0||x===1) return (T(b.last_touch)||0)-(T(a.last_touch)||0); var da=dueInfo(a).n, db=dueInfo(b).n; return (da==null?9e9:da)-(db==null?9e9:db); },
-    recent:function(a,b){ var x=T(a.last_touch), y=T(b.last_touch); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1; return y-x; },   // newest first
+    recent:function(a,b){ var na=a.live_new&&!newSeen(a.id), nb=b.live_new&&!newSeen(b.id); if(na!==nb) return na?-1:1; var x=T(a.last_touch), y=T(b.last_touch); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1; return y-x; },   // newest first
     due:function(a,b){ var x=a.due_set&&T(a.due)!=null?T(a.due):9e15, y=b.due_set&&T(b.due)!=null?T(b.due):9e15; return x-y; },                                                          // earliest first
     tag:function(a,b){ var d=(BORDER[a.bucket]||0)-(BORDER[b.bucket]||0); return d||SORTS.recent(a,b); },
     name:function(a,b){ return String(a.name||"").localeCompare(String(b.name||"")); },
@@ -1388,7 +1405,7 @@
           var dname=attioVal(f.b,"name")||"", nx=attioVal(f.b,"next_action_at"), em=(pb.match(/email_addresses\[\d+\]:\s*(\S+)/)||[])[1]||null, li=attioVal(pb,"linkedin"), ch=attioVal(f.b,"source_channel")||"";
           var bk=stageBucket(f.st)||"followup", parts=dname.split("/");
           OPPS.push(tidyOpp({id:f.pid,name:attioVal(pb,"name")||dname,company:parts.length>1?parts.slice(1).join("/").trim():null,email:em,phone:((pb.match(/phone_numbers\[\d+\]:\s*(\S+)/)||[])[1]||null),linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:f.st,source:/call/i.test(ch)?"Call":"Email",
-            last_touch:new Date().toISOString(),due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,summary:attioVal(pb,"last_reply_summary")||null,call_at:null,attempts:null,campaign:null,
+            last_touch:(function(){ var t=nextIso(attioVal(pb,"last_contacted_at"))||nextIso(attioVal(pb,"last_reply_at"))||nextIso(attioVal(f.b,"last_activity_at"))||nextIso(attioVal(f.b,"created_at"))||null; return t; })(),due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,summary:attioVal(pb,"last_reply_summary")||null,call_at:null,attempts:null,campaign:null,
             links:{attio:"https://app.attio.com/koya-talent/person/"+f.pid,deal:"https://app.attio.com/koya-talent/deals/record/"+f.did,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[],live_new:true})); added++; });
         OPPS.filter(function(o){ return o.live_new && o.email && !o.sequence; }).forEach(function(o){                       // PlusVibe: where this lead is in the sequences, straight away
           o.sequence=[];
@@ -2599,24 +2616,29 @@
   function chatMarkSeen(){ CHAT_LAST=Date.now(); try{ localStorage.setItem("koya-chat-last",String(CHAT_LAST)); }catch(e){} chatBadge(); }
   function chatPartsHTML(m){ var ps=m.parts&&m.parts.length?m.parts:[{t:"x",v:m.text||""}];
     return ps.map(function(p){ if(p.t==="lead") return '<button type="button" class="clead" data-clead="'+esc(p.id)+'">#'+esc(p.l||"lead")+'</button>';
-      if(p.t==="user") return '<span class="cto'+(p.id===CHAT_ME.id?" me":"")+'">@'+esc(chatName(p.id))+'</span>';
+      if(p.t==="user") return '<span class="cto'+(p.id&&p.id===CHAT_ME.id?" me":"")+'">@'+esc((p.id&&CHAT_NAMES[p.id])||p.n||"Someone")+'</span>';
       return esc(p.v).replace(/\n/g,"<br>"); }).join(""); }
   function chatMsgHTML(m){ var mine=m.fromId===CHAT_ME.id, nm=mine?(CHAT_ME.name||"You"):chatName(m.fromId);
-    return '<div class="cmsg'+(mine?" mine":"")+'"><span class="cav">'+esc(chatInit(nm))+'</span><div class="cbub"><div class="cwho">'+esc(nm)+'<span>'+esc(chatWhen(m.t))+'</span></div>'+chatPartsHTML(m)+'</div></div>'; }
+    return '<div class="cmsg'+(mine?" mine":"")+'">'+(mine?'':'<span class="cav">'+esc(chatInit(nm))+'</span>')+'<div class="ccol"><div class="cwho">'+(mine?'':esc(nm)+' ')+'<span>'+esc(chatWhen(m.t))+'</span></div><div class="cbub">'+chatPartsHTML(m)+'</div></div></div>'; }
+  function chatDayLabel(t){ var d=new Date(t); if(isNaN(d)) return ""; var n=new Date(), y=new Date(Date.now()-864e5), k=function(x){ return x.getFullYear()+"-"+x.getMonth()+"-"+x.getDate(); }; return k(d)===k(n)?"Today":k(d)===k(y)?"Yesterday":d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}); }
   function chatDrawerBuild(){ var d=document.getElementById("chatDrawer"); if(d) return d; d=document.createElement("div"); d.id="chatDrawer"; d.hidden=true;
-    d.innerHTML='<div class="chead"><b>Team chat</b><span class="chint">Type @ to tag a person or a lead, # for a lead</span><button type="button" id="chatClose" aria-label="Close chat">&times;</button></div><div id="chatFeed" class="cfeed"></div><div class="cwrite"><div id="chatAc" class="cac" hidden></div><textarea id="chatText" rows="2" placeholder="Write a message"></textarea><div class="cbot"><span class="csub" id="chatWho"></span><button type="button" class="csend" id="chatSend">Send</button></div></div>';
+    d.innerHTML='<div class="chead"><div class="ctitle"><b>Team chat</b><span id="chatSub">Tag a person or a lead</span></div><button type="button" id="chatClose" aria-label="Close chat">&times;</button></div><div id="chatFeed" class="cfeed"></div><div class="cwrite"><div id="chatAc" class="cac" hidden></div><div class="ctools"><button type="button" data-ctool="@">@ Person</button><button type="button" data-ctool="#"># Lead</button><span class="csub" id="chatWho"></span></div><div class="cbox"><textarea id="chatText" rows="1" placeholder="Message the team"></textarea><button type="button" class="csendi" id="chatSend" aria-label="Send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div></div>';
     document.body.appendChild(d); return d; }
   function chatDraw(){ var d=document.getElementById("chatDrawer"); if(!d||d.hidden) return; var f=document.getElementById("chatFeed"), atEnd=f.scrollHeight-f.scrollTop-f.clientHeight<80;
     var list=CHAT.slice().sort(function(a,b){ return String(a.t).localeCompare(String(b.t)); }).slice(-120);
-    f.innerHTML=list.length?list.map(chatMsgHTML).join(""):'<div class="cempty">No messages yet. Write the first one below.</div>'; if(atEnd) f.scrollTop=f.scrollHeight;
-    var w=document.getElementById("chatWho"); if(w) w.textContent=CHAT_ME.id?"Posting as "+(CHAT_ME.name||"you"):"Sign in to Claude to post"; }
+    var last="", html=list.map(function(m){ var dl=chatDayLabel(m.t), sep=dl!==last?'<div class="cday"><span>'+esc(dl)+'</span></div>':""; last=dl; return sep+chatMsgHTML(m); }).join("");
+    f.innerHTML=list.length?html:'<div class="cempty">No messages yet. Write the first one below.</div>'; if(atEnd) f.scrollTop=f.scrollHeight;
+    var w=document.getElementById("chatWho"); if(w) w.textContent=CHAT_ME.id?(CHAT_ME.name||"You"):"Sign in to Claude to post"; }
   function chatRedraw(){ chatBadge(); chatDraw(); }
   function chatOpen(pre){ var d=chatDrawerBuild(); d.hidden=false; CHAT_OPEN=true; chatMarkSeen(); chatDraw(); var f=document.getElementById("chatFeed"); f.scrollTop=f.scrollHeight;
     var ta=document.getElementById("chatText"); if(pre){ var cur=ta.value.trim(); ta.value=(cur?cur+" ":"")+pre.label+" "; CHAT_TAGS.push(pre); } setTimeout(function(){ ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length); },50); }
   function chatClose(){ var d=document.getElementById("chatDrawer"); if(d) d.hidden=true; CHAT_OPEN=false; chatBadge(); }
   function chatLeadLabel(o){ return (o.name||"lead")+(o.company?" ("+o.company+")":""); }
+  function chatPeopleAll(){ var m={}; CHAT_PEOPLE.forEach(function(p){ if(p.id) m[p.id]=p.name||CHAT_NAMES[p.id]||""; }); CHAT.forEach(function(x){ if(x.fromId) m[x.fromId]=m[x.fromId]||CHAT_NAMES[x.fromId]||""; (x.tagIds||[]).forEach(function(i){ m[i]=m[i]||CHAT_NAMES[i]||""; }); });
+    return Object.keys(m).filter(function(i){ return i!==CHAT_ME.id; }).map(function(i){ return {id:i,name:m[i]||CHAT_NAMES[i]||""}; }).filter(function(p){ return p.name; }); }
   function chatAcFind(q,kind){ q=(q||"").toLowerCase().trim(); var out=[];
-    if(kind==="@") CHAT_PEOPLE.filter(function(p){ return p.id!==CHAT_ME.id && p.name && (!q||p.name.toLowerCase().indexOf(q)>=0); }).slice(0,4).forEach(function(p){ out.push({type:"user",id:p.id,label:"@"+p.name,show:p.name,sub:"Person"}); });
+    if(kind==="@"){ chatPeopleAll().filter(function(p){ return !q||p.name.toLowerCase().indexOf(q)>=0; }).slice(0,4).forEach(function(p){ out.push({type:"user",id:p.id,label:"@"+p.name,show:p.name,sub:"Person"}); });
+      if(q.length>=2&&!out.some(function(c){ return c.type==="user"&&c.show.toLowerCase()===q; })) out.push({type:"user",id:null,name:q.charAt(0).toUpperCase()+q.slice(1),label:"@"+q.charAt(0).toUpperCase()+q.slice(1),show:q.charAt(0).toUpperCase()+q.slice(1),sub:"Tag this name"}); }
     var seen={}; OPPS.concat(CLOSED).forEach(function(o){ if(out.length>=9||seen[o.id]) return; var hay=((o.name||"")+" "+(o.company||"")).toLowerCase(); if(!q||hay.indexOf(q)>=0){ seen[o.id]=1; out.push({type:"lead",id:o.id,label:"#"+chatLeadLabel(o),show:chatLeadLabel(o),sub:"Lead"}); } });
     return out; }
   function chatAcUpdate(){ var ta=document.getElementById("chatText"), ac=document.getElementById("chatAc"); if(!ta||!ac) return; var before=ta.value.slice(0,ta.selectionStart), m=before.match(/([@#])([^@#\n]{0,30})$/);
@@ -2624,15 +2646,15 @@
     CHAT_AC=chatAcFind(m[2],m[1]); CHAT_ACI=0; if(!CHAT_AC.length){ ac.hidden=true; return; }
     ac.innerHTML=CHAT_AC.map(function(c,i){ return '<button type="button" class="cacitem'+(i===0?" on":"")+'" data-cpick="'+i+'"><b>'+esc(c.show)+'</b><span>'+c.sub+'</span></button>'; }).join(""); ac.hidden=false; }
   function chatPick(i){ var c=CHAT_AC[i], ta=document.getElementById("chatText"), ac=document.getElementById("chatAc"); if(!c||!ta) return; var pos=ta.selectionStart, before=ta.value.slice(0,pos), m=before.match(/([@#])([^@#\n]{0,30})$/); if(!m) return;
-    ta.value=before.slice(0,m.index)+c.label+" "+ta.value.slice(pos); CHAT_TAGS.push({type:c.type,id:c.id,label:c.label}); var np=m.index+c.label.length+1; ta.focus(); ta.setSelectionRange(np,np); ac.hidden=true; CHAT_AC=[]; }
+    ta.value=before.slice(0,m.index)+c.label+" "+ta.value.slice(pos); CHAT_TAGS.push({type:c.type,id:c.id,name:c.name,label:c.label}); var np=m.index+c.label.length+1; ta.focus(); ta.setSelectionRange(np,np); ac.hidden=true; CHAT_AC=[]; }
   function chatBuildParts(text){ var tags=CHAT_TAGS.filter(function(t){ return text.indexOf(t.label)>=0; }).sort(function(a,b){ return b.label.length-a.label.length; }); if(!tags.length) return [{t:"x",v:text}];
     var parts=[], rest=text; while(rest.length){ var best=null, bi=-1; tags.forEach(function(t){ var k=rest.indexOf(t.label); if(k>=0&&(bi<0||k<bi||(k===bi&&t.label.length>best.label.length))){ best=t; bi=k; } });
       if(!best){ parts.push({t:"x",v:rest}); break; } if(bi>0) parts.push({t:"x",v:rest.slice(0,bi)});
-      parts.push(best.type==="lead"?{t:"lead",id:best.id,l:best.label.replace(/^#/,"")}:{t:"user",id:best.id}); rest=rest.slice(bi+best.label.length); } return parts; }
+      parts.push(best.type==="lead"?{t:"lead",id:best.id,l:best.label.replace(/^#/,"")}:{t:"user",id:best.id,n:best.name||best.label.replace(/^@/,"")}); rest=rest.slice(bi+best.label.length); } return parts; }
   function chatSend(){ var ta=document.getElementById("chatText"), btn=document.getElementById("chatSend"); if(!ta) return; var text=ta.value.trim(); if(!text){ toast("Write a message first"); return; }
     if(!CHAT_ME.id){ toast("Sign in to Claude to post here"); return; } if(!db){ toast("Chat is not connected right now"); return; }
     var parts=chatBuildParts(text), id=Date.now().toString(36)+Math.random().toString(36).slice(2,6); btn.disabled=true;
-    db.collection("chat").doc(id).set({fromId:CHAT_ME.id,text:text,parts:parts,t:new Date().toISOString(),tagIds:parts.filter(function(p){ return p.t==="user"; }).map(function(p){ return p.id; }),leads:parts.filter(function(p){ return p.t==="lead"; }).map(function(p){ return p.id; })})
+    db.collection("chat").doc(id).set({fromId:CHAT_ME.id,text:text,parts:parts,t:new Date().toISOString(),tagIds:parts.filter(function(p){ return p.t==="user"&&p.id; }).map(function(p){ return p.id; }),leads:parts.filter(function(p){ return p.t==="lead"; }).map(function(p){ return p.id; })})
       .then(function(){ ta.value=""; CHAT_TAGS=[]; btn.disabled=false; document.getElementById("chatAc").hidden=true; },function(){ btn.disabled=false; toast("Could not send, try again"); }); }
   function chatListen(){ if(!db) return;
     try{ db.collection("chat").onSnapshot(function(snap){
@@ -2642,10 +2664,11 @@
       chatResolve(ids).then(function(){
         if(CHAT_READY&&!CHAT_OPEN){ CHAT.forEach(function(m){ if(!prev[m.id]&&m.fromId!==CHAT_ME.id){ toast(chatName(m.fromId)+" wrote in Team chat"); } }); }
         CHAT_READY=true; if(CHAT_OPEN) chatMarkSeen(); chatRedraw(); }); },function(){}); }catch(e){} }
-  document.addEventListener("click",function(e){ var t=e.target.closest&&e.target.closest("#chatBtn,#chatClose,#chatSend,[data-clead],[data-cpick],[data-chatlead]"); var d=document.getElementById("chatDrawer");
+  document.addEventListener("click",function(e){ var t=e.target.closest&&e.target.closest("#chatBtn,#chatClose,#chatSend,[data-clead],[data-cpick],[data-chatlead],[data-ctool]"); var d=document.getElementById("chatDrawer");
     if(!t){ var ac=document.getElementById("chatAc"); if(ac&&!ac.hidden&&!e.target.closest("#chatAc,#chatText")) ac.hidden=true; return; }
     if(t.id==="chatBtn"){ if(d&&!d.hidden) chatClose(); else chatOpen(); return; }
     if(t.id==="chatClose"){ chatClose(); return; }
+    if(t.dataset.ctool){ var tb=document.getElementById("chatText"); if(tb){ var v=tb.value, pos=tb.selectionStart||v.length, pre=v.slice(0,pos), sp=(pre&&!/\s$/.test(pre))?" ":""; tb.value=pre+sp+t.dataset.ctool+v.slice(pos); var np=(pre+sp+t.dataset.ctool).length; tb.focus(); tb.setSelectionRange(np,np); chatAcUpdate(); } return; }
     if(t.id==="chatSend"){ chatSend(); return; }
     if(t.dataset.cpick!==undefined){ chatPick(+t.dataset.cpick); return; }
     if(t.dataset.clead){ var id=t.dataset.clead; if(oppById(id)){ chatClose(); openPanel(id); } else toast("That lead is not on the page"); return; }
