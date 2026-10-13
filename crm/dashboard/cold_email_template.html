@@ -378,6 +378,7 @@
   .cto.me{background:var(--band);}
   .cmsg.forme .cbub{border-color:var(--violet); box-shadow:0 0 0 2px rgba(110,86,240,.18);}
   .chead #chatDesk{border:1px solid rgba(255,255,255,.35); background:transparent; color:#fff; border-radius:999px; padding:4px 12px; font:500 12px var(--font); cursor:pointer;}
+  .cacitem.hint{cursor:default; color:var(--ink-3); background:#fff;} .cacitem.hint b{font-weight:500;}
   .cping{margin:3px 4px 0; font-size:11px; color:var(--ink-3);} .cping.bad{color:var(--down);}
   /* chat look: a proper conversation, own messages on the right */
   .chead{background:var(--grad-ink); color:#fff; border-bottom:0; padding:16px 16px 14px;}
@@ -2609,17 +2610,17 @@
   }
   // ----- team chat: ONE channel for the team. A message can tag people (@) and leads (@ or #); a lead tag is a link that opens that lead.
   // Stored in the shared db (collection "chat"); names come from the viewer's own sign-in (the user capability), nothing is typed in or remembered per device.
-  var CHAT=[], CHAT_READY=false, CHAT_OPEN=false, CHAT_LAST=0, CHAT_ME={id:null,name:""}, CHAT_USER=null, CHAT_PEOPLE=[], CHAT_NAMES={}, CHAT_TAGS=[], CHAT_AC=[], CHAT_ACI=0;
+  var CHAT=[], CHAT_READY=false, CHAT_OPEN=false, CHAT_LAST=0, CHAT_ME={id:null,name:""}, CHAT_USER=null, CHAT_PEOPLE=[], CHAT_NAMES={}, CHAT_ROSTER={}, CHAT_RENAMING=false, CHAT_TAGS=[], CHAT_AC=[], CHAT_ACI=0;
   try{ CHAT_LAST=+localStorage.getItem("koya-chat-last")||0; }catch(e){}
   function chatSeenLead(){}
   function chatInit(n){ return String(n||"?").trim().slice(0,2).toUpperCase(); }
   function chatWhen(t){ var d=new Date(t); return isNaN(d)?"":d.toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }
-  function chatName(id){ return CHAT_NAMES[id]||"Someone"; }
+  function chatName(id){ return (CHAT_ROSTER[id]&&CHAT_ROSTER[id].label)||CHAT_NAMES[id]||"Someone"; }
   function chatResolve(ids){ if(!CHAT_USER||!CHAT_USER.profiles) return Promise.resolve(); var need=ids.filter(function(i){ return i&&!CHAT_NAMES[i]; }); if(!need.length) return Promise.resolve();
     return CHAT_USER.profiles(need).then(function(ps){ Object.keys(ps||{}).forEach(function(k){ var p=ps[k]; if(p&&p.name) CHAT_NAMES[k]=p.name; }); }).catch(function(){}); }
   function chatUserInit(){ try{ if(!(window.claude&&window.claude.use)) return; window.claude.use("user").then(function(u){ if(!u) return; CHAT_USER=u;
       return u.me().then(function(m){ CHAT_ME={id:m.id||null,name:m.name||""}; if(m.id&&m.name) CHAT_NAMES[m.id]=m.name; return u.search?u.search(""):[]; }).then(function(hits){
-        CHAT_PEOPLE=(hits||[]).filter(function(h){ return h&&h.id; }).map(function(h){ if(h.name) CHAT_NAMES[h.id]=h.name; return {id:h.id,name:h.name||""}; }); chatRedraw(); }); }).catch(function(){}); }catch(e){} }
+        CHAT_PEOPLE=(hits||[]).filter(function(h){ return h&&h.id; }).map(function(h){ if(h.name) CHAT_NAMES[h.id]=h.name; return {id:h.id,name:h.name||""}; }); chatRegisterSelf(); chatRedraw(); }); }).catch(function(){}); }catch(e){} }
   function chatUnread(){ return CHAT.filter(function(m){ return m.fromId!==CHAT_ME.id && Date.parse(m.t)>CHAT_LAST; }); }
   function chatBadge(){ var n=(tab==="chat")?0:chatUnread().length, b=document.getElementById("chatBadge"); if(b){ b.textContent=n; b.hidden=!n; } var tc=document.getElementById("tabcnt-chat"); if(tc){ tc.textContent=n; tc.hidden=!n; } try{ document.title=(n?"("+n+") ":"")+"Koya Outbound"; }catch(e){} }
   function chatMarkSeen(){ CHAT_LAST=Date.now(); try{ localStorage.setItem("koya-chat-last",String(CHAT_LAST)); }catch(e){} chatBadge(); }
@@ -2639,22 +2640,23 @@
     var list=CHAT.slice().sort(function(a,b){ return String(a.t).localeCompare(String(b.t)); }).slice(-120);
     var last="", html=list.map(function(m){ var dl=chatDayLabel(m.t), sep=dl!==last?'<div class="cday"><span>'+esc(dl)+'</span></div>':""; last=dl; return sep+chatMsgHTML(m); }).join("");
     f.innerHTML=list.length?html:'<div class="cempty">No messages yet. Write the first one below.</div>'; if(atEnd) f.scrollTop=f.scrollHeight;
-    var w=document.getElementById("chatWho"); if(w) w.textContent=CHAT_ME.id?(CHAT_ME.name||"You"):"Sign in to Claude to post"; }
+    var w=document.getElementById("chatWho"); if(w){ if(!CHAT_ME.id) w.textContent="Sign in to Claude to post"; else if(CHAT_RENAMING) w.innerHTML='<input id="chatNameIn" value="'+esc(CHAT_ME.name||"")+'" maxlength="30" style="font:inherit;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:2px 6px;width:110px"> <button type="button" id="chatNameSave" style="font:inherit;font-size:12px;border:0;background:var(--ink);color:#fff;border-radius:8px;padding:3px 9px;cursor:pointer">Save</button>'; else w.innerHTML='You are <b>'+esc(CHAT_ME.name||"you")+'</b> <button type="button" id="chatRename" style="font:inherit;font-size:12px;border:0;background:none;color:var(--violet);cursor:pointer;padding:0 0 0 4px">change</button>'; } }
   function chatRedraw(){ chatBadge(); chatDraw(); }
   function chatOpen(pre){ try{ var pc=document.getElementById("pclose"); if(pc&&!document.getElementById("panelwrap").hidden) pc.click(); }catch(e){} setTab("chat"); chatShow();
     var ta=document.getElementById("chatText"); if(ta&&pre){ var cur=ta.value.trim(); ta.value=(cur?cur+" ":"")+pre.label+" "; CHAT_TAGS.push(pre); } if(ta) setTimeout(function(){ ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length); },50); }
   function chatLeadLabel(o){ return (o.name||"lead")+(o.company?" ("+o.company+")":""); }
-  function chatPeopleAll(){ var m={}; CHAT_PEOPLE.forEach(function(p){ if(p.id) m[p.id]=p.name||CHAT_NAMES[p.id]||""; }); CHAT.forEach(function(x){ if(x.fromId) m[x.fromId]=m[x.fromId]||CHAT_NAMES[x.fromId]||""; (x.tagIds||[]).forEach(function(i){ m[i]=m[i]||CHAT_NAMES[i]||""; }); });
-    return Object.keys(m).filter(function(i){ return i!==CHAT_ME.id; }).map(function(i){ return {id:i,name:m[i]||CHAT_NAMES[i]||""}; }).filter(function(p){ return p.name; }); }
+  function chatPeopleAll(){ var m={}; Object.keys(CHAT_ROSTER).forEach(function(i){ m[i]=1; }); CHAT_PEOPLE.forEach(function(p){ if(p.id) m[p.id]=1; }); CHAT.forEach(function(x){ if(x.fromId) m[x.fromId]=1; (x.tagIds||[]).forEach(function(i){ m[i]=1; }); });
+    return Object.keys(m).filter(function(i){ return i!==CHAT_ME.id; }).map(function(i){ return {id:i,name:chatName(i)==="Someone"?"":chatName(i)}; }).filter(function(p){ return p.name; }); }
   function chatAcFind(q,kind){ q=(q||"").toLowerCase().trim(); var out=[];
-    if(kind==="@"){ chatPeopleAll().filter(function(p){ return !q||p.name.toLowerCase().indexOf(q)>=0; }).slice(0,4).forEach(function(p){ out.push({type:"user",id:p.id,label:"@"+p.name,show:p.name,sub:"Person"}); }); }
+    if(kind==="@"){ chatPeopleAll().filter(function(p){ return !q||p.name.toLowerCase().indexOf(q)>=0; }).slice(0,4).forEach(function(p){ out.push({type:"user",id:p.id,label:"@"+p.name,show:p.name,sub:"Person"}); });
+      if(q.length>=2&&!out.length) out.push({type:"hint",show:"Nobody called \""+q+"\" has opened the dashboard yet",sub:"Ask them to open Team chat once"}); }
     var seen={}; OPPS.concat(CLOSED).forEach(function(o){ if(out.length>=9||seen[o.id]) return; var hay=((o.name||"")+" "+(o.company||"")).toLowerCase(); if(!q||hay.indexOf(q)>=0){ seen[o.id]=1; out.push({type:"lead",id:o.id,label:"#"+chatLeadLabel(o),show:chatLeadLabel(o),sub:"Lead"}); } });
     return out; }
   function chatAcUpdate(){ var ta=document.getElementById("chatText"), ac=document.getElementById("chatAc"); if(!ta||!ac) return; var before=ta.value.slice(0,ta.selectionStart), m=before.match(/([@#])([^@#\n]{0,30})$/);
     if(!m||(m.index>0&&!/\s/.test(before.charAt(m.index-1)))){ ac.hidden=true; CHAT_AC=[]; return; }
     CHAT_AC=chatAcFind(m[2],m[1]); CHAT_ACI=0; if(!CHAT_AC.length){ ac.hidden=true; return; }
-    ac.innerHTML=CHAT_AC.map(function(c,i){ return '<button type="button" class="cacitem'+(i===0?" on":"")+'" data-cpick="'+i+'"><b>'+esc(c.show)+'</b><span>'+c.sub+'</span></button>'; }).join(""); ac.hidden=false; }
-  function chatPick(i){ var c=CHAT_AC[i], ta=document.getElementById("chatText"), ac=document.getElementById("chatAc"); if(!c||!ta) return; var pos=ta.selectionStart, before=ta.value.slice(0,pos), m=before.match(/([@#])([^@#\n]{0,30})$/); if(!m) return;
+    ac.innerHTML=CHAT_AC.map(function(c,i){ return c.type==="hint"?'<div class="cacitem hint"><b>'+esc(c.show)+'</b><span>'+esc(c.sub)+'</span></div>':'<button type="button" class="cacitem'+(i===0?" on":"")+'" data-cpick="'+i+'"><b>'+esc(c.show)+'</b><span>'+c.sub+'</span></button>'; }).join(""); ac.hidden=false; }
+  function chatPick(i){ var c=CHAT_AC[i], ta=document.getElementById("chatText"), ac=document.getElementById("chatAc"); if(!c||c.type==="hint"||!ta) return; var pos=ta.selectionStart, before=ta.value.slice(0,pos), m=before.match(/([@#])([^@#\n]{0,30})$/); if(!m) return;
     ta.value=before.slice(0,m.index)+c.label+" "+ta.value.slice(pos); CHAT_TAGS.push({type:c.type,id:c.id,name:c.name,label:c.label}); var np=m.index+c.label.length+1; ta.focus(); ta.setSelectionRange(np,np); ac.hidden=true; CHAT_AC=[]; }
   function chatBuildParts(text){ var tags=CHAT_TAGS.filter(function(t){ return text.indexOf(t.label)>=0; }).sort(function(a,b){ return b.label.length-a.label.length; }); if(!tags.length) return [{t:"x",v:text}];
     var parts=[], rest=text; while(rest.length){ var best=null, bi=-1; tags.forEach(function(t){ var k=rest.indexOf(t.label); if(k>=0&&(bi<0||k<bi||(k===bi&&t.label.length>best.label.length))){ best=t; bi=k; } });
@@ -2672,7 +2674,14 @@
   // a new message from someone else: a notice on the page, and when it tags ME also a sound, a flashing tab title and (if allowed) a desktop alert, so it is seen even from another tab
   function chatNotify(m){ var me=(m.tagIds||[]).indexOf(CHAT_ME.id)>=0, who=chatName(m.fromId); toast(who+(me?" tagged you in Team chat":" wrote in Team chat"));
     if(me){ chatBeep(); chatFlash(who+" tagged you"); chatDesktop(who+" tagged you in Team chat",String(m.text||"").slice(0,140)); } }
+  function chatRegisterSelf(){ try{ if(!db||!CHAT_ME.id||!CHAT_ROSTER_READY) return; var mine=CHAT_ROSTER[CHAT_ME.id], now=Date.now();
+      if(!mine) db.collection("roster").doc(CHAT_ME.id).set({id:CHAT_ME.id,label:CHAT_ME.name||"",at:new Date().toISOString()}).catch(function(){});
+      else if(!mine.at||now-Date.parse(mine.at)>6*3600000) db.collection("roster").doc(CHAT_ME.id).update({at:new Date().toISOString()}).catch(function(){});
+      if(mine&&mine.label) CHAT_ME.name=mine.label; }catch(e){} }
+  var CHAT_ROSTER_READY=false;
+  function chatRename(label){ label=String(label||"").trim().slice(0,30); if(!label||!db||!CHAT_ME.id) return; db.collection("roster").doc(CHAT_ME.id).set({id:CHAT_ME.id,label:label,at:new Date().toISOString()}).then(function(){ CHAT_RENAMING=false; toast("You are now "+label+" in Team chat"); },function(){ toast("Could not save the name"); }); }
   function chatListen(){ if(!db) return;
+    try{ db.collection("roster").onSnapshot(function(snap){ CHAT_ROSTER={}; snap.docs.forEach(function(d){ var v=d.data()||{}; CHAT_ROSTER[d.id]={label:v.label||"",at:v.at||""}; }); CHAT_ROSTER_READY=true; chatRegisterSelf(); chatRedraw(); },function(){}); }catch(e){}
     try{ db.collection("chat").onSnapshot(function(snap){
       var prev={}; CHAT.forEach(function(m){ prev[m.id]=1; });
       CHAT=snap.docs.map(function(d){ return Object.assign({id:d.id},d.data()); });
@@ -2680,9 +2689,11 @@
       chatResolve(ids).then(function(){
         if(CHAT_READY){ CHAT.forEach(function(m){ if(!prev[m.id]&&m.fromId!==CHAT_ME.id&&Date.now()-Date.parse(m.t)<120000&&!(tab==="chat"&&!document.hidden&&(m.tagIds||[]).indexOf(CHAT_ME.id)<0)) chatNotify(m); }); }
         CHAT_READY=true; if(CHAT_OPEN) chatMarkSeen(); chatRedraw(); }); },function(){}); }catch(e){} }
-  document.addEventListener("click",function(e){ var t=e.target.closest&&e.target.closest("#chatBtn,#chatSend,#chatDesk,[data-clead],[data-cpick],[data-chatlead],[data-ctool]");
+  document.addEventListener("click",function(e){ var t=e.target.closest&&e.target.closest("#chatBtn,#chatSend,#chatDesk,#chatRename,#chatNameSave,[data-clead],[data-cpick],[data-chatlead],[data-ctool]");
     if(!t){ var ac=document.getElementById("chatAc"); if(ac&&!ac.hidden&&!e.target.closest("#chatAc,#chatText")) ac.hidden=true; return; }
     if(t.id==="chatBtn"){ chatOpen(); return; }
+    if(t.id==="chatRename"){ CHAT_RENAMING=true; chatDraw(); var ni=document.getElementById("chatNameIn"); if(ni){ ni.focus(); ni.select(); } return; }
+    if(t.id==="chatNameSave"){ chatRename((document.getElementById("chatNameIn")||{}).value); return; }
     if(t.id==="chatDesk"){ try{ Notification.requestPermission().then(chatDeskUpdate,chatDeskUpdate); }catch(x){ chatDeskUpdate(); } return; }
     if(t.dataset.ctool){ var tb=document.getElementById("chatText"); if(tb){ var v=tb.value, pos=tb.selectionStart||v.length, pre=v.slice(0,pos), sp=(pre&&!/\s$/.test(pre))?" ":""; tb.value=pre+sp+t.dataset.ctool+v.slice(pos); var np=(pre+sp+t.dataset.ctool).length; tb.focus(); tb.setSelectionRange(np,np); chatAcUpdate(); } return; }
     if(t.id==="chatSend"){ chatSend(); return; }
