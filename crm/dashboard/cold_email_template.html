@@ -746,9 +746,9 @@
   function clamp(r){ return [Math.max(MIN,Math.min(r[0],MAX)), Math.max(MIN,Math.min(r[1],MAX))]; }
 
   function agg(s,e){
-    var o={t:{}, odays:0, cdays:0}; for (var k in M){ o[k]=0; o.t[k]=0; }
+    var o={t:{}, odays:0, cdays:0, wdays:0}; for (var k in M){ o[k]=0; o.t[k]=0; }
     for (var i=s;i<=e;i++){
-      var r=BY[i], hasOut=i>=OSTART, hasCall=i>=CSTART; if (hasOut) o.odays++; if (hasCall) o.cdays++;
+      var r=BY[i], hasOut=i>=OSTART, hasCall=i>=CSTART; if (hasOut) o.odays++; if (hasCall) o.cdays++; var dw=new Date(iso(i)+"T12:00:00Z").getUTCDay(); if (hasOut && dw>=1 && dw<=5) o.wdays++;
       for (var k2 in M){
         if (OUTREACH[k2] && !hasOut) continue;                 // no daily sending data before PlusVibe
         if (CALLKEY[k2] && !hasCall) continue;                 // calls are counted from CSTART
@@ -796,7 +796,7 @@
     var a=cur[den]?cur[num]/cur[den]:null, b=prv.odays===0||!prv[den]?null:prv[num]/prv[den];
     var dp=tgt<.05?2:0, v=a==null?"\u2014":(a*100).toFixed(a<.1?2:1).replace(/\.0+$/,"")+"%";
     var q=a==null?0:a/tgt, col=q>=1?"var(--up)":q>=.7?"var(--amber)":"var(--down)";
-    var sub=a==null?(cur[den]?"":(den==="contacted"?(cur[num]>0?fmt(cur[num])+" repl"+(cur[num]>1?"ies":"y")+" came in. No emails go out at weekends.":"no emails go out at weekends"):"no replies in this range")):fmt(cur[num])+" of "+fmt(cur[den])+" "+unit;
+    var none=cur.wdays===0?"No emails go out at weekends.":"No emails sent yet. Sending opens at 2 PM Lagos time on weekdays.", sub=a==null?(cur[den]?"":(den==="contacted"?(cur[num]>0?fmt(cur[num])+" repl"+(cur[num]>1?"ies":"y")+" came in. "+none:none.charAt(0).toLowerCase()+none.slice(1)):"no replies in this range")):fmt(cur[num])+" of "+fmt(cur[den])+" "+unit;
     var note=early&&a!=null?'<span class="chg flat" title="Replies arrive days after the email, so a short range under-counts">early</span>':'';
     return '<div class="card"><div class="ctop"><span class="cname">'+name+'</span><span class="cr">'+note+chg(a,b,true)+'</span></div>'+
       '<div class="val'+(a==null?' na':'')+'">'+v+'</div><div class="prev">'+sub+(b==null?"":" \u00b7 "+(b*100).toFixed(b<.1?2:1).replace(/\.0+$/,"")+"% "+pw)+'</div>'+
