@@ -1006,7 +1006,7 @@
   var BUCKET_NAME={meeting:"Meeting booked", followup:"Follow up", chasing:"Multi-touch", callback:"Callback", later:"Later", lost:"Lost", won:"Won"};
   var PVWS="6a6e634971ad0f0e174a5471";
   var ACTIONS_URL="__LEAD_ACTIONS_URL__";   // the Lead Actions web app address; empty = the Resolve section stays hidden
-  var fStatus="all", fSource="all", fNotes="all", fReview="all", fSort="priority", fNode=null, openId=null, qsSel=0, qsHits=[];
+  var fStatus="all", fSource="all", fNotes="all", fReview="all", fSort="recent", fNode=null, openId=null, qsSel=0, qsHits=[];
   var SEV={bad:3, warn:2, ok:1, info:0};
 
   function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
@@ -1103,7 +1103,7 @@
     try{ localStorage.setItem("koya-opps-order",JSON.stringify(ORDER)); }catch(e){}
     if (db){ try{ db.doc("prefs/opps_order").set({ids:ORDER,updated:Date.now()}).catch(function(){}); }catch(e){} }
   }
-  var SORTNAME={priority:"Needs attention first",recent:"Last touch",due:"Follow-up due",tag:"Tag",name:"Name",notes:"Most notes",mine:"My order"}, SDEF={priority:"asc",recent:"desc",due:"asc",tag:"asc",name:"asc",notes:"asc",mine:"asc"}, fDir="asc";
+  var SORTNAME={priority:"Needs attention first",recent:"Last touch",due:"Follow-up due",tag:"Tag",name:"Name",notes:"Most notes",mine:"My order"}, SDEF={priority:"asc",recent:"desc",due:"asc",tag:"asc",name:"asc",notes:"asc",mine:"asc"}, fDir="desc";
   function filtered(){
     var base=fView==="open"?OPPS:CLOSED.filter(function(o){ return o.bucket===fView; });
     var arr=base.filter(function(o){
