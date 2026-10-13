@@ -40,3 +40,7 @@ jobs:
       - name: Call lists to dialler tags
         run: |
           if [ "$DRY" = "true" ]; then python crm/scripts/verify_cloudtalk_tags.py; else python crm/scripts/verify_cloudtalk_tags.py --commit; fi
+      - name: Merge the empty duplicate people CloudTalk creates (notes move to the real person first)
+        continue-on-error: true
+        run: |
+          if [ "$DRY" = "true" ]; then python crm/scripts/merge_cloudtalk_twins.py --days 3; else python crm/scripts/merge_cloudtalk_twins.py --commit --days 3; fi
