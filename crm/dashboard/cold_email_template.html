@@ -35,6 +35,26 @@
   html[data-koya-theme="dark"] .card:hover, html[data-koya-theme="dark"] .orow:hover{box-shadow:0 0 0 1px rgba(161,137,255,.5), 0 0 26px -6px rgba(161,137,255,.4); transition:box-shadow .25s ease;}
   html[data-koya-theme="dark"] .card{transition:box-shadow .25s ease;}
   html[data-koya-theme="dark"] .menu, html[data-koya-theme="dark"] .pop{box-shadow:0 0 0 1px rgba(0,0,0,.08), 0 18px 40px -16px rgba(255,255,255,.85);}
+  /* Lead Catcher: a hidden dev perk (tap the title 7 times, then the PIN). Dark by design: in dark mode it is inverted back so it looks the same */
+  #lcRoot{position:fixed; inset:0; z-index:99999; background:#07080b; color:#f2f4f7; font-family:var(--font); touch-action:none; overflow:hidden;}
+  #lcRoot[hidden]{display:none!important;}
+  html[data-koya-theme="dark"] #lcRoot{filter:invert(1) hue-rotate(180deg);}
+  #lcRoot canvas{display:block; width:100%; height:100%;}
+  #lcRoot .lcglow{position:absolute; inset:0; pointer-events:none; background:radial-gradient(55% 42% at 12% -8%,rgba(34,192,122,.55),transparent 70%),radial-gradient(52% 40% at 92% -6%,rgba(122,99,255,.6),transparent 70%),radial-gradient(60% 36% at 50% 112%,rgba(122,99,255,.25),transparent 70%); background-size:130% 130%; animation:lcdrift 16s ease-in-out infinite alternate;}
+  @keyframes lcdrift{0%{background-position:0% 0%,100% 0%,50% 100%;} 100%{background-position:18% 8%,82% 10%,40% 88%;}}
+  #lcx{position:absolute; top:12px; right:12px; z-index:3; width:34px; height:34px; border-radius:10px; border:1px solid #222633; background:rgba(16,18,24,.8); color:#a4abb8; cursor:pointer; font-size:14px;}
+  #lcRoot .lclayer{position:absolute; inset:0; z-index:2; display:grid; place-items:center; padding:20px; background:rgba(7,8,11,.78); backdrop-filter:blur(6px);}
+  #lcRoot .lclayer[hidden]{display:none!important;}
+  #lcRoot .lcpanel{width:min(420px,100%); background:#101218; border:1px solid #222633; border-radius:20px; padding:26px 24px 22px; text-align:center; box-shadow:0 30px 80px -30px rgba(122,99,255,.45);}
+  #lcRoot .lceyebrow{font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#6b7280;}
+  #lcRoot h1{margin:8px 0 6px; font-size:30px; letter-spacing:-.03em; font-weight:650; color:#f2f4f7;} #lcRoot h2{margin:6px 0 4px; font-size:22px; letter-spacing:-.02em; color:#f2f4f7;}
+  #lcRoot p{margin:0 0 14px; color:#a4abb8; font-size:14px; line-height:1.55;}
+  #lcRoot .lcbtn{appearance:none; border:0; background:#7a63ff; color:#fff; font:600 15px var(--font); padding:12px 22px; border-radius:12px; cursor:pointer;} #lcRoot .lcbtn.ghost{background:transparent; border:1px solid #222633; color:#a4abb8;}
+  #lcRoot .lclegend{display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; text-align:left; margin:14px 0 18px; font-size:13px; color:#a4abb8;} #lcRoot .lclegend span{display:flex; align-items:center; gap:8px;}
+  #lcRoot .lcdot{flex:none; width:18px; height:18px; border-radius:50%; display:grid; place-items:center; font:700 10px var(--mono); color:#06070a; font-style:normal;}
+  #lcRoot .lckeys{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:12px 0;} #lcRoot .lckeys button{font:600 20px var(--font); padding:14px 0; border-radius:12px; border:1px solid #222633; background:#0b0d12; color:#f2f4f7; cursor:pointer;}
+  #lcRoot .lcpin{display:flex; justify-content:center; gap:10px; margin:10px 0 4px;} #lcRoot .lcpin i{width:14px; height:14px; border-radius:50%; border:1.5px solid #6b7280;} #lcRoot .lcpin i.on{background:#7a63ff; border-color:#7a63ff;}
+  #lcRoot .lcerr{color:#ff5a4d; min-height:20px; font-size:13px;} #lcRoot .lctiny{font-size:12px; color:#6b7280; margin-top:10px;}
   #themeBtn svg{display:block;}
   *{box-sizing:border-box;}
   html{scrollbar-gutter:stable; overflow-y:scroll;}
@@ -512,6 +532,12 @@
 </script>
 
 
+<div id="lcRoot" hidden><canvas id="lcc"></canvas><div class="lcglow" aria-hidden="true"></div><button type="button" id="lcx" aria-label="Close">&#10005;</button>
+<div class="lclayer" id="lcpinlayer" hidden><div class="lcpanel"><div class="lceyebrow">Dev perk</div><h2>Enter the PIN</h2><div class="lcpin" id="lcpin"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="lcerr" id="lcerr"></div><div class="lckeys" id="lckeys"></div><button class="lcbtn ghost" id="lcpinclose">Close</button></div></div>
+<div class="lclayer" id="lcintro" hidden><div class="lcpanel"><div class="lceyebrow">Koya &middot; dev perk</div><h1>Lead Catcher</h1><p>Slide your inbox to catch what falls. Build a streak for a bigger multiplier. Each level is a bigger campaign: faster, busier, riskier.</p>
+<div class="lclegend"><span><i class="lcdot" style="background:#22c07a">AB</i>Lead  +10</span><span><i class="lcdot" style="background:#7a63ff;color:#fff">R</i>Reply  +30</span><span><i class="lcdot" style="background:#ffc24a">&#9733;</i>Meeting booked  +100</span><span><i class="lcdot" style="background:#ff5a4d;color:#fff">&times;</i>Bounce  lose a life</span><span><i class="lcdot" style="background:#ff8a3d;color:#1a0d02">!</i>Spam trap  lose a life</span><span><i class="lcdot" style="background:#4b5160;color:#d4d8e0">u</i>Unsubscribe  breaks streak</span></div>
+<button class="lcbtn" id="lcplay">Start campaign</button><div class="lctiny">Move with the mouse, your finger, or the arrow keys. Space pauses. Esc closes.</div></div></div>
+<div class="lclayer" id="lcover" hidden><div class="lcpanel"><div class="lceyebrow">Campaign over</div><h2 id="lcovlevel">Level 1</h2><h1 id="lcovscore">0</h1><p id="lcovbest"></p><button class="lcbtn" id="lcagain">Run it again</button></div></div></div>
 <div id="nightglow" aria-hidden="true"></div><div id="themeVeil" aria-hidden="true"></div>
 <header><div class="wrap">
   <div class="hrow">
@@ -2496,4 +2522,90 @@
   },{passive:true});
   window.addEventListener("wheel",function(){ clearTimeout(window.__ptrT); window.__ptrT=setTimeout(function(){ if(!busy){ wheelAcc=0; reset(); } },300); },{passive:true});
 })();
+</script>
+<script>
+
+(function(){
+  var $=function(i){ return document.getElementById(i==="lcRoot"||i==="lcx"?i:i); };
+  // ---------- the hidden door
+  var HASH="3bb78535cc9555ff19fe3556aaa41c78a0a45c64d49ba2bc564507648a8e77a1", taps=0, tapT=0, pin="";
+  function show(id){ ["pinlayer","intro","over"].forEach(function(x){ $("lc"+x).hidden=x!==id; }); }
+  var hd=document.querySelector("header h1"); if(hd) hd.addEventListener("click",function(){ var n=Date.now(); taps=(n-tapT>4000)?1:taps+1; tapT=n; if(taps>=7){ taps=0; pin=""; paintPin(); $("lcRoot").hidden=false; show("pinlayer"); } });
+  var keys=$("lckeys"); [1,2,3,4,5,6,7,8,9,"",0,"⌫"].forEach(function(k){ var b=document.createElement("button"); b.textContent=k; if(k===""){ b.style.visibility="hidden"; } b.addEventListener("click",function(){ press(k); }); keys.appendChild(b); });
+  function paintPin(){ [].forEach.call($("lcpin").children,function(d,i){ d.className=i<pin.length?"on":""; }); }
+  function sha(t){ return crypto.subtle.digest("SHA-256",new TextEncoder().encode(t)).then(function(b){ return [].map.call(new Uint8Array(b),function(x){ return ("0"+x.toString(16)).slice(-2); }).join(""); }); }
+  function press(k){ if(k==="⌫"){ pin=pin.slice(0,-1); } else if(k!==""&&pin.length<6){ pin+=k; } $("lcerr").textContent=""; paintPin();
+    if(pin.length===6){ sha(pin).then(function(h){ if(h===HASH){ show("intro"); } else { $("lcerr").textContent="Not that one."; pin=""; paintPin(); } }); } }
+  $("lcpinclose").addEventListener("click",closeAll);
+  function closeAll(){ running=false; paused=false; show(null); $("lcRoot").hidden=true; }
+  $("lcx").addEventListener("click",closeAll);
+  addEventListener("keydown",function(e){ if($("lcRoot").hidden) return; if(e.key==="Escape"){ closeAll(); return; } if(!$("lcpinlayer").hidden){ if(/^[0-9]$/.test(e.key)) press(e.key); else if(e.key==="Backspace") press("⌫"); } });
+
+  // ---------- the game
+  var cv=$("lcc"), cx=cv.getContext("2d"), W=0, H=0, DPR=Math.min(2,window.devicePixelRatio||1);
+  function fit(){ var r=cv.getBoundingClientRect(); W=r.width; H=r.height; cv.width=W*DPR; cv.height=H*DPR; cx.setTransform(DPR,0,0,DPR,0,0); if(P) P.y=H-54; }
+  var P=null, items=[], parts=[], floats=[], score=0, lives=3, level=1, combo=0, best=0, running=false, paused=false, last=0, spawnT=0, lvlT=0, shake=0, flash=0, banner=0, bannerTxt="", keyL=false, keyR=false, tx=null, missed=0;
+  try{ best=+localStorage.getItem("leadCatcherBest")||0; }catch(e){}
+  var NAMES=["AK","JM","TS","RB","LN","PD","CH","MO","EV","SA","DK","IB","FN","GY"];
+  var CAMPAIGNS=["Warm-up list","Rejoice","Original copy","Free build","Cycle 1","TAM sweep","Nurture","Hiring guide","Boss level: Q4"];
+  var TYPES={ lead:{c:"#22c07a",ink:"#06070a"}, reply:{c:"#7a63ff",ink:"#fff"}, meeting:{c:"#ffc24a",ink:"#1a1203"}, bounce:{c:"#ff5a4d",ink:"#fff"}, spam:{c:"#ff8a3d",ink:"#1a0d02"}, unsub:{c:"#4b5160",ink:"#d4d8e0"} };
+  function speed(){ return 150+level*34; }
+  function every(){ return Math.max(.28,.95-level*.075); }
+  function pick(){ var r=Math.random(), bad=Math.min(.34,.1+level*.03), m=.04+Math.min(.04,level*.004), rp=.17;
+    if(r<bad*.5) return "bounce"; if(r<bad) return "spam"; if(r<bad+.05) return "unsub"; if(r<bad+.05+m) return "meeting"; if(r<bad+.05+m+rp) return "reply"; return "lead"; }
+  function spawn(){ var t=pick(), r=t==="meeting"?19:16; items.push({t:t,x:r+Math.random()*(W-2*r),y:-r,r:r,vy:speed()*(0.85+Math.random()*.35),ph:Math.random()*6,tx:t==="lead"?NAMES[(Math.random()*NAMES.length)|0]:null}); }
+  function burst(x,y,c,n){ for(var i=0;i<n;i++){ var a=Math.random()*6.28,s=60+Math.random()*180; parts.push({x:x,y:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-60,l:.6+Math.random()*.4,c:c}); } }
+  function say(x,y,t,c){ floats.push({x:x,y:y,t:t,c:c,l:1}); }
+  function start(){ show(null); fit(); P={x:W/2,w:Math.min(150,W*.34),h:16,y:H-54}; items=[]; parts=[]; floats=[]; score=0; lives=3; level=1; combo=0; missed=0; spawnT=0; lvlT=0; shake=0; flash=0; running=true; paused=false; last=performance.now(); bannerTxt="Level 1 · "+CAMPAIGNS[0]; banner=2.4; requestAnimationFrame(loop); }
+  function mult(){ return 1+Math.min(4,Math.floor(combo/5)); }
+  function catchIt(it){ var T=TYPES[it.t];
+    if(it.t==="lead"||it.t==="reply"||it.t==="meeting"){ var base=it.t==="lead"?10:it.t==="reply"?30:100; combo++; var g=base*mult(); score+=g; burst(it.x,P.y,T.c,it.t==="meeting"?34:14); say(it.x,P.y-24,"+"+g,T.c); if(it.t==="meeting"){ flash=.35; } }
+    else if(it.t==="unsub"){ combo=0; burst(it.x,P.y,T.c,10); say(it.x,P.y-24,"streak lost","#9aa1ae"); }
+    else { lives--; combo=0; shake=.45; flash=-.5; burst(it.x,P.y,T.c,26); say(it.x,P.y-24,it.t==="bounce"?"bounced":"spam trap","#ff5a4d"); if(lives<=0) end(); } }
+  function end(){ running=false; if(score>best){ best=score; try{ localStorage.setItem("leadCatcherBest",String(best)); }catch(e){} } $("lcovlevel").textContent="Level "+level+" · "+CAMPAIGNS[Math.min(level-1,CAMPAIGNS.length-1)]; $("lcovscore").textContent=score.toLocaleString(); $("lcovbest").textContent=score>=best&&score>0?"New best":"Best "+best.toLocaleString(); show("over"); }
+  function loop(now){ if(!running) return; var dt=Math.min(.05,(now-last)/1000); last=now; if(!paused) step(dt); draw(); requestAnimationFrame(loop); }
+  function step(dt){
+    var v=(keyR?1:0)-(keyL?1:0); if(v) P.x+=v*Math.max(520,W*0.9)*dt; if(tx!==null) P.x+=(tx-P.x)*Math.min(1,dt*18); P.x=Math.max(P.w/2,Math.min(W-P.w/2,P.x));
+    spawnT+=dt; if(spawnT>=every()){ spawnT=0; spawn(); }
+    lvlT+=dt; if(lvlT>=22){ lvlT=0; level++; bannerTxt="Level "+level+" · "+CAMPAIGNS[Math.min(level-1,CAMPAIGNS.length-1)]; banner=2.4; flash=.2; }
+    for(var i=items.length-1;i>=0;i--){ var it=items[i]; it.y+=it.vy*dt; it.x+=Math.sin(it.ph+it.y/60)*14*dt*(level>3?1:.4);
+      if(it.y+it.r>=P.y && it.y-it.r<=P.y+P.h && Math.abs(it.x-P.x)<=P.w/2+it.r*.55){ catchIt(it); items.splice(i,1); if(!running) return; continue; }
+      if(it.y-it.r>H){ if(it.t==="lead"||it.t==="reply"||it.t==="meeting"){ combo=0; missed++; } items.splice(i,1); } }
+    for(var j=parts.length-1;j>=0;j--){ var q=parts[j]; q.l-=dt; if(q.l<=0){ parts.splice(j,1); continue; } q.x+=q.vx*dt; q.y+=q.vy*dt; q.vy+=420*dt; }
+    for(var k=floats.length-1;k>=0;k--){ var f=floats[k]; f.l-=dt*1.1; f.y-=40*dt; if(f.l<=0) floats.splice(k,1); }
+    if(shake>0) shake-=dt; if(flash>0) flash=Math.max(0,flash-dt); else if(flash<0) flash=Math.min(0,flash+dt); if(banner>0) banner-=dt; }
+  function orb(it){ var T=TYPES[it.t]; cx.save(); cx.translate(it.x,it.y); cx.shadowColor=T.c; cx.shadowBlur=18; cx.fillStyle=T.c; cx.beginPath();
+    if(it.t==="spam"){ cx.moveTo(0,-it.r); cx.lineTo(it.r,0); cx.lineTo(0,it.r); cx.lineTo(-it.r,0); cx.closePath(); } else if(it.t==="meeting"){ for(var i=0;i<10;i++){ var a=-1.5708+i*0.62832, rr=i%2?it.r*.5:it.r*1.05; cx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr); } cx.closePath(); } else { cx.arc(0,0,it.r,0,6.2832); }
+    cx.fill(); cx.shadowBlur=0; cx.fillStyle=T.ink; cx.font="700 "+(it.t==="lead"?12:15)+"px Geist Mono, monospace"; cx.textAlign="center"; cx.textBaseline="middle";
+    cx.fillText(it.t==="lead"?it.tx:it.t==="reply"?"R":it.t==="meeting"?"":it.t==="bounce"?"×":it.t==="spam"?"!":"u",0,it.t==="meeting"?0:1); cx.restore(); }
+  function draw(){ cx.save(); cx.clearRect(0,0,W,H); if(shake>0) cx.translate((Math.random()-.5)*10*shake,(Math.random()-.5)*10*shake);
+    // lane lines
+    cx.strokeStyle="rgba(255,255,255,.04)"; cx.lineWidth=1; for(var x=0;x<=W;x+=Math.max(48,W/10)){ cx.beginPath(); cx.moveTo(x,0); cx.lineTo(x,H); cx.stroke(); }
+    items.forEach(orb);
+    parts.forEach(function(q){ cx.globalAlpha=Math.max(0,q.l); cx.fillStyle=q.c; cx.fillRect(q.x-2,q.y-2,4,4); }); cx.globalAlpha=1;
+    // the inbox
+    var g=cx.createLinearGradient(P.x-P.w/2,0,P.x+P.w/2,0); g.addColorStop(0,"#7a63ff"); g.addColorStop(1,"#22c07a"); cx.shadowColor="#7a63ff"; cx.shadowBlur=22; cx.fillStyle=g;
+    cx.beginPath(); cx.roundRect?cx.roundRect(P.x-P.w/2,P.y,P.w,P.h,9):cx.rect(P.x-P.w/2,P.y,P.w,P.h); cx.fill(); cx.shadowBlur=0;
+    floats.forEach(function(f){ cx.globalAlpha=Math.max(0,f.l); cx.fillStyle=f.c; cx.font="700 16px Geist, sans-serif"; cx.textAlign="center"; cx.fillText(f.t,f.x,f.y); }); cx.globalAlpha=1;
+    if(flash!==0){ cx.fillStyle=flash>0?"rgba(255,194,74,"+(flash*.35)+")":"rgba(255,90,77,"+(-flash*.5)+")"; cx.fillRect(0,0,W,H); }
+    // HUD
+    cx.textBaseline="top"; cx.textAlign="left"; cx.fillStyle="#f2f4f7"; cx.font="700 26px Geist, sans-serif"; cx.fillText(score.toLocaleString(),16,14);
+    cx.fillStyle="#6b7280"; cx.font="500 11px Geist Mono, monospace"; cx.fillText("LEVEL "+level+"   BEST "+Math.max(best,score).toLocaleString(),16,46);
+    if(combo>=3){ cx.fillStyle="#ffc24a"; cx.font="700 13px Geist Mono, monospace"; cx.fillText("STREAK "+combo+"   x"+mult(),16,64); }
+    for(var h=0;h<3;h++){ cx.beginPath(); cx.arc(W-24-h*24,26,8,0,6.2832); if(h<lives){ cx.fillStyle="#ff5a4d"; cx.shadowColor="#ff5a4d"; cx.shadowBlur=10; cx.fill(); cx.shadowBlur=0; } else { cx.strokeStyle="#3a3f4d"; cx.lineWidth=2; cx.stroke(); } }
+    if(banner>0){ cx.globalAlpha=Math.min(1,banner); cx.textAlign="center"; cx.fillStyle="#f2f4f7"; cx.font="700 28px Geist, sans-serif"; cx.fillText(bannerTxt,W/2,H*.3); cx.globalAlpha=1; }
+    if(paused){ cx.fillStyle="rgba(7,8,11,.6)"; cx.fillRect(0,0,W,H); cx.fillStyle="#f2f4f7"; cx.textAlign="center"; cx.font="700 28px Geist, sans-serif"; cx.fillText("Paused",W/2,H/2-14); }
+    cx.restore(); }
+  // input
+  function setX(e){ var r=cv.getBoundingClientRect(); tx=e.clientX-r.left; }
+  cv.addEventListener("pointermove",setX); cv.addEventListener("pointerdown",function(e){ setX(e); });
+  addEventListener("keydown",function(e){ if($("lcRoot").hidden) return; if(e.key==="ArrowLeft"||e.key==="a") keyL=true; if(e.key==="ArrowRight"||e.key==="d") keyR=true; if(e.key===" "&&running){ paused=!paused; e.preventDefault(); } if((e.key==="Enter")&&!$("lcover").hidden) start(); });
+  addEventListener("keyup",function(e){ if(e.key==="ArrowLeft"||e.key==="a") keyL=false; if(e.key==="ArrowRight"||e.key==="d") keyR=false; });
+  document.addEventListener("visibilitychange",function(){ if(document.hidden&&running) paused=true; });
+  $("lcplay").addEventListener("click",start); $("lcagain").addEventListener("click",start);
+  addEventListener("resize",function(){ if(!$("lcRoot").hidden) fit(); }); P=null;
+  window.__lcSim=function(sec,follow){ for(var i=0;i<sec*60;i++){ if(follow&&items.length){ var n=items.filter(function(t){ return t.t==='lead'||t.t==='reply'||t.t==='meeting'; }).sort(function(a,b){ return b.y-a.y; })[0]; if(n) tx=n.x; } step(1/60); if(!running) break; } draw(); };
+  // for the preview screenshots only: ?play starts straight away
+})();
+
 </script>
