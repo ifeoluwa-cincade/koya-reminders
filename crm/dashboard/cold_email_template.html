@@ -1527,7 +1527,8 @@
   function pOverviewRight(o,d){
     var th=o.thread||[], last=th[0], seqs=o.sequence||[], active=seqs.filter(function(q){ return /active|running|sending|waiting/i.test(String(q.status||"")+" "+String(q.camp||"")); }).length;
     var banner, tone="gray";
-    if(last&&last.from_lead){ banner='<b>Replied to our email</b><span>They wrote on '+esc(fmtDate(last.t))+'.'+(seqs.length?" Check Sequences to confirm sending has stopped.":"")+'</span>'; tone="green"; }
+    var rep=th.filter(function(m){ return m.from_lead; })[0];
+    if(rep){ banner='<b>Replied to our email</b><span>They wrote on '+esc(fmtDate(rep.t))+'.'+(last&&!last.from_lead?" We have written since.":"")+(seqs.length?" Check Sequences to confirm sending has stopped.":"")+'</span>'; tone="green"; }
     else if(th.length){ banner='<b>We wrote last, no reply yet</b><span>Last email on '+esc(fmtDate(last.t))+'.</span>'; tone="amber"; }
     else if(o.source&&/call/i.test(o.source)&&!/email/i.test(o.source)){ banner='<b>Cold call lead</b><span>Check Calls for what happened.</span>'; tone="blue"; }
     else { banner='<b>No emails yet</b><span>Nothing has been sent or received.</span>'; }
