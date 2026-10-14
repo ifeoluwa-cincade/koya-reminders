@@ -1357,7 +1357,7 @@
         var o={id:id,name:attioVal(pb,"name")||dname,company:parts.length>1?parts.slice(1).join("/").trim():null,email:em,phone:null,linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:stage,source:"Email",
           last_touch:null,due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,missed:ms||null,summary:null,call_at:null,attempts:null,campaign:null,
           links:{attio:"https://app.attio.com/koya-talent/person/"+id,deal:did?"https://app.attio.com/koya-talent/deals/record/"+did:null,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[]};
-        OPPS.push(o); var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=OPPS.length; if(note) note.textContent="";
+        OPPS.push(o); var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=oppNL().length; if(note) note.textContent="";
         openPanel(id);
       });
     }).catch(function(e){ if(note) note.textContent="Could not open that lead: "+errText(e); });
@@ -1390,24 +1390,29 @@
     if (db){ try{ db.doc("prefs/opps_order").set({ids:ORDER,updated:Date.now()}).catch(function(){}); }catch(e){} }
   }
   var SORTNAME={priority:"Needs attention first",recent:"Last touch",due:"Follow-up due",tag:"Tag",name:"Name",notes:"Most notes",mine:"My order"}, SDEF={priority:"asc",recent:"desc",due:"asc",tag:"asc",name:"asc",notes:"asc",mine:"asc"}, fDir="desc";
+  function oppNL(){ return OPPS.filter(function(o){ return o.bucket!=="later"; }); }
+  function oppLT(){ return OPPS.filter(function(o){ return o.bucket==="later"; }); }
+  function viewBase(){ return fView==="later"?oppLT():oppNL(); }
+  function isClosedView(){ return fView==="lost"||fView==="won"; }
   function filtered(){
-    var base=fView==="open"?OPPS:CLOSED.filter(function(o){ return o.bucket===fView; });
+    var base=fView==="open"?oppNL():fView==="later"?oppLT():CLOSED.filter(function(o){ return o.bucket===fView; });
     var arr=base.filter(function(o){
       var d=dueInfo(o);
-      if (fView!=="open") return true;
+      if (isClosedView()) return true;
       if (fStatus==="overdue" && d.cls!=="over") return false;
       if (fStatus==="today" && d.cls!=="today") return false;
-      if (["meeting","followup","chasing","callback","later"].indexOf(fStatus)>=0 && o.bucket!==fStatus) return false;
+      if (fView==="open" && ["meeting","followup","chasing","callback"].indexOf(fStatus)>=0 && o.bucket!==fStatus) return false;
       if (fSource!=="all" && o.source.indexOf(fSource)<0) return false;
       if (fReview!=="all" && revState(o.id)!==fReview) return false;
       if (fNotes==="has" && !teamNotes(o)) return false;
       if (fNotes==="none" && teamNotes(o)) return false;
-      return true; }).sort(SORTS[fSort]||SORTS.recent);
-    if (fView!=="open"){ arr.sort(function(a,b){ return String(b.closed_at||b.last_touch||"").localeCompare(String(a.closed_at||a.last_touch||"")); }); return arr; }
+      return true; }).sort((fView==="later"&&fSort==="priority")?SORTS.due:(SORTS[fSort]||SORTS.recent));
+    if (isClosedView()){ arr.sort(function(a,b){ return String(b.closed_at||b.last_touch||"").localeCompare(String(a.closed_at||a.last_touch||"")); }); return arr; }
     if (fDir!==SDEF[fSort]) arr.reverse();
     return arr;
   }
-  function countWhere(fn){ var n=0; OPPS.forEach(function(o){ if (fn(o)) n++; }); return n; }
+  function countWhere(fn){ var n=0; oppNL().forEach(function(o){ if (fn(o)) n++; }); return n; }
+  function countView(fn){ var n=0; viewBase().forEach(function(o){ if (fn(o)) n++; }); return n; }
   var ICON={note:'<path d="M5 4h14v12H9l-4 4z"/>',filter:'<path d="M3 5h18l-7 8v6l-4-2v-4z"/>',layers:'<path d="M12 3l9 4.5-9 4.5-9-4.5zM3 12l9 4.5 9-4.5M3 16.5L12 21l9-4.5"/>',sort:'<path d="M8 4v16M8 4L5 7M8 4l3 3M16 20V4M16 20l-3-3M16 20l3-3"/>',chev:'<path d="M6 9l6 6 6-6"/>',arrow:'<path d="M12 5v14M12 5l-5 5M12 5l5 5"/>'};
   function svg(k,sz){ return '<svg width="'+(sz||15)+'" height="'+(sz||15)+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICON[k]+'</svg>'; }
   var OPEN_MENU=null;
@@ -1417,14 +1422,14 @@
       (open?'<div class="menu" role="menu">'+items.map(function(i){ return '<button class="mitem" type="button" role="menuitemradio" aria-checked="'+(i.k===cur)+'" data-menu="'+id+'" data-opt="'+esc(i.k)+'"><span class="tick">'+(i.k===cur?"✓":"")+'</span><span class="ml">'+esc(i.l)+'</span>'+(i.n==null?'':'<span class="mn'+(i.hot&&i.n?" hot":"")+'">'+i.n+'</span>')+'</button>'; }).join("")+'</div>':'')+'</div>';
   }
   function renderTools(){
-    var over=countWhere(function(o){ return dueInfo(o).cls==="over"; }), today=countWhere(function(o){ return dueInfo(o).cls==="today"; });
-    var st=[{k:"all",l:"All",n:OPPS.length},{k:"overdue",l:"Overdue",n:over,hot:true},{k:"today",l:"Due today",n:today,hot:true}].concat(["meeting","followup","chasing","callback","later"].map(function(b){ return {k:b,l:BUCKET_NAME[b],n:countWhere(function(o){ return o.bucket===b; })}; }));
-    var so=[{k:"all",l:"All sources",n:OPPS.length},{k:"Email",l:"Email",n:countWhere(function(o){ return o.source.indexOf("Email")>=0; })},{k:"Call",l:"Cold call",n:countWhere(function(o){ return o.source.indexOf("Call")>=0; })}];
+    var over=countView(function(o){ return dueInfo(o).cls==="over"; }), today=countView(function(o){ return dueInfo(o).cls==="today"; });
+    var st=[{k:"all",l:"All",n:viewBase().length},{k:"overdue",l:"Overdue",n:over,hot:true},{k:"today",l:"Due today",n:today,hot:true}].concat(["meeting","followup","chasing","callback"].map(function(b){ return {k:b,l:BUCKET_NAME[b],n:countView(function(o){ return o.bucket===b; })}; }));
+    var so=[{k:"all",l:"All sources",n:viewBase().length},{k:"Email",l:"Email",n:countView(function(o){ return o.source.indexOf("Email")>=0; })},{k:"Call",l:"Cold call",n:countView(function(o){ return o.source.indexOf("Call")>=0; })}];
     var sr=Object.keys(SORTNAME).map(function(k){ return {k:k,l:SORTNAME[k]}; });
     var lostN=CLOSED.filter(function(o){ return o.bucket==="lost"; }).length, wonN=CLOSED.filter(function(o){ return o.bucket==="won"; }).length;
-    var vsw='<div class="seg" id="oview" role="group" aria-label="Which leads">'+[["open","Open",OPPS.length],["lost","Lost",lostN],["won","Won",wonN]].map(function(v){ return '<button type="button" class="segb" data-view="'+v[0]+'" aria-pressed="'+(fView===v[0])+'">'+v[1]+' <b>'+v[2]+'</b></button>'; }).join("")+'</div>';
-    if (fView!=="open"){ document.getElementById("otools").innerHTML=vsw; return; }
-    document.getElementById("otools").innerHTML=vsw+menuHTML("status",st,fStatus,"Status","filter",fStatus!=="all")+menuHTML("source",so,fSource,"Source","layers",fSource!=="all")+menuHTML("review",[{k:"all",l:"All leads",n:OPPS.length},{k:"open",l:"Open",n:countWhere(function(o){ return revState(o.id)==="open"; }),hot:true},{k:"ongoing",l:"Ongoing",n:countWhere(function(o){ return revState(o.id)==="ongoing"; })},{k:"done",l:"Resolved",n:countWhere(function(o){ return revState(o.id)==="done"; })}],fReview,"Open, ongoing or resolved","layers",fReview!=="all")+menuHTML("notes",[{k:"all",l:"All leads",n:OPPS.length},{k:"has",l:"Has notes",n:countWhere(function(o){ return teamNotes(o)>0; })},{k:"none",l:"No notes",n:countWhere(function(o){ return teamNotes(o)===0; })}],fNotes,"Notes","note",fNotes!=="all")+menuHTML("sort",sr,fSort,"Sort","sort",false)+
+    var vsw='<div class="seg" id="oview" role="group" aria-label="Which leads">'+[["open","Open",oppNL().length],["later","Later",oppLT().length],["lost","Lost",lostN],["won","Won",wonN]].map(function(v){ return '<button type="button" class="segb" data-view="'+v[0]+'" aria-pressed="'+(fView===v[0])+'">'+v[1]+' <b>'+v[2]+'</b></button>'; }).join("")+'</div>';
+    if (isClosedView()){ document.getElementById("otools").innerHTML=vsw; return; }
+    document.getElementById("otools").innerHTML=vsw+menuHTML("status",st,fStatus,"Status","filter",fStatus!=="all")+menuHTML("source",so,fSource,"Source","layers",fSource!=="all")+menuHTML("review",[{k:"all",l:"All leads",n:viewBase().length},{k:"open",l:"Open",n:countView(function(o){ return revState(o.id)==="open"; }),hot:true},{k:"ongoing",l:"Ongoing",n:countView(function(o){ return revState(o.id)==="ongoing"; })},{k:"done",l:"Resolved",n:countView(function(o){ return revState(o.id)==="done"; })}],fReview,"Open, ongoing or resolved","layers",fReview!=="all")+menuHTML("notes",[{k:"all",l:"All leads",n:viewBase().length},{k:"has",l:"Has notes",n:countView(function(o){ return teamNotes(o)>0; })},{k:"none",l:"No notes",n:countView(function(o){ return teamNotes(o)===0; })}],fNotes,"Notes","note",fNotes!=="all")+menuHTML("sort",sr,fSort,"Sort","sort",false)+
       '<button class="tbtn icon" type="button" id="sortdir" aria-label="'+(fDir==="asc"?"Ascending":"Descending")+'" title="'+(fDir==="asc"?"Ascending, click for descending":"Descending, click for ascending")+'"><span class="dirarrow'+(fDir==="asc"?"":" down")+'">'+svg("arrow")+'</span></button>';
   }
   function reviewMark(o){
@@ -1446,7 +1451,7 @@
     var over=countWhere(function(o){ return dueInfo(o).cls==="over"; }), today=countWhere(function(o){ return dueInfo(o).cls==="today"; });
     renderTools();
     var list=filtered();
-    document.getElementById("oppNote").textContent = fView!=="open" ? (list.length+" "+fView+" lead"+(list.length===1?"":"s")+" closed since the dashboard started") : OPPS.length ? (list.length+" of "+OPPS.length+" leads · checked "+relAgo(OPS_AT)+" · drag a lead to put it where you want it") : "";
+    document.getElementById("oppNote").textContent = isClosedView() ? (list.length+" "+fView+" lead"+(list.length===1?"":"s")+" closed since the dashboard started") : viewBase().length ? (list.length+" of "+viewBase().length+" "+(fView==="later"?"later ":"")+"leads · checked "+relAgo(OPS_AT)+" · drag a lead to put it where you want it") : "";
     var HC=[["name","Lead",""],["tag","Stage",""],["","Source","c"],["recent","Last touch",""],["due","Follow-up",""],["","",""]];
     var head='<div class="ogrid ohead">'+HC.map(function(c){ if(!c[1]) return "<span></span>"; var on=fSort===c[0]; return '<span class="'+c[2]+'">'+(c[0]?'<button data-hs="'+c[0]+'" class="'+(on?"on":"")+'">'+c[1]+(on?(fDir==="asc"?" ↑":" ↓"):"")+'</button>':c[1])+'</span>'; }).join("")+'</div>';
     var IC={Email:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 7l8.5 6 8.5-6"/></svg>',Call:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>'};
@@ -1458,8 +1463,8 @@
         '<span class="oseen">'+esc(relAgo(o.last_touch))+'</span><span class="odue '+d.cls+'">'+esc(d.label)+'</span>'+
         '<span class="omarks">'+noteIcon(o)+liMark(o)+reviewMark(o)+'</span></button>'; }).join("");
     if (h) h=head+h;
-    document.getElementById("olist").innerHTML = h || '<div class="oempty">'+(fView!=="open"?"Nothing here yet. Leads you close from now on appear here, with their notes.":OPPS.length?"Nobody matches this filter.":"No opportunities were collected in the last build. The Systems & operations tab says why if something failed.")+'</div>';
-    var cnt=document.getElementById("tabcnt-opps"); cnt.textContent=OPPS.length; cnt.classList.toggle("hot", over+today>0);
+    document.getElementById("olist").innerHTML = h || '<div class="oempty">'+(isClosedView()?"Nothing here yet. Leads you close from now on appear here, with their notes.":fView==="later"&&!viewBase().length?"Nobody is parked as Later right now.":viewBase().length?"Nobody matches this filter.":"No opportunities were collected in the last build. The Systems & operations tab says why if something failed.")+'</div>';
+    var cnt=document.getElementById("tabcnt-opps"); cnt.textContent=oppNL().length; cnt.classList.toggle("hot", over+today>0);
   }
   document.getElementById("otools").addEventListener("click",function(e){
     e.stopPropagation();
@@ -1605,7 +1610,7 @@
             if (tab==="opps") renderOpps(); if (openId===o.id) openPanel(o.id,true);
           }).catch(function(){});
         });
-        if (added){ var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=OPPS.length; if(tab==="opps") renderOpps(); var n=document.getElementById("liveNote"); if(n){ n.textContent=""; n.title=added+" new lead"+(added>1?"s":"")+" found live in Attio"; } }
+        if (added){ var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=oppNL().length; if(tab==="opps") renderOpps(); var n=document.getElementById("liveNote"); if(n){ n.textContent=""; n.title=added+" new lead"+(added>1?"s":"")+" found live in Attio"; } }
       });
     }).catch(function(e){ LIVE_DISC_ERR=errText(e); var n1=document.getElementById("liveNote"); if(n1) n1.textContent="New leads could not be read live ("+LIVE_DISC_ERR+")"; });
   }
@@ -1641,7 +1646,7 @@
         return true; });
       var oo=openId&&oppById(openId); if (oo&&oo.resolved){ var pt=document.querySelector("#panel .ptags"); if (pt&&!pt.querySelector(".closedtag")) pt.insertAdjacentHTML("afterbegin",'<span class="tag closedtag">Closed</span>'); }   // tag only: a full redraw would wipe a note being typed
       LIVE_AT=Date.now(); LIVE_ERR=null;
-      var cnt=document.getElementById("tabcnt-opps"); if(cnt) cnt.textContent=OPPS.length;
+      var cnt=document.getElementById("tabcnt-opps"); if(cnt) cnt.textContent=oppNL().length;
       if (tab==="opps") renderOpps(); if (tab==="sys") renderSys();
       var n=document.getElementById("liveNote"); if(n){ n.textContent=""; n.title="leads re-checked in Attio just now"+(gone?" · "+gone+" resolved lead"+(gone>1?"s":"")+" removed":""); }
     }).catch(function(e){ LIVE_ERR=errText(e); var n=document.getElementById("liveNote"); if(n) n.textContent="could not re-check leads in Attio: "+LIVE_ERR+" (showing the hourly data)"; });
@@ -1918,7 +1923,7 @@
       CLOSED=CLOSED.filter(function(x){ return x.id!==o.id; }); o.bucket="followup"; o.status="Follow up"; o.stage="Interested"; o.resolved=false; o.reason=null; o.closed_at=null; OPPS.push(o);
       if (db){ try{ db.doc("closed/"+o.id).delete().catch(function(){}); }catch(e){} }
       logAct("stage",leadLabel(o)+" reopened as Interested",o.id);
-      var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=OPPS.length; renderOpps(); openPanel(o.id,true);
+      var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=oppNL().length; renderOpps(); openPanel(o.id,true);
     }).catch(function(e){ stat("rreopenmsg","bad","Not reopened: "+errText(e)); var b=document.getElementById("rreopen"); if(b) b.disabled=false; });
   }
   function guessStage(o){ var t=(o.status||"").toLowerCase(); return /meeting/.test(t)?"Meeting Booked":/not now|later/.test(t)?"Later":"Interested"; }
@@ -2177,7 +2182,7 @@
   function closePanel(){
     document.getElementById("panelwrap").hidden=true; openId=null;
     var gone=OPPS.filter(function(o){ return o.resolved; });
-    if (gone.length){ OPPS=OPPS.filter(function(o){ return !o.resolved; }); gone.forEach(toClosed); var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=OPPS.length; if(tab==="opps") renderOpps(); }
+    if (gone.length){ OPPS=OPPS.filter(function(o){ return !o.resolved; }); gone.forEach(toClosed); var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=oppNL().length; if(tab==="opps") renderOpps(); }
   }
   document.getElementById("pscrim").addEventListener("click",closePanel);
   document.getElementById("panel").addEventListener("click",function(e){
@@ -2689,7 +2694,7 @@
 
   // start on the tab named in the link (#opps or #systems), else the one last used
   (function(){ var t=tabFromHash(); if(!t){ try{ var s=localStorage.getItem("koya-tab"); if(s==="opps"||s==="sys") t=s; }catch(e){} }
-    document.getElementById("tabcnt-opps").textContent=OPPS.length;
+    document.getElementById("tabcnt-opps").textContent=oppNL().length;
     var hot=countWhere(function(o){ var c=dueInfo(o).cls; return c==="over"||c==="today"; }); document.getElementById("tabcnt-opps").classList.toggle("hot",hot>0);
     var cs=liveChecks(), b=cs.filter(function(c){ return c.status==="bad"; }).length, w=cs.filter(function(c){ return c.status==="warn"; }).length;
     document.getElementById("tabdot-sys").className="sdot "+(b?"bad":w?"warn":"ok");
