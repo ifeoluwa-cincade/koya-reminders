@@ -245,11 +245,22 @@ def main() -> int:
         held = (cur_dnc == "DO_NOT_CONTACT" or L["status"] == "UNSUBSCRIBED" or bounced
                 or L["label"] in LABEL or protected)
         vals["outreach_paused"] = [{"value": bool(held)}]
-        if held or not L["sent"]:
+        last = L["sent"]
+        if not last and not held:
+            # 2026-10-14: PlusVibe showing NO send (a lead it skipped because they were already emailed elsewhere, e.g. in Instantly) used to wipe
+            # the person's due date even though Attio already knew when we last emailed them. 812 people lost their 90-day re-outreach this way
+            # (495 of them past 90 days). The date Attio holds is the truth, so count from that.
+            lc = ((v.get("last_contacted_at") or [{}])[0].get("value"))
+            if lc:
+                try:
+                    last = date.fromisoformat(str(lc)[:10])
+                except ValueError:
+                    last = None
+        if held or not last:
             vals["next_eligible_at"] = []
             vals["due_status"] = [{"option": "NOT_ELIGIBLE"}]
         else:
-            nxt = L["sent"] + timedelta(days=RECYCLE_DAYS)
+            nxt = last + timedelta(days=RECYCLE_DAYS)
             vals["next_eligible_at"] = [{"value": nxt.isoformat()}]
             vals["due_status"] = [{"option": "OVERDUE" if nxt <= today else
                                    "DUE_SOON" if nxt <= today + timedelta(days=14) else "NOT_DUE"}]
