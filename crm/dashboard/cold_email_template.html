@@ -1494,8 +1494,11 @@
           var cm=lastRaw.match(/(?:next_cursor|nextCursor|next cursor|cursor)["']?\s*[:=]\s*["']?([A-Za-z0-9_\-+\/=.]{6,})/i), nc=cm&&cm[1]&&!/^(null|none|undefined)$/i.test(cm[1])?cm[1]:null;
           return (fresh&&pg<15)?go(off+got.length,nc,pg+1):out; }); }
       return go(0,null,0); }
-    return Promise.all(OPEN.map(pageStage)).then(function(parts){
-      var B={}, counts=[]; parts.forEach(function(pt,i){ var k=Object.keys(pt); k.forEach(function(d){ B[d]=pt[d]; }); counts.push(OPEN[i]+" "+k.length); });
+    // a second, independent read: every deal created since the page was built (small, so no paging problem)
+    function pageNewest(){ var since=null; try{ since=new Date(new Date(DATA.generated_at).getTime()-3600e3).toISOString(); }catch(e){} if(!since) return Promise.resolve({});
+      return ask({object:"deals",filter:{attribute:"created_at",op:"gt",value:since},limit:100}).then(function(r){ return attioBlocks(txt(r)); }).catch(function(){ return {}; }); }
+    return Promise.all(OPEN.map(pageStage).concat([pageNewest()])).then(function(parts){
+      var B={}, counts=[]; parts.forEach(function(pt,i){ var k=Object.keys(pt); k.forEach(function(d){ B[d]=pt[d]; }); counts.push((OPEN[i]||"newest")+" "+k.length); });
       var ids=Object.keys(B);
       if (!ids.length){ LIVE_DISC_ERR="the list came back in a format the page could not read: "+lastRaw.replace(/\s+/g," ").slice(0,140); var n0=document.getElementById("liveNote"); if(n0) n0.textContent="New leads could not be read live ("+LIVE_DISC_ERR+")"; return; }
       LIVE_COUNTS=counts.join(", ");
