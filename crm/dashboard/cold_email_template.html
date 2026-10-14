@@ -2621,6 +2621,7 @@
     var cs=liveChecks(), b=cs.filter(function(c){ return c.status==="bad"; }).length, w=cs.filter(function(c){ return c.status==="warn"; }).length;
     document.getElementById("tabdot-sys").className="sdot "+(b?"bad":w?"warn":"ok");
     var lead=leadFromHash();
+    try{ if(lead&&sessionStorage.getItem("koya-lead-hash")===lead) lead=null; else if(lead) sessionStorage.setItem("koya-lead-hash",lead); }catch(e){}      // a reload of a shared lead link goes to the normal page, not back to that lead
     if (lead){ setTab("opps", true); showLead(lead); } else setTab(t||"dash", true); })();
   window.addEventListener("hashchange",function(){ var lead=leadFromHash(); if (lead){ setTab("opps", true); showLead(lead); return; } var t=tabFromHash(); setTab(t||"dash", true); });
 
