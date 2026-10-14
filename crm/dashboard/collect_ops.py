@@ -468,7 +468,7 @@ def cloudtalk_checks(spec: dict, opps: list[dict]) -> list[dict]:
     oldest = min((parse(x["Cdr"]["started_at"]) for x in waiting), default=None)
     stale = oldest and (now() - oldest).total_seconds() > 3 * 3600
     out.append(mk("calls_waiting", "github", "Calls worked out into dispositions",
-                  "bad" if stale else ("warn" if len(waiting) > 20 else "ok"),
+                  "bad" if stale else ("warn" if (oldest and (now() - oldest).total_seconds() > 20 * 60) else "ok"),      # a burst of calls is worked through in minutes; only warn when the oldest has waited over 20 minutes
                   f"{len(out_calls)} calls since {CALLS_FROM}, {len(waiting)} waiting to be worked out"
                   + (f" (oldest {ago(oldest.isoformat())})" if waiting and oldest else "")))
     # people with a real result still in the dial queue
