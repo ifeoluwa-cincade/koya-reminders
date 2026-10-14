@@ -3080,11 +3080,6 @@
     else if(s==="bubble"){ chatNote(ac,380,n,.14,.3,"sine",4000,900); chatNote(ac,520,n+.1,.16,.26,"sine",4000,1200); }
     else if(s==="glass"){ chatNote(ac,2093,n,1,.15,"sine"); chatNote(ac,3136,n,.7,.07,"sine"); chatNote(ac,4186,n,.4,.03,"sine"); }
     else { chatNote(ac,1046,n,.5,.17); chatNote(ac,1318,n+.11,.5,.17); chatNote(ac,1568,n+.22,.75,.17); } }catch(e){} }
-    if(s==="ding"){ chatTone(ac,1568,n,.9,.22); chatTone(ac,3136,n,.5,.07); }
-    else if(s==="pop"){ chatTone(ac,720,n,.16,.3,"sine",260); }
-    else if(s==="drop"){ chatTone(ac,740,n,.34,.22,"sine",1180); chatTone(ac,1480,n+.05,.3,.06); }
-    else if(s==="soft"){ chatTone(ac,523,n,.55,.16,"triangle"); chatTone(ac,659,n+.09,.6,.14,"triangle"); }
-    else { chatTone(ac,1046,n,.5,.18); chatTone(ac,1318,n+.11,.5,.18); chatTone(ac,1568,n+.22,.75,.18); } }catch(e){} }
   var CHAT_FLASH_ON=false;
   function chatTitle(){ var n=(tab==="chat")?0:chatUnread().length, men=(tab==="chat")?0:CHAT.filter(function(m){ return (m.tagIds||[]).indexOf(CHAT_ME.id)>=0&&m.fromId!==CHAT_ME.id&&Date.parse(m.t)>CHAT_LAST; }).length; return (n?"("+n+(men?" @":"")+") ":"")+"Koya Outbound"; }
   function chatFlash(txt){ clearInterval(CHAT_FLASH); var on=false, n=0; CHAT_FLASH_ON=true; CHAT_FLASH=setInterval(function(){ on=!on; try{ document.title=on?txt:chatTitle(); }catch(e){} if(++n>60||(!document.hidden&&tab==="chat")){ clearInterval(CHAT_FLASH); CHAT_FLASH_ON=false; chatBadge(); } },1200); }
