@@ -149,7 +149,8 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
             continue
         stage = val(p, "relationship_stage")
         # a person marked lost / excluded or on the do-not-contact list is never an opportunity
-        if val(p, "dnc_status") == "DO_NOT_CONTACT" or stage in ("LOST", "CUSTOMER"):
+        has_open = any(dl["stage"] in OPEN_STAGES for dl in r["deals"])      # a person marked LOST by an old auto-label still counts when a human has since opened a deal for them (Carsten Isert, 14 Oct 2026)
+        if val(p, "dnc_status") == "DO_NOT_CONTACT" or (stage in ("LOST", "CUSTOMER") and not has_open):
             continue
         calls = sorted(r["calls"], key=lambda z: z["at"] or "")
         last_call = calls[-1] if calls else None
