@@ -1286,7 +1286,7 @@
   var ALLOPPS=(DATA.opps||[]).slice().map(tidyOpp), CLOSED=ALLOPPS.filter(function(o){ return o.bucket==="lost"||o.bucket==="won"; }), OPPS=ALLOPPS.filter(function(o){ return o.bucket!=="lost"&&o.bucket!=="won"; }), fView="open", CHECKS=(DATA.checks||[]).slice(), OPS_AT=DATA.ops_at||null;
   var HASH={dash:"", opps:"opps", chat:"chat", plan:"plan", sys:"systems"}, TABKEYS=["dash","opps","chat","plan","sys"], tab="dash";
   var RULE={meeting:3, followup:2, chasing:2, callback:1, later:30};
-  var BUCKET_NAME={meeting:"Meeting booked", followup:"Follow up", chasing:"Multi-touch", callback:"Callback", later:"Later", lost:"Lost", won:"Won"};
+  var BUCKET_NAME={meeting:"Meeting booked", followup:"Interested", chasing:"Multi-touch", callback:"Callback", later:"Later", lost:"Lost", won:"Won"};
   var PVWS="6a6e634971ad0f0e174a5471";
   var ACTIONS_URL="__LEAD_ACTIONS_URL__";   // the Lead Actions web app address; empty = the Resolve section stays hidden
   var fStatus="all", fSource="all", fNotes="all", fReview="all", fSort="recent", fNode=null, openId=null, qsSel=0, qsHits=[];
@@ -1371,6 +1371,7 @@
   function tabFromHash(){ var h=(location.hash||"").replace("#",""); if(h==="opps") return "opps"; if(h==="plan") return "plan"; if(h==="systems") return "sys"; return null; }
 
   // ----- opportunities
+  function stLabel(o){ return o.bucket==="followup" ? (o.due_set?"Follow up":"Interested") : o.status; }   // 'Follow up' only when a follow-up date is really set
   function T(v){ if(!v) return null; var n=new Date(v).getTime(); return isNaN(n)?null:n; }
   function TT(o){ var x=T(o.last_touch); if(x==null&&o.live_at) x=o.live_at; return x; }   // a lead found live with no usable touch date counts as just now, never as the oldest
   var BORDER={meeting:0,followup:1,chasing:2,callback:3,later:4};
@@ -1465,7 +1466,7 @@
     function srcIcons(o){ var t=String(o.source||""), r=""; if(t.indexOf("Email")>=0) r+='<span data-tip="Email">'+IC.Email+'</span>'; if(t.indexOf("Call")>=0) r+='<span data-tip="Cold call">'+IC.Call+'</span>'; return r||'<span class="oseen">'+esc(t)+'</span>'; }
     var h=list.map(function(o){ var d=dueInfo(o);
       return '<button class="orow ogrid" draggable="true" data-id="'+esc(o.id)+'"><span class="olead"><span class="odot '+d.cls+'"></span><span class="omain"><span class="oname"><b>'+esc(o.name||o.email)+'</b>'+(o.live_new&&!newSeen(o.id)?'<span class="newtag">New</span>':'')+'</span><span class="ocomp">'+esc(o.company||o.email||"")+'</span></span></span>'+
-        '<span class="ostage"><span class="tag '+o.bucket+'">'+esc(o.status)+'</span>'+'</span>'+
+        '<span class="ostage"><span class="tag '+o.bucket+'">'+esc(stLabel(o))+'</span>'+'</span>'+
         '<span class="osrc">'+srcIcons(o)+'</span>'+
         '<span class="oseen">'+esc(relAgo(o.last_touch))+'</span><span class="odue '+d.cls+'">'+esc(d.label)+'</span>'+
         '<span class="omarks">'+noteIcon(o)+liMark(o)+reviewMark(o)+'</span></button>'; }).join("");
@@ -1517,7 +1518,7 @@
     var others=OPPS.filter(function(x){ return x.id!==o.id && o.company && x.company && x.company.toLowerCase()===o.company.toLowerCase(); });
     var thread=(o.thread||[]).map(function(m){
       return '<li class="msg '+(m.from_lead?"in":"out")+'"><div class="mh"><b>'+(m.from_lead?"They wrote":"We wrote")+'</b><span>'+esc(fmtDate(m.t))+'</span></div><p><b>'+esc(m.subject||"")+'</b>'+(m.text?"<br>"+esc(m.text):"")+'</p></li>'; }).join("");
-    var rows=[["Status",esc(o.status)+(o.stage?" · deal stage "+esc(o.stage):"")],["Source",esc(o.source)],
+    var rows=[["Status",esc(stLabel(o))+(o.stage?" · deal stage "+esc(o.stage):"")],["Source",esc(o.source)],
       ["Last touch",esc(fmtDate(o.last_touch))+" ("+esc(relAgo(o.last_touch))+")"],
       o.due_set ? ["Follow-up due",'<span class="'+(d.cls==="over"?"over":"")+'">'+esc(fmtWhen(o.due))+" \u00b7 "+esc(d.label)+'</span>'+(planOf(o)?'<br><span class="plan">Note: '+esc(planOf(o))+'</span>':'<br><span class="tnote">set on the deal in Attio</span>')]
         : o.missed ? ["Follow-up",'<span class="over">Missed: it was due '+esc(fmtWhen(o.missed))+'</span><br><span class="tnote">A call or email clears it. Use Follow up on a date to set a new one.</span>']
@@ -1528,7 +1529,7 @@
     if (o.phone) rows.push(["Phone",esc(o.phone)+copyBtn(o.phone)]);
     if (nolink) rows.push(["LinkedIn",'<span class="tnote">no LinkedIn address is saved for this person in Attio or PlusVibe, so the button searches their name and company</span>']);
     var html='<div class="phd"><div class="phead"><div><div class="ptitle">'+esc(o.name||o.email)+'</div><div class="psub">'+esc(o.company||"")+'</div></div><button class="pclose" id="pclose" type="button" aria-label="Close">✕</button></div>'+
-      '<div class="ptags">'+(o.resolved?'<span class="tag closedtag">Closed</span>':'')+'<span class="tag '+o.bucket+'">'+esc(o.status)+'</span><span class="tag src">'+esc(o.source)+'</span><span class="tag">'+esc(d.label)+'</span></div>'+
+      '<div class="ptags">'+(o.resolved?'<span class="tag closedtag">Closed</span>':'')+'<span class="tag '+o.bucket+'">'+esc(stLabel(o))+'</span><span class="tag src">'+esc(o.source)+'</span><span class="tag">'+esc(d.label)+'</span></div>'+
       '<div class="plinks">'+link(pv,L.plusvibe?"Open conversation":"PlusVibe")+link(li,liLabel)+link(L.website,"Website")+link(L.attio,"Attio")+link(L.deal,"Deal")+link(L.cloudtalk,"CloudTalk")+(ARTIFACT_URL?'<button type="button" class="plink ico cplink" id="copyLeadLink" data-tip="Copy link to this lead" aria-label="Copy link to this lead">'+svgIcon("link")+'</button>':'')+'<button type="button" class="plink ico cplink" data-chatlead="'+esc(o.id)+'" data-tip="Message the team about this lead" aria-label="Message the team about this lead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 01-11.6 7.1L4 20l1-4.6A8 8 0 1121 12z"/></svg></button></div></div>'+
       '<div class="pgrid"><div class="pcol pleft">'+
       reviewHTML(o)+((o.bucket==="lost"||o.bucket==="won")?closedHTML(o):resolveHTML(o))+editHTML(o)+liConnHTML(o)+
