@@ -453,13 +453,12 @@
   .cav{width:42px; height:42px; font-size:13.5px;} .cav.emoav{font-size:22px;} .cav.emoav .emo{font-size:23px; line-height:1;} .cmem .cav{width:40px; height:40px;} .cavs .cav{width:30px; height:30px; margin-left:-8px;} .cavs .cav.emoav .emo{font-size:17px;}
   .cwho{margin-bottom:5px;} .cwho b{font-size:15px;}
   .cbub{font-size:15px; padding:10px 15px; border-radius:16px;}
-  .crow{display:flex; align-items:center; gap:8px; max-width:100%; min-width:0;}
-  .ctool{position:static; display:flex; gap:1px; padding:2px; visibility:hidden; opacity:0; transition:opacity .12s ease; flex:none; box-shadow:0 4px 12px -6px rgba(20,23,26,.3);} .cmsg:hover .ctool,.ctool:focus-within{visibility:visible; opacity:1; display:flex;}
+  .ctool{position:absolute; top:-17px; right:10px; z-index:5; display:flex; gap:1px; padding:2px; visibility:hidden; opacity:0; transition:opacity .12s ease; box-shadow:0 4px 12px -6px rgba(20,23,26,.3);} .cmsg:hover .ctool,.ctool:focus-within{visibility:visible; opacity:1; display:flex;}
   .ctool button{width:30px; height:28px;} @media (hover:none){ .ctool{visibility:visible; opacity:1;} }
   .cmsg{animation:cmIn .22s ease both;} @keyframes cmIn{from{opacity:0; transform:translateY(6px);}to{opacity:1; transform:none;}}
   .crxb{transition:background .12s ease,border-color .12s ease,transform .08s ease;} .crxb:active{transform:scale(.94);} .crxb.add{opacity:0; transition:opacity .12s ease;} .crx .crxb:not(.add) ~ .crxb.add,.cmsg:hover .crxb.add,.crxb.add:focus{opacity:1;}
   .cmsg:not(:hover) .crxb.add:only-child{display:inline-flex; opacity:0;}
-  .crxpick{width:max-content; max-width:none; flex-wrap:nowrap; top:38px; z-index:8;} .crxpick button{width:38px; height:36px;}
+  .crxpick{width:max-content; max-width:none; flex-wrap:nowrap; z-index:8;} .crxpick button{width:38px; height:36px;}
   .cwrite{padding:12px 22px calc(14px + env(safe-area-inset-bottom,0px));}
   .cinput{align-items:center; gap:10px;}
   .cplus{width:42px; height:42px; min-height:0; border-radius:12px;}
@@ -469,7 +468,8 @@
   .chelp{margin:7px 2px 0 52px; font-size:11.5px;}
   .chmenu{width:300px;} .avgrid{display:grid; grid-template-columns:repeat(6,1fr); gap:6px; margin-bottom:4px;} .avopt{height:40px; border:1px solid var(--line); background:#fff; border-radius:10px; cursor:pointer; display:grid; place-items:center; font-size:21px; color:var(--ink-2);} .avopt:hover{background:var(--bg-soft);} .avopt.on{border-color:var(--violet); box-shadow:0 0 0 2px rgba(110,86,240,.2); background:var(--band);} .avopt.txt{font:600 13px var(--font);} .avopt .emo{font-size:22px; line-height:1;}
   .tab .cnt.men{background:var(--violet); color:#fff; margin-left:3px;} .tab[aria-selected="true"] .cnt.men{background:var(--violet); color:#fff;}
-  @media (max-width:1000px){ #tab-chat .chatpage{height:calc(100vh - 160px);} }
+  .crx{position:relative;} .crxpick{top:auto; bottom:calc(100% + 4px); left:0;}
+  @media (max-width:1000px){ #tab-chat .chatpage{grid-template-columns:minmax(0,1fr); height:calc(100vh - 160px); min-height:520px;} .chatside{display:none;} }
   /* Systems page: the Fix problems button */
   .sysbar{display:flex; align-items:center; gap:14px; flex-wrap:wrap;} .sysfix{border:1px solid var(--ink); background:var(--ink); color:#fff; border-radius:999px; padding:7px 18px; font:500 13.5px var(--font); cursor:pointer;} .sysfix:hover:not(:disabled){background:#2a2f36;} .sysfix:disabled{background:var(--bg-tint); color:var(--ink-2); border-color:var(--line); cursor:default;} .sysfixnote{color:var(--ink-3); font-size:13px;}
   /* messages between teammates */
@@ -2750,7 +2750,7 @@
     var quote=""; if(m.replyTo){ var rm=CHAT.filter(function(x){ return x.id===m.replyTo; })[0], rn=rm?(rm.fromId===CHAT_ME.id?(CHAT_ME.name||"You"):chatName(rm.fromId)):(m.replyName||"Someone"), rt=rm?rm.text:(m.replyText||"Message deleted"); quote='<div class="cquote"><b>'+esc(rn)+'</b><span>'+esc(String(rt).slice(0,90))+'</span></div>'; }
     var tools='<div class="ctool"><button type="button" data-crxmenu="'+esc(m.id)+'" aria-label="React" data-tip="React">'+ICO.smile+'</button><button type="button" data-creply="'+esc(m.id)+'" aria-label="Reply" data-tip="Reply">'+ICO.reply+'</button>'+(mine?'<button type="button" data-cedit="'+esc(m.id)+'" aria-label="Edit" data-tip="Edit">'+ICO.edit+'</button>':'')+((mine||CHAT_ME.admin)?'<button type="button" data-cdel="'+esc(m.id)+'" class="'+(CHAT_DELARM===m.id?"arm":"")+'" aria-label="Delete" data-tip="'+(CHAT_DELARM===m.id?"Click again to delete":"Delete")+'">'+(CHAT_DELARM===m.id?"Sure?":ICO.bin)+'</button>':'')+'</div>';
     var text=(m.parts&&m.parts.length)||m.text?'<div class="ctext">'+chatPartsHTML(m)+'</div>':'';
-    return '<div class="cmsg'+(mine?" mine":"")+((m.tagIds||[]).indexOf(CHAT_ME.id)>=0?" forme":"")+(grouped?" grp":"")+'" data-mid="'+esc(m.id)+'">'+(grouped?'<span class="cav gap"></span>':chatAv(m.fromId,nm))+'<div class="ccol">'+(grouped?'':'<div class="cwho"><b>'+esc(nm)+'</b><span>'+esc(chatClock(m.t))+'</span>'+(mine?chatTicks(m):'')+'</div>')+'<div class="crow"><div class="cbub">'+quote+text+(m.edited?'<span class="cedited">edited</span>':'')+'</div>'+tools+'</div>'+(lp?chatLeadCard(lp):'')+files.map(chatFileCard).join("")+chatRxHTML(m)+'</div></div>'; }
+    return '<div class="cmsg'+(mine?" mine":"")+((m.tagIds||[]).indexOf(CHAT_ME.id)>=0?" forme":"")+(grouped?" grp":"")+'" data-mid="'+esc(m.id)+'">'+(grouped?'<span class="cav gap"></span>':chatAv(m.fromId,nm))+'<div class="ccol">'+(grouped?'':'<div class="cwho"><b>'+esc(nm)+'</b><span>'+esc(chatClock(m.t))+'</span>'+(mine?chatTicks(m):'')+'</div>')+'<div class="cbub">'+quote+text+(m.edited?'<span class="cedited">edited</span>':'')+tools+'</div>'+(lp?chatLeadCard(lp):'')+files.map(chatFileCard).join("")+chatRxHTML(m)+'</div></div>'; }
   // ----- the page: header, filters, conversation and composer on the left; members and quick add on the right
   function chatPageBuild(){ var m=document.getElementById("chatMount"); if(!m||m.firstChild) return m;
     m.innerHTML='<div class="chatmain"><div class="chead"><span class="chico">'+ICO.chat+'</span><div class="ctitle"><b>Team chat</b><span>Share updates, discuss leads and stay in sync.</span></div><div class="chmeta" id="chatHeadMeta"></div><div class="chmenuwrap"><button type="button" class="chmenub" id="chatMenuBtn" aria-label="Chat options">'+ICO.dots+'</button><div class="chmenu" id="chatMenu" hidden></div></div><button type="button" class="chmenub" id="chatBack" aria-label="Close chat">&times;</button></div>'+
