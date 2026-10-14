@@ -1731,6 +1731,16 @@
   // people whose Claude account has no Attio / PlusVibe / CloudTalk connection see why the buttons are off
   setTimeout(function(){ if(MCP||RELAY_STARTED||document.getElementById("noConn")) return; var n=document.createElement("div"); n.id="noConn"; n.className="viewonly"; n.style.top="62px"; n.innerHTML='Attio, PlusVibe and CloudTalk are not connected for you, so notes, stages and follow-ups are switched off. In Claude go to Settings, then Connectors, and connect them (or ask Ife to add them for the whole team).<button type="button" aria-label="Close">&times;</button>'; n.querySelector("button").onclick=function(){ n.remove(); }; document.body.appendChild(n); },9000);
   // ----- relay: a teammate without their own connections sends note/stage/follow-up writes to a tab that has them (an owner tab left open)
+  // what this viewer's page can reach, saved per person so a missing connection can be diagnosed without asking them
+  function viewerDiag(m){ var go=function(n){ var id=(typeof CHAT_ME!=="undefined"&&CHAT_ME.id)||""; if(!db||!id){ if(n<12) setTimeout(function(){ go(n+1); },3000); return; }
+      var rec={name:(CHAT_ME.name||""),mcp:!!m,at:new Date().toISOString(),ver:"2026-10-15"}; var done=function(){ try{ db.collection("meta").doc("viewer_"+id).set(rec).catch(function(){}); }catch(e){} };
+      if(!m){ rec.note="use(mcp) returned null for this viewer"; done(); return; }
+      var lt; try{ lt=m.listTools?m.listTools():null; }catch(e){ lt=null; }
+      Promise.resolve(lt).then(function(l){ rec.tools=JSON.stringify(l).slice(0,1800); },function(e){ rec.tools="listTools failed: "+String((e&&(e.code||e.message))||e).slice(0,100); }).then(function(){
+        var calls=[["Attio","list-objects"],["CloudTalk","cloudtalk_search_calls"],["PlusVibe","get_analytics_stats"]]; rec.test={};
+        return Promise.all(calls.map(function(c){ var inp=c[0]==="CloudTalk"?{limit:1}:(c[0]==="PlusVibe"?{workspace_id:PVWS_ID}:{}); return Promise.resolve().then(function(){ return m.callTool(c[0],c[1],inp); }).then(function(){ rec.test[c[0]]="ok"; },function(e){ rec.test[c[0]]=String((e&&e.code)||(e&&e.message)||e).slice(0,60); }); }));
+      }).then(done,done); };
+    go(0); }
   var RELAY_OK={"Attio":{"update-record":1,"create-note":1,"get-records-by-ids":1},"PlusVibe":{"find_lead_by_email":1,"get_analytics_stats":1},"CloudTalk":{"cloudtalk_search_calls":1}}, RELAY_STARTED=false, RELAY_MODE=false;
   function relayDb(cb){ var n=0, iv=setInterval(function(){ if(db||++n>40){ clearInterval(iv); if(db) cb(db); } },500); }
   function relayClientStart(){ if(RELAY_STARTED) return; RELAY_STARTED=true;
@@ -1834,7 +1844,7 @@
       render(); age(); if(tab==="sys") renderSys();
     }).catch(function(e){ LIVE_CALL_ERR=errText(e); if(tab==="sys") renderSys(); });
   }
-  (function(){ try{ if (window.claude && window.claude.use){ window.claude.use("mcp").then(function(m){ MCP=wrapMcp(m); if(!m){ relayClientStart(); } if(m){ relayWorkerStart();  if(openId && oppById(openId)) openPanel(openId); if(PENDING_LEAD){ var pl=PENDING_LEAD; PENDING_LEAD=null; if(oppById(pl)) openPanel(pl); else loadLeadLive(pl); } liveAll(); setInterval(function(){ if(!document.hidden){ liveAll(); } },300000); setInterval(function(){ if(!document.hidden && MCP) liveDiscover(); },40000); document.addEventListener("visibilitychange",function(){ if(!document.hidden){ liveAll(); } }); } },function(){}); } }catch(e){} })();
+  (function(){ try{ if (window.claude && window.claude.use){ window.claude.use("mcp").then(function(m){ MCP=wrapMcp(m); try{ viewerDiag(m); }catch(e){} if(!m){ relayClientStart(); } if(m){ relayWorkerStart();  if(openId && oppById(openId)) openPanel(openId); if(PENDING_LEAD){ var pl=PENDING_LEAD; PENDING_LEAD=null; if(oppById(pl)) openPanel(pl); else loadLeadLive(pl); } liveAll(); setInterval(function(){ if(!document.hidden){ liveAll(); } },300000); setInterval(function(){ if(!document.hidden && MCP) liveDiscover(); },40000); document.addEventListener("visibilitychange",function(){ if(!document.hidden){ liveAll(); } }); } },function(){}); } }catch(e){} })();
 
   // When the live connection is off, a banner across the top of EVERY tab says so and offers one tap to allow it
   // (the page asks the viewer for access to Attio, PlusVibe and CloudTalk). It disappears the moment the connection is on.
