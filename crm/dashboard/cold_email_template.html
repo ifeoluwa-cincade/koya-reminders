@@ -467,6 +467,8 @@
   .cclip{width:36px; height:36px;} .csendi{width:38px; height:38px; border-radius:11px;} .cboxbtns{align-self:center; gap:4px;}
   .chelp{margin:7px 2px 0 52px; font-size:11.5px;}
   .chmenu{width:300px;} .avgrid{display:grid; grid-template-columns:repeat(6,1fr); gap:6px; margin-bottom:4px;} .avopt{height:40px; border:1px solid var(--line); background:#fff; border-radius:10px; cursor:pointer; display:grid; place-items:center; font-size:21px; color:var(--ink-2);} .avopt:hover{background:var(--bg-soft);} .avopt.on{border-color:var(--violet); box-shadow:0 0 0 2px rgba(110,86,240,.2); background:var(--band);} .avopt.txt{font:600 13px var(--font);} .avopt .emo{font-size:22px; line-height:1;}
+  #tabcnt-chat{background:var(--violet); color:#fff; font-weight:700; min-width:20px; text-align:center; animation:cmPop .35s ease;} @keyframes cmPop{0%{transform:scale(.6);}60%{transform:scale(1.2);}100%{transform:scale(1);}}
+  .tab .cnt.men,.tabs .cnt.men{background:#e5484d!important; color:#fff!important; margin-left:3px; font-weight:700;} .tab[aria-selected="true"] #tabcnt-chat{background:var(--violet); color:#fff;}
   .tab .cnt.men{background:var(--violet); color:#fff; margin-left:3px;} .tab[aria-selected="true"] .cnt.men{background:var(--violet); color:#fff;}
   /* chat v10: the chat page uses the whole window */
   html.chatfull header{display:none;} html.chatfull #tab-chat>.wrap{max-width:none; padding-inline:20px;}
