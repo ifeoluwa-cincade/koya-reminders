@@ -30,6 +30,16 @@
     --ease:cubic-bezier(.22,1,.36,1);
   }
   /* dark mode: the whole page is inverted, then the dark header, logos and status marks are inverted back so they keep their own colours */
+  html[data-accent="emerald"]{--violet:#1f9d63; --band:#e1f3e9; --grad-ink:linear-gradient(140deg,#0e2a1d 0%,#0d0f13 50%,#0f2a22 100%);}
+  html[data-accent="ocean"]{--violet:#2f7be8; --band:#e1ecfb; --grad-ink:linear-gradient(140deg,#0e2336 0%,#0d0f13 50%,#10294a 100%);}
+  html[data-accent="sunset"]{--violet:#e2682e; --band:#fbe8dc; --grad-ink:linear-gradient(140deg,#2e1810 0%,#0d0f13 50%,#33150f 100%);}
+  html[data-accent="rose"]{--violet:#d6457a; --band:#fbe3ec; --grad-ink:linear-gradient(140deg,#2d1220 0%,#0d0f13 50%,#2a1030 100%);}
+  html[data-accent="teal"]{--violet:#12a1a0; --band:#dff3f2; --grad-ink:linear-gradient(140deg,#0c2a2c 0%,#0d0f13 50%,#0e2038 100%);}
+  html[data-accent="gold"]{--violet:#c58a10; --band:#f8ecd2; --grad-ink:linear-gradient(140deg,#2a2110 0%,#0d0f13 50%,#2b1d0a 100%);}
+  html[data-accent="graphite"]{--violet:#3d4452; --band:#e8ebef; --grad-ink:linear-gradient(140deg,#1b1f26 0%,#0d0f13 50%,#1a1d24 100%);}
+  .acpop{position:fixed; z-index:2147000; width:236px; background:#fff; border:1px solid var(--line); border-radius:16px; padding:14px; box-shadow:0 22px 50px -18px rgba(20,23,26,.5); color:var(--ink); animation:chIn .18s ease both;} .acpop[hidden]{display:none;} .acpop h5{margin:0 0 10px; font:600 11px var(--font); letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3);}
+  .acgrid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px;} .acopt{display:flex; flex-direction:column; align-items:center; gap:5px; border:0; background:none; cursor:pointer; font:500 11.5px var(--font); color:var(--ink-2); padding:0;} .acopt i{display:block; width:36px; height:36px; border-radius:50%; box-shadow:inset 0 0 0 2px rgba(255,255,255,.7), 0 0 0 1px var(--line); transition:transform .12s;} .acopt:hover i{transform:scale(1.1);} .acopt.on i{box-shadow:inset 0 0 0 3px #fff, 0 0 0 2px var(--ink);}
+  html[data-koya-theme="dark"] .acpop{background:#e4e7ea; box-shadow:0 0 0 1px rgba(0,0,0,.10), 0 18px 40px -16px rgba(255,255,255,.85);}
   html[data-koya-theme="light"]{filter:brightness(var(--kb,1));}
   html[data-koya-theme="dark"]{filter:invert(1) hue-rotate(180deg) contrast(.95) brightness(var(--kb,1)); background:#fff;}
   #themeVeil{position:fixed; inset:0; z-index:9999; pointer-events:none; opacity:0; background:#000; transition:opacity .7s ease;}
@@ -514,6 +524,17 @@
   html[data-koya-theme="dark"] body #tab-chat .chatpage{box-shadow:0 0 0 1px rgba(0,0,0,.10), 0 40px 100px -24px rgba(255,255,255,.9);} html[data-koya-theme="dark"].chatfull body #tab-chat .chatpage{box-shadow:none;}
   html[data-koya-theme="dark"] .chmenu, html[data-koya-theme="dark"] .cstkpop{background:#e4e7ea; box-shadow:0 0 0 1px rgba(0,0,0,.10), 0 18px 40px -16px rgba(255,255,255,.85);}
   html[data-koya-theme="dark"] #chatFeed[data-wall="img"]{filter:invert(1) hue-rotate(180deg);}
+  #chatFeed[data-wall="aurora"]{background:radial-gradient(at 12% 8%,#c6eedb,transparent 52%),radial-gradient(at 88% 14%,#d8cffb,transparent 52%),radial-gradient(at 50% 105%,#e2f4ea,transparent 58%),#f4f6f3;} .wall-aurora{background:radial-gradient(at 12% 8%,#c6eedb,transparent 52%),radial-gradient(at 88% 14%,#d8cffb,transparent 52%),radial-gradient(at 50% 105%,#e2f4ea,transparent 58%),#f4f6f3; background-size:auto;}
+  #chatFeed[data-wall="haze"]{background:radial-gradient(at 80% 10%,#f6d6e8,transparent 55%),radial-gradient(at 10% 90%,#d9d4f9,transparent 55%),#f6f4f8;} .wall-haze{background:radial-gradient(at 80% 10%,#f6d6e8,transparent 55%),radial-gradient(at 10% 90%,#d9d4f9,transparent 55%),#f6f4f8; background-size:auto;}
+  #chatFeed[data-wall="sunrise"]{background:linear-gradient(180deg,#fff0d6,#fde0ea 60%,#e9e1fa);} .wall-sunrise{background:linear-gradient(180deg,#fff0d6,#fde0ea 60%,#e9e1fa); background-size:auto;}
+  #chatFeed[data-wall="forest"]{background:linear-gradient(165deg,#d3e7d8,#eaf4ec 55%,#f4f8f3);} .wall-forest{background:linear-gradient(165deg,#d3e7d8,#eaf4ec 55%,#f4f8f3); background-size:auto;}
+  #chatFeed[data-wall="diag"]{background:repeating-linear-gradient(45deg,#f0f2ee 0 12px,#f7f8f5 12px 24px);} .wall-diag{background:repeating-linear-gradient(45deg,#f0f2ee 0 12px,#f7f8f5 12px 24px); background-size:auto;}
+  #chatFeed[data-wall="topo"]{background:repeating-radial-gradient(circle at 20% 25%,transparent 0 16px,#dde3d9 16px 17px),repeating-radial-gradient(circle at 82% 75%,transparent 0 16px,#e3dff4 16px 17px),#f6f7f4;} .wall-topo{background:repeating-radial-gradient(circle at 20% 25%,transparent 0 16px,#dde3d9 16px 17px),repeating-radial-gradient(circle at 82% 75%,transparent 0 16px,#e3dff4 16px 17px),#f6f7f4; background-size:auto;}
+  #chatFeed[data-wall="stars"]{background:radial-gradient(#cfc8f2 1.4px,transparent 1.6px) 0 0/34px 34px,radial-gradient(#cfe6d6 1px,transparent 1.2px) 17px 17px/34px 34px,#f6f6fa;} .wall-stars{background:radial-gradient(#cfc8f2 1.4px,transparent 1.6px) 0 0/34px 34px,radial-gradient(#cfe6d6 1px,transparent 1.2px) 17px 17px/34px 34px,#f6f6fa; background-size:auto;}
+  #chatFeed[data-wall="plus"]{background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Cpath d='M14 9v10M9 14h10' stroke='%23d5d9d0' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E") #f6f7f4;} .wall-plus{background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Cpath d='M14 9v10M9 14h10' stroke='%23d5d9d0' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E") #f6f7f4; background-size:auto;}
+  .chmenu input{height:38px; width:100%; border:1px solid var(--line); background:#fff; border-radius:10px; padding:0 12px; font:500 14px var(--font); color:var(--ink); transition:border-color .15s, box-shadow .15s;} .chmenu input::placeholder{color:var(--ink-3); font-weight:400;} .chmenu input:focus{outline:none; border-color:var(--violet); box-shadow:0 0 0 3px rgba(110,86,240,.16);}
+  .chmenu .chsave{width:100%; height:40px; margin-top:12px; border:0; border-radius:10px; background:var(--violet); color:#fff; font:600 14px var(--font); cursor:pointer; transition:filter .15s, transform .08s;} .chmenu .chsave:hover{filter:brightness(1.07);} .chmenu .chsave:active{transform:scale(.985);}
+  .bubgrid{grid-template-columns:repeat(10,1fr) !important; gap:7px !important;} .bubopt{height:24px !important;} .wallgrid{grid-template-columns:repeat(6,1fr) !important;} .wallopt{height:38px !important;}
   /* chat v11: big panel by default, full screen on request, animated */
   #tab-chat>.wrap{max-width:1540px;} .tabpanel:not([hidden]){animation:chIn .26s ease both;}
   #tab-chat .chatpage{max-width:1480px; height:calc(100vh - 150px); min-height:620px; margin:14px auto 18px; grid-template-columns:minmax(0,1fr) 270px; transition:height .32s ease, margin .32s ease, max-width .32s ease; animation:chIn .3s ease both;}
@@ -736,6 +757,7 @@
   <div class="hrow">
     <div><div class="eyebrow">// Outbound · email and cold calling</div><h1>Koya Outbound</h1></div>
     <div class="hright"><div class="updated" id="updated">—</div>
+      <button class="tgbtn round" id="accentBtn" type="button" aria-label="Colour theme of the page" data-tip="Page colours"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3z"/><circle cx="7.5" cy="11.5" r="1" fill="currentColor"/><circle cx="10" cy="7.5" r="1" fill="currentColor"/><circle cx="15" cy="7.5" r="1" fill="currentColor"/></svg></button>
       <button class="tgbtn round" id="themeBtn" type="button" aria-label="Colour theme" data-tip="Theme: automatic"></button>
       <button class="tgbtn round" id="tourbtn" type="button" aria-label="Take a tour of this page">?</button>
       <button class="tgbtn" id="tgbtn" type="button" aria-expanded="false" aria-controls="targets"><span id="tgtxt">Show targets</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" id="tgchev"><path d="M6 9l6 6 6-6"/></svg></button></div>
@@ -1117,6 +1139,16 @@
   });
 
   // ---------- render ----------
+  // page colours: a few accent themes, remembered in this browser
+  var ACCENTS=[["","Violet","#6e56f0"],["emerald","Emerald","#1f9d63"],["ocean","Ocean","#2f7be8"],["sunset","Sunset","#e2682e"],["rose","Rose","#d6457a"],["teal","Teal","#12a1a0"],["gold","Gold","#c58a10"],["graphite","Graphite","#3d4452"]];
+  function accentGet(){ try{ return localStorage.getItem("koya-accent")||""; }catch(e){ return ""; } }
+  function accentApply(a){ if(a) document.documentElement.setAttribute("data-accent",a); else document.documentElement.removeAttribute("data-accent"); }
+  accentApply(accentGet());
+  document.addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest("#accentBtn"), pop=document.getElementById("acPop");
+    var o=e.target.closest&&e.target.closest("[data-acc]"); if(o){ var v=o.getAttribute("data-acc"); try{ localStorage.setItem("koya-accent",v); }catch(x){} accentApply(v); if(pop) pop.querySelectorAll(".acopt").forEach(function(k){ k.classList.toggle("on",k.getAttribute("data-acc")===v); }); return; }
+    if(b){ if(!pop){ pop=document.createElement("div"); pop.id="acPop"; pop.className="acpop"; pop.hidden=true; document.body.appendChild(pop); }
+      if(pop.hidden){ var cur=accentGet(), r=b.getBoundingClientRect(); pop.innerHTML='<h5>Page colours</h5><div class="acgrid">'+ACCENTS.map(function(a){ return '<button type="button" class="acopt'+(a[0]===cur?" on":"")+'" data-acc="'+a[0]+'"><i style="background:'+a[2]+'"></i>'+a[1]+'</button>'; }).join("")+'</div>'; pop.style.top=(r.bottom+10)+"px"; pop.style.left=Math.max(12,Math.min(innerWidth-248,r.right-236))+"px"; pop.hidden=false; } else pop.hidden=true; return; }
+    if(pop&&!pop.hidden&&!(e.target.closest&&e.target.closest("#acPop"))) pop.hidden=true; });
   // This month so far against the monthly target of email plus cold calling. The white tick is where we should be today.
   function drawMonthProgress(){ var el=document.getElementById("mprog"); if(!el) return; var td=new Date(), ms=Date.UTC(td.getFullYear(),td.getMonth(),1)/864e5, dim=new Date(td.getFullYear(),td.getMonth()+1,0).getDate(), now=Math.min(todayN(),Date.UTC(td.getFullYear(),td.getMonth(),td.getDate())/864e5), a=agg(ms,now), frac=Math.min(1,(now-ms+1)/dim);
     var items=[["Meetings booked","booked","cbooked"],["Meetings held","held","cheld"],["Clients won","staffed","cstaffed"],["Devs staffed","devs","cdevs"]];
@@ -2842,11 +2874,11 @@
     var mn=document.getElementById("chatMenu"); if(mn&&!mn.hidden) chatMenuDraw(); }
   var CHAT_SIZES=[["s","Small"],["m","Normal"],["l","Large"]], CHAT_SIZE=(function(){ try{ return localStorage.getItem("koya-chat-size")||"m"; }catch(e){ return "m"; } })();
   function chatSizeApply(){ document.documentElement.setAttribute("data-chs",CHAT_SIZE); }
-  var CHAT_WALLS=[["","Plain"],["sand","Sand"],["mint","Mint"],["sky","Sky"],["dusk","Dusk"],["dots","Dots"],["grid","Grid"],["waves","Waves"]], CHAT_WALL=(function(){ try{ return localStorage.getItem("koya-chat-wall")||""; }catch(e){ return ""; } })();
+  var CHAT_WALLS=[["","Plain"],["aurora","Aurora"],["haze","Haze"],["sunrise","Sunrise"],["forest","Forest"],["diag","Stripes"],["topo","Contour"],["stars","Stars"],["plus","Plus"],["sand","Sand"],["mint","Mint"],["sky","Sky"],["dusk","Dusk"],["dots","Dots"],["grid","Grid"],["waves","Waves"]], CHAT_WALL=(function(){ try{ return localStorage.getItem("koya-chat-wall")||""; }catch(e){ return ""; } })();
   function CHAT_WALLIMG(){ try{ return localStorage.getItem("koya-chat-wallimg")||""; }catch(e){ return ""; } }
   function chatWallPick(file){ if(!file) return; var fr=new FileReader(); fr.onload=function(){ var im=new Image(); im.onload=function(){ var s=Math.min(1,1600/Math.max(im.width,im.height)), c=document.createElement("canvas"); c.width=Math.round(im.width*s); c.height=Math.round(im.height*s); c.getContext("2d").drawImage(im,0,0,c.width,c.height); var url=c.toDataURL("image/jpeg",.72); try{ localStorage.setItem("koya-chat-wallimg",url); CHAT_WALL="img"; localStorage.setItem("koya-chat-wall","img"); }catch(e){ toast("That picture is too big to keep. Try a smaller one."); return; } chatWallApply(); chatMenuDraw(); }; im.onerror=function(){ toast("That file is not a picture"); }; im.src=fr.result; }; fr.readAsDataURL(file); }
   function chatWallApply(){ var f=document.getElementById("chatFeed"); if(f){ f.setAttribute("data-wall",CHAT_WALL); f.style.backgroundImage=(CHAT_WALL==="img"&&CHAT_WALLIMG())?"url("+CHAT_WALLIMG()+")":""; } }
-  var CHAT_AVPICK=null, CHAT_BUBS=["","#d8f0e2","#ffe2cc","#fbdce8","#dbe3f8","#fff1b8","#cdeaf3","#e6d9f7"];
+  var CHAT_AVPICK=null, CHAT_BUBS=["","#d8f0e2","#ffe2cc","#fbdce8","#dbe3f8","#fff1b8","#cdeaf3","#e6d9f7","#c9f0e8","#fbd5d0","#e8f0c8","#d9d4f9","#f6d9ee","#d7e9f8","#f2e3d0","#d3d9e3","#b9e6c9","#ffc9a8","#b7c8f5","#e3bff0"];
   var CHAT_MTAB="profile";
   function chatMenuDraw(){ var mn=document.getElementById("chatMenu"); if(!mn) return; var desk=window.Notification&&Notification.permission==="default", mine=CHAT_ROSTER[CHAT_ME.id]||{}; if(CHAT_AVPICK===null) CHAT_AVPICK=mine.avatar||"";
     var keepN=(document.getElementById("chatNameIn")||{}).value, keepR=(document.getElementById("chatRoleIn")||{}).value;
@@ -2903,7 +2935,7 @@
     var w=document.getElementById("chatWho"); if(w) w.textContent=CHAT_ME.id?"Enter sends, Shift+Enter adds a line. You are "+(CHAT_ME.name||"signed in")+".":"Sign in to Claude to post here."; }
   function chatRedraw(){ chatBadge(); chatDraw(); }
   document.addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest("#chatFull"); if(!b) return; var on=document.documentElement.classList.toggle("chatfull"); b.title=on?"Exit full screen":"Full screen"; b.setAttribute("aria-label",b.title); });
-  document.addEventListener("click",function(e){ if(e.target&&e.target.id==="tab-chat"){ var b=document.getElementById("chatBack"); if(b) b.click(); } });
+  document.addEventListener("click",function(e){ if(e.target&&(e.target.id==="tab-chat"||(e.target.classList&&e.target.classList.contains("wrap")&&e.target.parentNode&&e.target.parentNode.id==="tab-chat"))){ var b=document.getElementById("chatBack"); if(b) b.click(); } });
   function chatShow(){ chatSizeApply(); setTimeout(chatWallApply,0); if(!CHAT) return; chatPageBuild(); chatDrawComposer(); if(!CHAT_SHOWN){ CHAT_NEWFROM=CHAT_LAST; CHAT_SHOWN=true; } CHAT_OPEN=true; chatMarkSeen(); chatDraw(); var f=document.getElementById("chatFeed"); if(f) f.scrollTop=f.scrollHeight; }
   function chatOpen(pre){ try{ var pc=document.getElementById("pclose"); if(pc&&!document.getElementById("panelwrap").hidden) pc.click(); }catch(e){} setTab("chat"); chatShow();
     var ed=chatEd(); if(ed&&pre){ chatCaretEnd(ed); chatInsertChip(pre.type,pre.id,pre.label.replace(/^[#@]/,"")); } if(ed) setTimeout(function(){ ed.focus(); },50); }
