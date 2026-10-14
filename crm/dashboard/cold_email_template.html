@@ -470,11 +470,15 @@
   #tabcnt-chat{background:var(--violet); color:#fff; font-weight:700; min-width:20px; text-align:center; animation:cmPop .35s ease;} @keyframes cmPop{0%{transform:scale(.6);}60%{transform:scale(1.2);}100%{transform:scale(1);}}
   .tab .cnt.men,.tabs .cnt.men{background:#e5484d!important; color:#fff!important; margin-left:3px; font-weight:700;} .tab[aria-selected="true"] #tabcnt-chat{background:var(--violet); color:#fff;}
   .tab .cnt.men{background:var(--violet); color:#fff; margin-left:3px;} .tab[aria-selected="true"] .cnt.men{background:var(--violet); color:#fff;}
-  /* chat v10: the chat page uses the whole window */
-  html.chatfull header{display:none;} html.chatfull #tab-chat>.wrap{max-width:none; padding-inline:20px;}
-  html.chatfull #tab-chat .chatpage{max-width:none; margin:12px 0 12px; height:calc(100vh - 100px); min-height:560px; grid-template-columns:minmax(0,1fr) 360px;}
-  html.chatfull .cbub{font-size:16px; padding:11px 17px;} html.chatfull .cfeed{padding:24px 40px 32px;} html.chatfull .ccol{max-width:min(900px,100%);}
-  html.chatfull .cav{width:46px; height:46px;} html.chatfull .cav.emoav .emo{font-size:25px;}
+  /* chat v11: big panel by default, full screen on request, animated */
+  header{max-height:150px; transition:max-height .32s ease, opacity .25s ease;} html.chatfull header{max-height:0; opacity:0;}
+  #tab-chat>.wrap{max-width:1320px;} .tabpanel:not([hidden]){animation:chIn .26s ease both;}
+  #tab-chat>.wrap{transition:max-width .32s ease, padding .32s ease;} html.chatfull #tab-chat>.wrap{max-width:none; padding-inline:20px;}
+  #tab-chat .chatpage{max-width:1280px; height:calc(100vh - 235px); min-height:580px; margin:16px auto 24px; grid-template-columns:minmax(0,1fr) 320px; transition:height .32s ease, margin .32s ease, max-width .32s ease; animation:chIn .3s ease both;}
+  @keyframes chIn{from{opacity:0; transform:translateY(10px) scale(.992);}to{opacity:1; transform:none;}}
+  html.chatfull #tab-chat .chatpage{max-width:1640px; margin:10px auto 10px; height:calc(100vh - 92px); grid-template-columns:minmax(0,1fr) 340px;}
+  html.chatfull .ccol{max-width:min(820px,100%);}
+  #chatFull{transition:background .15s;}
   .crx{position:relative;} .crxpick{top:auto; bottom:calc(100% + 4px); left:0;}
   @media (max-width:640px){ .chcount,.chead .ctitle span{display:none;} .chead{padding:12px 14px; gap:10px;} .cfeed{padding:14px 12px 20px;} .cwrite{padding:10px 12px calc(12px + env(safe-area-inset-bottom,0px));} .chelp{margin-left:2px;} }
   @media (max-width:1000px){ #tab-chat .chatpage{grid-template-columns:minmax(0,1fr); height:calc(100vh - 160px); min-height:520px;} .chatside{display:none;} }
@@ -1198,7 +1202,7 @@
     TABKEYS.forEach(function(k){ var b=document.getElementById("tabbtn-"+k); b.setAttribute("aria-selected", String(k===t)); });
     if (t==="opps") renderOpps();
     if (t==="plan") renderPlan();
-    try{ document.documentElement.classList.toggle("chatfull",t==="chat"); }catch(e){} try{ CHAT_OPEN=(t==="chat"); if (t==="chat"){ if(__from!=="chat") CHAT_FROM=__from; chatShow(); } else { CHAT_SHOWN=false; chatBadge(); } }catch(e){}
+    try{ if(t!=="chat") document.documentElement.classList.remove("chatfull"); }catch(e){} try{ CHAT_OPEN=(t==="chat"); if (t==="chat"){ if(__from!=="chat") CHAT_FROM=__from; chatShow(); } else { CHAT_SHOWN=false; chatBadge(); } }catch(e){}
     if (t==="sys") renderSys();
     if (!fromHash){ try{ history.replaceState(null,"", HASH[t]?("#"+HASH[t]):location.pathname+location.search); }catch(e){ try{ location.hash=HASH[t]; }catch(e2){} } }
     try{ localStorage.setItem("koya-tab", t); }catch(e){}
@@ -2761,7 +2765,7 @@
     return '<div class="cmsg'+(mine?" mine":"")+((m.tagIds||[]).indexOf(CHAT_ME.id)>=0?" forme":"")+(grouped?" grp":"")+'" data-mid="'+esc(m.id)+'">'+(grouped?'<span class="cav gap"></span>':chatAv(m.fromId,nm))+'<div class="ccol">'+(grouped?'':'<div class="cwho"><b>'+esc(nm)+'</b><span>'+esc(chatClock(m.t))+'</span>'+(mine?chatTicks(m):'')+'</div>')+'<div class="cbub">'+quote+text+(m.edited?'<span class="cedited">edited</span>':'')+tools+'</div>'+(lp?chatLeadCard(lp):'')+files.map(chatFileCard).join("")+chatRxHTML(m)+'</div></div>'; }
   // ----- the page: header, filters, conversation and composer on the left; members and quick add on the right
   function chatPageBuild(){ var m=document.getElementById("chatMount"); if(!m||m.firstChild) return m;
-    m.innerHTML='<div class="chatmain"><div class="chead"><span class="chico">'+ICO.chat+'</span><div class="ctitle"><b>Team chat</b><span>Share updates, discuss leads and stay in sync.</span></div><div class="chmeta" id="chatHeadMeta"></div><div class="chmenuwrap"><button type="button" class="chmenub" id="chatMenuBtn" aria-label="Chat options">'+ICO.dots+'</button><div class="chmenu" id="chatMenu" hidden></div></div><button type="button" class="chmenub" id="chatBack" aria-label="Close chat">&times;</button></div>'+
+    m.innerHTML='<div class="chatmain"><div class="chead"><span class="chico">'+ICO.chat+'</span><div class="ctitle"><b>Team chat</b><span>Share updates, discuss leads and stay in sync.</span></div><div class="chmeta" id="chatHeadMeta"></div><div class="chmenuwrap"><button type="button" class="chmenub" id="chatMenuBtn" aria-label="Chat options">'+ICO.dots+'</button><div class="chmenu" id="chatMenu" hidden></div></div><button type="button" class="chmenub" id="chatFull" aria-label="Make the chat full screen" title="Full screen"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button><button type="button" class="chmenub" id="chatBack" aria-label="Close chat">&times;</button></div>'+
       '<div class="cbar"><div class="cfilters" id="chatFilters"></div><input id="chatSearch" class="csearch" type="search" placeholder="Search messages" autocomplete="off"></div>'+
       '<div id="chatPin" class="cpin" hidden><span class="pi">'+ICO.pin+'</span><span class="pt">Keep lead discussions here. Use <b>@</b> to notify a teammate and <b>#</b> to link a lead.</span><button type="button" id="chatPinX" aria-label="Hide this tip">&times;</button></div><div class="cfeedwrap"><div id="chatFeed" class="cfeed"></div><button type="button" class="cdown" id="chatDown" aria-label="Jump to the latest message" hidden>'+ICO.down+'</button></div>'+
       '<div class="cwrite"><div id="chatAc" class="cac" hidden></div><div id="chatTyping" class="ctyping" hidden></div><div id="chatReplyBar" class="creplybar" hidden></div><div id="chatEmoPop" class="cemopop" hidden></div><div id="chatFileBar" class="cfilebar" hidden></div><div class="cinput" id="chatInput"></div><div class="chelp" id="chatWho"></div></div></div>'+
@@ -2818,6 +2822,7 @@
     var fd=f, dn=document.getElementById("chatDown"); if(dn){ fd.onscroll=function(){ dn.hidden=fd.scrollHeight-fd.scrollTop-fd.clientHeight<120; }; dn.hidden=fd.scrollHeight-fd.scrollTop-fd.clientHeight<120; }
     var w=document.getElementById("chatWho"); if(w) w.textContent=CHAT_ME.id?"Enter sends, Shift+Enter adds a line. You are "+(CHAT_ME.name||"signed in")+".":"Sign in to Claude to post here."; }
   function chatRedraw(){ chatBadge(); chatDraw(); }
+  document.addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest("#chatFull"); if(!b) return; var on=document.documentElement.classList.toggle("chatfull"); b.title=on?"Exit full screen":"Full screen"; b.setAttribute("aria-label",b.title); });
   function chatShow(){ if(!CHAT) return; chatPageBuild(); chatDrawComposer(); if(!CHAT_SHOWN){ CHAT_NEWFROM=CHAT_LAST; CHAT_SHOWN=true; } CHAT_OPEN=true; chatMarkSeen(); chatDraw(); var f=document.getElementById("chatFeed"); if(f) f.scrollTop=f.scrollHeight; }
   function chatOpen(pre){ try{ var pc=document.getElementById("pclose"); if(pc&&!document.getElementById("panelwrap").hidden) pc.click(); }catch(e){} setTab("chat"); chatShow();
     var ed=chatEd(); if(ed&&pre){ chatCaretEnd(ed); chatInsertChip(pre.type,pre.id,pre.label.replace(/^[#@]/,"")); } if(ed) setTimeout(function(){ ed.focus(); },50); }
