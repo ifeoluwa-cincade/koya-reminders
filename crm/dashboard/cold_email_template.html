@@ -423,6 +423,7 @@
   .cnote{display:flex; align-items:center; gap:11px; width:100%; text-align:left; background:#0d0f13; color:#fff; border:1px solid rgba(255,255,255,.14); border-radius:14px; padding:11px 13px; font:inherit; cursor:pointer; box-shadow:0 18px 40px -16px rgba(0,0,0,.6); animation:cnoteIn .28s ease;} .cnote.me{border-color:var(--violet); box-shadow:0 0 0 2px rgba(110,86,240,.4),0 18px 40px -16px rgba(0,0,0,.6);}
   .cnote .nt{flex:1; min-width:0;} .cnote b{display:block; font-size:13.5px;} .cnote small{display:block; color:rgba(255,255,255,.7); font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;} .cnote .nx{font:600 12px var(--font); color:#a99bff;}
   @keyframes cnoteIn{from{opacity:0; transform:translateY(-8px);}to{opacity:1; transform:none;}}
+  .sysbar{display:flex; align-items:center; gap:12px; flex-wrap:wrap;} .sysfix{border:1px solid var(--ink); background:var(--ink); color:#fff; border-radius:999px; padding:6px 16px; font:500 13px var(--font); cursor:pointer;} .sysfix:disabled{opacity:.55; cursor:default;} .sysfixnote{color:var(--ink-3); font-size:12.5px;}
   /* messages between teammates */
   .chatbell{position:relative;}
   .chatbell .cbadge{position:absolute; top:-6px; right:-6px; min-width:18px; padding:1px 5px; border-radius:999px; background:var(--violet); color:#fff; font:600 10.5px var(--mono); text-align:center; line-height:15px;}
@@ -729,7 +730,7 @@
 <div id="tab-sys" class="tabpanel" hidden>
 <div class="wrap">
   <div class="sect"><h2>Systems &amp; operations</h2><span id="sysAge"></span></div>
-  <div class="sysbar"><span class="sysbadge" id="sysBadge"></span></div>
+  <div class="sysbar"><span class="sysbadge" id="sysBadge"></span><button type="button" class="sysfix" id="sysFix">Fix problems</button><span class="sysfixnote" id="sysFixNote"></span></div>
   <div class="sect"><h2><button type="button" class="foldbtn" data-fold="up" aria-expanded="true" aria-controls="fold-up"><svg class="fchev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>Uptime</button></h2><div class="seg" id="upseg" role="group" aria-label="Range"><button type="button" class="segb" data-n="24h" aria-pressed="false">24 hours</button><button type="button" class="segb" data-n="7d" aria-pressed="true">7 days</button><button type="button" class="segb" data-n="30" aria-pressed="false">30 days</button><button type="button" class="segb" data-n="90" aria-pressed="false">90 days</button></div></div>
   <div class="foldbody" id="fold-up">
   <div class="uplist" id="uplist"></div>
@@ -2755,6 +2756,12 @@
     if(open&&(e.key==="Enter"||e.key==="Tab")){ e.preventDefault(); chatPick(CHAT_ACI); return; }
     if(e.key==="Escape"){ if(open){ ac.hidden=true; } return; }
     if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); chatSend(); } });
+  // Systems page: one click asks the Lead Actions script (through an Attio marker note, the same path as the pull-to-refresh) to run the self-fix now and start the call and reply jobs; the result is written to the Activity list
+  document.addEventListener("click",function(e){ var b=e.target.closest&&e.target.closest("#sysFix"); if(!b) return; var note=document.getElementById("sysFixNote");
+    if(!MCP){ if(note) note.textContent="Needs the live connection: allow live access first."; return; }
+    b.disabled=true; if(note) note.textContent="Checking and fixing...";
+    MCP.callTool("Attio","create-note",{title:"koya heal",content:"fix "+new Date().toISOString(),parent_object:"companies",parent_record_id:"72483d3c-6d5f-4df8-91c7-63cfcce772d4"},{cache:false})
+      .then(function(){ if(note) note.textContent="Started. What it found and fixed appears in the Activity list below in about a minute."; setTimeout(function(){ b.disabled=false; },25000); },function(){ if(note) note.textContent="Could not start it. Try again."; b.disabled=false; }); });
   chatUserInit();
   if(tab==="chat") chatShow();
   var uc=window.claude && window.claude.use ? window.claude.use("db") : Promise.resolve(null);
