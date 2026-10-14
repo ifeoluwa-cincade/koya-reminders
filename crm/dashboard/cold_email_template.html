@@ -1615,10 +1615,11 @@
   function stageBucket(st){ return ({"Meeting Booked":"meeting","Interested":"followup","Multi-touch":"chasing","Later":"later"})[st]||null; }
   // ----- live discovery: ask Attio for every open deal, so a lead that arrived since the hourly build shows up on a pull
   var LIVE_DISC_ERR=null, LIVE_COUNTS="", LIVE_NEWEST=null;
-  function liveDiagDraw(extra){ var el=document.getElementById("liveDiag"); if(!el) return; el.textContent="Read at "+new Date().toISOString().slice(11,19)+" UTC\nBy stage: "+(LIVE_COUNTS||"none")+"\nNewest-deals read: "+(LIVE_NEWEST?("found "+LIVE_NEWEST.n+" since "+LIVE_NEWEST.since+(LIVE_NEWEST.err?" | error: "+LIVE_NEWEST.err:"")+(LIVE_NEWEST.sample?"\nFirst bytes: "+LIVE_NEWEST.sample:"")):"not run")+"\n"+(extra||"")+(LIVE_DISC_ERR?"\nProblem: "+LIVE_DISC_ERR:""); }
+  function liveDiagDraw(extra){ var el=document.getElementById("liveDiag"); if(!el) return; el.textContent="Read at "+new Date().toISOString().slice(11,19)+" UTC\nBy stage: "+(LIVE_COUNTS||"none")+"\nNewest-deals read: "+(LIVE_NEWEST?("found "+LIVE_NEWEST.n+" since "+LIVE_NEWEST.since+(LIVE_NEWEST.err?" | error: "+LIVE_NEWEST.err:"")+(LIVE_NEWEST.sample?"\nFirst bytes: "+LIVE_NEWEST.sample:"")):"not run")+"\n"+(extra||"")+(LIVE_DISC_ERR?"\nProblem: "+LIVE_DISC_ERR:""); try{ liveDiagSave(); }catch(e){} }
+  var LIVE_DIAG_T=0; function liveDiagSave(){ try{ var el=document.getElementById("liveDiag"); if(!db||!el||Date.now()-LIVE_DIAG_T<20000) return; LIVE_DIAG_T=Date.now(); db.collection("meta").doc("live_diag").set({text:String(el.textContent).slice(0,3000),at:new Date().toISOString(),by:(typeof CHAT_ME!=="undefined"&&CHAT_ME.name)||"",relay:!!(MCP&&MCP.isRelay),mcp:!!MCP}).catch(function(){}); }catch(e){} }
   document.addEventListener("click",function(e){ if(!(e.target.closest&&e.target.closest("#liveDiagCopy"))) return; var el=document.getElementById("liveDiag"); try{ navigator.clipboard.writeText(el.textContent).then(function(){ toast("Copied"); },function(){ var r=document.createRange(); r.selectNodeContents(el); var s=getSelection(); s.removeAllRanges(); s.addRange(r); }); }catch(x){} });
   function liveDiscover(){
-    if (!MCP) return Promise.resolve();
+    if (!MCP){ try{ liveDiagDraw("no live connection (MCP missing) in this viewer"); }catch(e){} return Promise.resolve(); }
     var OPEN=["Interested","Multi-touch","Later","Meeting Booked","Profiles Sent","Trial"], flt={or:OPEN.map(function(x){ return {attribute:"stage",op:"eq",value:x}; })};
     function ask(inp){ return MCP.callTool("Attio","list-records",inp,{cache:false}); }
     // one read per stage, and further pages until a page brings nothing new: the tool returns a limited page, and one combined read missed the newest deals
@@ -1636,7 +1637,7 @@
     return Promise.all(OPEN.map(pageStage).concat([pageNewest()])).then(function(parts){
       var B={}, counts=[]; parts.forEach(function(pt,i){ var k=Object.keys(pt); k.forEach(function(d){ B[d]=pt[d]; }); counts.push((OPEN[i]||"newest")+" "+k.length); });
       var ids=Object.keys(B);
-      if (!ids.length){ LIVE_DISC_ERR="the list came back in a format the page could not read: "+lastRaw.replace(/\s+/g," ").slice(0,140); var n0=document.getElementById("liveNote"); if(n0) n0.textContent="New leads could not be read live ("+LIVE_DISC_ERR+")"; return; }
+      if (!ids.length){ LIVE_DISC_ERR="the list came back in a format the page could not read: "+lastRaw.replace(/\s+/g," ").slice(0,140); try{ liveDiagDraw("parsed 0 records. counts: "+counts.join(", ")+" | raw: "+lastRaw.replace(/\s+/g," ").slice(0,500)); }catch(e){} var n0=document.getElementById("liveNote"); if(n0) n0.textContent="New leads could not be read live ("+LIVE_DISC_ERR+")"; return; }
       LIVE_COUNTS=counts.join(", "); try{ liveDiagDraw("Open deals read: "+ids.length); }catch(e){}
       var known={}; OPPS.concat(CLOSED).forEach(function(o){ known[o.id]=1; });
       var fresh=[]; ids.forEach(function(did){ var b=B[did], m=b.match(/people,[0-9a-f-]{36},([0-9a-f-]{36})/), pid=m&&m[1], st=attioVal(b,"stage"); if (pid && !known[pid] && OPEN.indexOf(st)>=0){ known[pid]=1; fresh.push({pid:pid,did:did,b:b,st:st}); } });
