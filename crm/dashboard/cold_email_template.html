@@ -1576,7 +1576,9 @@
   function liveDiagDraw(extra){ var el=document.getElementById("liveDiag"); if(!el) return; el.textContent="Read at "+new Date().toISOString().slice(11,19)+" UTC\nBy stage: "+(LIVE_COUNTS||"none")+"\nNewest-deals read: "+(LIVE_NEWEST?("found "+LIVE_NEWEST.n+" since "+LIVE_NEWEST.since+(LIVE_NEWEST.err?" | error: "+LIVE_NEWEST.err:"")+(LIVE_NEWEST.sample?"\nFirst bytes: "+LIVE_NEWEST.sample:"")):"not run")+"\n"+(extra||"")+(LIVE_DISC_ERR?"\nProblem: "+LIVE_DISC_ERR:""); try{ liveDiagSave(); }catch(e){} }
   var LIVE_DIAG_T=0; function liveDiagSave(){ try{ var el=document.getElementById("liveDiag"); if(!db||!el||Date.now()-LIVE_DIAG_T<20000) return; LIVE_DIAG_T=Date.now(); db.collection("meta").doc("live_diag").set({text:String(el.textContent).slice(0,3000),at:new Date().toISOString(),by:(typeof CHAT_ME!=="undefined"&&CHAT_ME.name)||"",relay:!!(MCP&&MCP.isRelay),mcp:!!MCP}).catch(function(){}); }catch(e){} }
   document.addEventListener("click",function(e){ if(!(e.target.closest&&e.target.closest("#liveDiagCopy"))) return; var el=document.getElementById("liveDiag"); try{ navigator.clipboard.writeText(el.textContent).then(function(){ toast("Copied"); },function(){ var r=document.createRange(); r.selectNodeContents(el); var s=getSelection(); s.removeAllRanges(); s.addRange(r); }); }catch(x){} });
+  var LIVE_DISC_BUSY=false;
   function liveDiscover(){
+    if (LIVE_DISC_BUSY) return Promise.resolve(); LIVE_DISC_BUSY=true; setTimeout(function(){ LIVE_DISC_BUSY=false; },25000);
     if (!MCP){ try{ liveDiagDraw("no live connection (MCP missing) in this viewer"); }catch(e){} return Promise.resolve(); }
     var OPEN=["Interested","Multi-touch","Later","Meeting Booked","Profiles Sent","Trial"], flt={or:OPEN.map(function(x){ return {attribute:"stage",op:"eq",value:x}; })};
     function ask(inp){ return MCP.callTool("Attio","list-records",inp,{cache:false}); }
@@ -1602,7 +1604,7 @@
       LIVE_DISC_ERR=null; try{ liveDiagDraw("Open deals read: "+ids.length+" | new to this page: "+fresh.length+(fresh.length?" ("+fresh.map(function(f){ return attioVal(f.b,"name"); }).join(", ")+")":"")); }catch(e){} var nn=document.getElementById("liveNote"); if (nn){ nn.textContent=""; nn.title=ids.length+" open deals read live from Attio ("+LIVE_COUNTS+"), "+fresh.length+" new"; } if (!fresh.length) return;
       return MCP.callTool("Attio","get-records-by-ids",{object:"people",record_ids:fresh.map(function(f){ return f.pid; })},{cache:false}).then(function(r2){
         var P=attioBlocks(txt(r2)), added=0;
-        fresh.forEach(function(f){ var pb=P[f.pid]; if(!pb) return;
+        fresh.forEach(function(f){ var pb=P[f.pid]; if(!pb||oppById(f.pid)) return;
           var dname=attioVal(f.b,"name")||"", nx=attioVal(f.b,"next_action_at"), em=(pb.match(/email_addresses\[\d+\]:\s*(\S+)/)||[])[1]||null, li=attioVal(pb,"linkedin"), ch=attioVal(f.b,"source_channel")||"";
           var bk=stageBucket(f.st)||"followup", parts=dname.split("/");
           OPPS.push(tidyOpp({id:f.pid,name:attioVal(pb,"name")||dname,company:parts.length>1?parts.slice(1).join("/").trim():null,email:em,phone:((pb.match(/phone_numbers\[\d+\]:\s*(\S+)/)||[])[1]||null),linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:f.st,source:/call/i.test(ch)?"Call":"Email",
