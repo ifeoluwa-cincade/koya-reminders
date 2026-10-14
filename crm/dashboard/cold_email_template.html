@@ -1409,6 +1409,7 @@
       if (isClosedView()) return true;
       if (fStatus==="overdue" && d.cls!=="over") return false;
       if (fStatus==="today" && d.cls!=="today") return false;
+      if (fStatus==="nodate" && (o.due_set||o.missed)) return false;
       if (fView==="open" && ["meeting","followup","chasing","callback"].indexOf(fStatus)>=0 && o.bucket!==fStatus) return false;
       if (fSource!=="all" && o.source.indexOf(fSource)<0) return false;
       if (fReview!=="all" && revState(o.id)!==fReview) return false;
@@ -1431,7 +1432,7 @@
   }
   function renderTools(){
     var over=countView(function(o){ return dueInfo(o).cls==="over"; }), today=countView(function(o){ return dueInfo(o).cls==="today"; });
-    var st=[{k:"all",l:"All",n:viewBase().length},{k:"overdue",l:"Overdue",n:over,hot:true},{k:"today",l:"Due today",n:today,hot:true}].concat(["meeting","followup","chasing","callback"].map(function(b){ return {k:b,l:BUCKET_NAME[b],n:countView(function(o){ return o.bucket===b; })}; }));
+    var st=[{k:"all",l:"All",n:viewBase().length},{k:"overdue",l:"Overdue",n:over,hot:true},{k:"today",l:"Due today",n:today,hot:true},{k:"nodate",l:"No follow-up date",n:countView(function(o){ return !o.due_set&&!o.missed; })}].concat(["meeting","followup","chasing","callback"].map(function(b){ return {k:b,l:BUCKET_NAME[b],n:countView(function(o){ return o.bucket===b; })}; }));
     var so=[{k:"all",l:"All sources",n:viewBase().length},{k:"Email",l:"Email",n:countView(function(o){ return o.source.indexOf("Email")>=0; })},{k:"Call",l:"Cold call",n:countView(function(o){ return o.source.indexOf("Call")>=0; })}];
     var sr=Object.keys(SORTNAME).map(function(k){ return {k:k,l:SORTNAME[k]}; });
     var lostN=CLOSED.filter(function(o){ return o.bucket==="lost"; }).length, wonN=CLOSED.filter(function(o){ return o.bucket==="won"; }).length;
