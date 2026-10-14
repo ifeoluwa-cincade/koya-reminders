@@ -1639,10 +1639,10 @@
       deals.length?MCP.callTool("Attio","get-records-by-ids",{object:"deals",record_ids:deals},{cache:false}):Promise.resolve(null),
       MCP.callTool("Attio","get-records-by-ids",{object:"people",record_ids:people},{cache:false})
     ]).then(function(rs){
-      var D=attioBlocks(rs[0]?txt(rs[0]):""), P=attioBlocks(txt(rs[1])), gone=0, changed=0, haveD=Object.keys(D).length>0, haveP=Object.keys(P).length>0;
+      var D=attioBlocks(rs[0]?txt(rs[0]):""), P=attioBlocks(txt(rs[1])), gone=0, changed=0, haveD=Object.keys(D).length>0, haveP=Object.keys(P).length>0, fullD=!deals.length||Object.keys(D).length>=deals.length, fullP=Object.keys(P).length>=people.length;   // a partial answer never counts as 'deleted in Attio' (a brand-new lead used to vanish this way)
       OPPS=OPPS.filter(function(o){
         var did0=dealIdOf(o);
-        if ((haveD && did0 && !D[did0]) || (haveP && !P[o.id])){ if (o.id===openId){ o.resolved=true; return true; } gone++; return false; }      // deleted in Attio since the last hourly build (a lead whose window is open stays until the window closes)
+        if (!o.live_new && fullD && fullP && ((haveD && did0 && !D[did0]) || (haveP && !P[o.id]))){ if (o.id===openId){ o.resolved=true; return true; } gone++; return false; }      // deleted in Attio since the last hourly build (a lead whose window is open stays until the window closes)
         var db=D[dealIdOf(o)], pb=P[o.id], ds=attioVal(db,"stage"), ps=attioVal(pb,"relationship_stage");
         if ((ds&&/^(Won|Lost)/.test(ds)) || ps==="LOST" || ps==="CUSTOMER"){ o.closedAs=(/^Won/.test(ds||"")||ps==="CUSTOMER")?"won":"lost"; o.reason=attioVal(db,"lost_reason")||o.reason||null; if (o.id===openId){ o.resolved=true; return true; } toClosed(o); gone++; return false; }
         if (ds && ds!==o.stage){ o.stage=ds; var bk=stageBucket(ds); if(bk&&bk!==o.bucket){ o.bucket=bk; o.status=BUCKET_NAME[bk]; } changed++; }
