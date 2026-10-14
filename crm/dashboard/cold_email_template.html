@@ -1625,7 +1625,7 @@
     // one read per stage, and further pages until a page brings nothing new: the tool returns a limited page, and one combined read missed the newest deals
     var lastRaw="";
     function pageStage(st){ var out={}, flt1={attribute:"stage",op:"eq",value:st};
-      function go(off,cur,pg){ var inp={object:"deals",filter:flt1,limit:100}; if(cur) inp.cursor=cur; else if(off) inp.offset=off;
+      function go(off,cur,pg){ var inp={object:"deals",filter:flt1,limit:50}; if(cur) inp.cursor=cur; else if(off) inp.offset=off;
         return ask(inp).catch(function(){ if(off||cur) return null; return ask({object:"deals",filter:flt1}); }).then(function(r){
           if(!r) return out; lastRaw=String(txt(r)); var b=attioBlocks(txt(r)), got=Object.keys(b), fresh=0; got.forEach(function(i){ if(!out[i]){ out[i]=b[i]; fresh++; } });
           var cm=lastRaw.match(/(?:next_cursor|nextCursor|next cursor|cursor)["']?\s*[:=]\s*["']?([A-Za-z0-9_\-+\/=.]{6,})/i), nc=cm&&cm[1]&&!/^(null|none|undefined)$/i.test(cm[1])?cm[1]:null;
@@ -1633,7 +1633,7 @@
       return go(0,null,0); }
     // a second, independent read: every deal created since the page was built (small, so no paging problem)
     function pageNewest(){ var since=null; try{ since=new Date(new Date(DATA.generated_at).getTime()-3600e3).toISOString(); }catch(e){} if(!since) return Promise.resolve({});
-      return ask({object:"deals",filter:{attribute:"created_at",op:"gt",value:since},limit:100}).then(function(r){ var bl=attioBlocks(txt(r)); LIVE_NEWEST={n:Object.keys(bl).length,since:since,sample:String(txt(r)).replace(/\s+/g," ").slice(0,260)}; return bl; }).catch(function(e){ LIVE_NEWEST={n:0,since:since,err:String((e&&e.message)||e).slice(0,260)}; return {}; }); }
+      return ask({object:"deals",filter:{attribute:"created_at",op:"gt",value:since},limit:50}).then(function(r){ var bl=attioBlocks(txt(r)); LIVE_NEWEST={n:Object.keys(bl).length,since:since,sample:String(txt(r)).replace(/\s+/g," ").slice(0,260)}; return bl; }).catch(function(e){ LIVE_NEWEST={n:0,since:since,err:String((e&&e.message)||e).slice(0,260)}; return {}; }); }
     return Promise.all(OPEN.map(pageStage).concat([pageNewest()])).then(function(parts){
       var B={}, counts=[]; parts.forEach(function(pt,i){ var k=Object.keys(pt); k.forEach(function(d){ B[d]=pt[d]; }); counts.push((OPEN[i]||"newest")+" "+k.length); });
       var ids=Object.keys(B);
