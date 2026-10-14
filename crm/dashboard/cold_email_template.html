@@ -1746,7 +1746,7 @@
   var REASONS=["NOT_INTERESTED","NO_RESPONSE","BAD_FIT","TIMING","PRICE","COMPETITOR","OTHER"];
   function resolveHTML(o){
     if (MCP){
-      return '<h4>Stage</h4><div class="resolve">'+RZORDER.map(function(k){ var on=RZ[k].deal && RZ[k].deal===o.stage && k!=="notint"; return '<button class="rbtn s-'+k+(on?' on':'')+'" type="button" data-rz="'+k+'" aria-pressed="'+(!!on)+'">'+(RZEMO[k]?RZEMO[k]+' ':'')+RZ[k].label+'</button>'; }).join("")+'</div><div class="rzx"><button class="rbtn" type="button" data-rz="followup">Follow up on a date</button></div>'+(o.due_set?'<div class="fset"><span class="fl">Follow-up set</span><b>'+esc(fmtWhen(o.due))+'</b><button class="plusbtn" type="button" data-rz="followup" style="margin-top:0">Change</button><button class="plusbtn" type="button" id="rfcancel" style="margin-top:0">Cancel</button><span class="pstat" id="rfcmsg"></span></div>':'')+'<p class="tnote hint2">One place for where this lead is. Pick a stage and you see what will change before you confirm. Meeting booked, Won, Lost and Not interested also update the person and stop the emails in PlusVibe. The other stages change the deal only. Follow up on a date sets a reminder.</p><div id="rzone"></div>';
+      return '<h4>Stage</h4><div class="resolve">'+RZORDER.map(function(k){ var on=RZ[k].deal && RZ[k].deal===o.stage && k!=="notint"; return '<button class="rbtn s-'+k+(on?' on':'')+'" type="button" data-rz="'+k+'" aria-pressed="'+(!!on)+'">'+(RZEMO[k]?RZEMO[k]+' ':'')+RZ[k].label+'</button>'; }).join("")+'</div><div class="rzx"><button class="rbtn" type="button" data-rz="followup">Follow up on a date</button><button class="rbtn" type="button" id="rcontact" title="Use this after you reached out some other way, like LinkedIn or WhatsApp. It clears Overdue.">Mark as contacted</button><span class="pstat" id="rcmsg"></span></div>'+(o.due_set?'<div class="fset"><span class="fl">Follow-up set</span><b>'+esc(fmtWhen(o.due))+'</b><button class="plusbtn" type="button" data-rz="followup" style="margin-top:0">Change</button><button class="plusbtn" type="button" id="rfcancel" style="margin-top:0">Cancel</button><span class="pstat" id="rfcmsg"></span></div>':'')+'<p class="tnote hint2">One place for where this lead is. Pick a stage and you see what will change before you confirm. Meeting booked, Won, Lost and Not interested also update the person and stop the emails in PlusVibe. The other stages change the deal only. Follow up on a date sets a reminder.</p><div id="rzone"></div>';
     }
     return '<h4>Stage</h4><p class="tnote">This window is not connected to Attio yet, so the buttons are off. Reload the page and allow the Attio connector if it asks. Make sure you are signed in to claude.ai with your work account.</p>';
   }
@@ -1904,6 +1904,14 @@
   }
   function closedHTML(o){
     return '<h4>Closed</h4><p class="tnote">'+(o.bucket==="won"?"Won":"Lost")+(o.closed_at?" on "+esc(fmtDate(o.closed_at)):"")+(o.reason?". Reason: "+esc(String(o.reason).replace(/_/g," ").toLowerCase()):"")+'. Emails in PlusVibe were stopped when it was closed.</p><div class="rzb"><button class="pbtn" type="button" id="rreopen"'+(MCP&&dealIdOf(o)?'':' disabled')+'>Reopen as Interested</button><span class="pstat" id="rreopenmsg"></span></div>';
+  }
+  function markContacted(){
+    var o=oppById(openId), did=o&&dealIdOf(o); if(!o) return; var b=document.getElementById("rcontact"), msg=document.getElementById("rcmsg"); function say(c,s){ if(msg){ msg.className="pstat "+c; msg.textContent=s; } }
+    var now=new Date().toISOString();
+    function local(){ o.last_touch=now; o.missed=null; o.due_set=false; o.due=new Date(Date.now()+(RULE[o.bucket]||2)*864e5).toISOString(); logAct("touch","Marked "+leadLabel(o)+" as contacted",o.id); try{ MCP&&MCP.invalidate().catch(function(){}); }catch(e){} openPanel(o.id,true); if(tab==="opps") renderOpps(); var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=oppNL().length; toast("Marked as contacted. Overdue is cleared."); }
+    if(!did||!MCP){ local(); return; }
+    if(b) b.disabled=true; say("","Saving...");
+    MCP.callTool("Attio","update-record",{object:"deals",record_id:did,values:{next_action_at:[],missed_followup_at:[],last_activity_at:now}},{cache:false}).then(function(){ local(); }).catch(function(e){ if(b) b.disabled=false; say("bad","Not saved: "+errText(e)); });
   }
   function cancelFollowup(){
     var o=oppById(openId), did=o&&dealIdOf(o); if(!o||!did||!MCP) return;
@@ -2200,6 +2208,7 @@
     var rv=e.target.closest("[data-rev]"); if (rv){ var o3=oppById(openId); if(o3&&!rv.disabled) setReview(o3,rv.dataset.rev); return; }
     if (e.target.closest("#rreopen")){ reopenLead(); return; }
     if (e.target.closest("#rfcancel")){ cancelFollowup(); return; }
+    if (e.target.closest("#rcontact")){ markContacted(); return; }
     var lc=e.target.closest("[data-lic]"); if (lc){ if(!lc.disabled) setLiConn(lc.dataset.lic); return; }
     var nh=e.target.closest("[data-nhide]"); if (nh){ var o1=oppById(openId); var n1=o1&&(o1.notes||[]).filter(function(x){ return String(x.id)===nh.dataset.nhide; })[0]; if(n1) hideNote(o1,n1); return; }
     var nr=e.target.closest("[data-nrestore]"); if (nr){ var o2=oppById(openId); var n2=o2&&(o2.notes||[]).filter(function(x){ return String(x.id)===nr.dataset.nrestore; })[0]; if(n2) restoreNote(o2,n2); return; }
