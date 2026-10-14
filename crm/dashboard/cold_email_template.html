@@ -544,6 +544,7 @@
   .chmenu input{height:38px; width:100%; border:1px solid var(--line); background:#fff; border-radius:10px; padding:0 12px; font:500 14px var(--font); color:var(--ink); transition:border-color .15s, box-shadow .15s;} .chmenu input::placeholder{color:var(--ink-3); font-weight:400;} .chmenu input:focus{outline:none; border-color:var(--violet); box-shadow:0 0 0 3px rgba(110,86,240,.16);}
   .chmenu .chsave{width:100%; height:40px; margin-top:12px; border:0; border-radius:10px; background:var(--violet); color:#fff; font:600 14px var(--font); cursor:pointer; transition:filter .15s, transform .08s;} .chmenu .chsave:hover{filter:brightness(1.07);} .chmenu .chsave:active{transform:scale(.985);}
   .bubgrid{grid-template-columns:repeat(10,1fr) !important; gap:7px !important;} .bubopt{height:24px !important;} .wallgrid{grid-template-columns:repeat(6,1fr) !important;} .wallopt{height:38px !important;}
+  .livediag{margin:10px 0 0; font-size:12.5px; color:var(--ink-3);} .livediag summary{cursor:pointer;} .livediag pre{white-space:pre-wrap; word-break:break-word; background:var(--bg-soft); border-radius:10px; padding:10px 12px; margin:8px 0; font:11.5px/1.5 var(--mono); color:var(--ink-2);}
   /* chat v11: big panel by default, full screen on request, animated */
   #tab-chat>.wrap{max-width:1540px;} .tabpanel:not([hidden]){animation:chIn .26s ease both;}
   #tab-chat .chatpage{max-width:1480px; height:calc(100vh - 150px); min-height:620px; margin:14px auto 18px; grid-template-columns:minmax(0,1fr) 270px; transition:height .32s ease, margin .32s ease, max-width .32s ease; animation:chIn .3s ease both;}
@@ -862,6 +863,7 @@
 <div class="wrap">
   <div class="sect"><h2>Systems &amp; operations</h2><span id="sysAge"></span></div>
   <div class="sysbar"><span class="sysbadge" id="sysBadge"></span><button type="button" class="sysfix" id="sysFix">Fix problems</button><span class="sysfixnote" id="sysFixNote"></span></div>
+  <details class="livediag"><summary>Live read details</summary><pre id="liveDiag">Not read yet.</pre><button type="button" id="liveDiagCopy" class="sysfix">Copy</button></details>
   <div class="sect"><h2><button type="button" class="foldbtn" data-fold="up" aria-expanded="true" aria-controls="fold-up"><svg class="fchev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>Uptime</button></h2><div class="seg" id="upseg" role="group" aria-label="Range"><button type="button" class="segb" data-n="24h" aria-pressed="false">24 hours</button><button type="button" class="segb" data-n="7d" aria-pressed="true">7 days</button><button type="button" class="segb" data-n="30" aria-pressed="false">30 days</button><button type="button" class="segb" data-n="90" aria-pressed="false">90 days</button></div></div>
   <div class="foldbody" id="fold-up">
   <div class="uplist" id="uplist"></div>
@@ -1533,7 +1535,9 @@
   function errText(e){ if (e && /was not found/i.test(String(e.message||""))) return "that lead no longer exists in Attio (it was deleted). Reload the page to refresh the list"; var c=(e&&e.code)||"error"; return ({server_not_connected:"the connector is not connected in your claude.ai",needs_reauth:"reconnect the connector in claude.ai Settings, Connectors",not_in_manifest:"the connector was not allowed for this page",blocked_by_policy:"blocked by your organisation",tool_error:(e&&e.message)||"the tool reported an error",server_unavailable:"the service did not answer, try again",upstream_error:"the service did not answer, try again"})[c]||(c+": "+((e&&e.message)||"")); }
   function stageBucket(st){ return ({"Meeting Booked":"meeting","Interested":"followup","Multi-touch":"chasing","Later":"later"})[st]||null; }
   // ----- live discovery: ask Attio for every open deal, so a lead that arrived since the hourly build shows up on a pull
-  var LIVE_DISC_ERR=null, LIVE_COUNTS="";
+  var LIVE_DISC_ERR=null, LIVE_COUNTS="", LIVE_NEWEST=null;
+  function liveDiagDraw(extra){ var el=document.getElementById("liveDiag"); if(!el) return; el.textContent="Read at "+new Date().toISOString().slice(11,19)+" UTC\nBy stage: "+(LIVE_COUNTS||"none")+"\nNewest-deals read: "+(LIVE_NEWEST?("found "+LIVE_NEWEST.n+" since "+LIVE_NEWEST.since+(LIVE_NEWEST.err?" | error: "+LIVE_NEWEST.err:"")+(LIVE_NEWEST.sample?"\nFirst bytes: "+LIVE_NEWEST.sample:"")):"not run")+"\n"+(extra||"")+(LIVE_DISC_ERR?"\nProblem: "+LIVE_DISC_ERR:""); }
+  document.addEventListener("click",function(e){ if(!(e.target.closest&&e.target.closest("#liveDiagCopy"))) return; var el=document.getElementById("liveDiag"); try{ navigator.clipboard.writeText(el.textContent).then(function(){ toast("Copied"); },function(){ var r=document.createRange(); r.selectNodeContents(el); var s=getSelection(); s.removeAllRanges(); s.addRange(r); }); }catch(x){} });
   function liveDiscover(){
     if (!MCP) return Promise.resolve();
     var OPEN=["Interested","Multi-touch","Later","Meeting Booked","Profiles Sent","Trial"], flt={or:OPEN.map(function(x){ return {attribute:"stage",op:"eq",value:x}; })};
@@ -1549,15 +1553,15 @@
       return go(0,null,0); }
     // a second, independent read: every deal created since the page was built (small, so no paging problem)
     function pageNewest(){ var since=null; try{ since=new Date(new Date(DATA.generated_at).getTime()-3600e3).toISOString(); }catch(e){} if(!since) return Promise.resolve({});
-      return ask({object:"deals",filter:{attribute:"created_at",op:"gt",value:since},limit:100}).then(function(r){ return attioBlocks(txt(r)); }).catch(function(){ return {}; }); }
+      return ask({object:"deals",filter:{attribute:"created_at",op:"gt",value:since},limit:100}).then(function(r){ var bl=attioBlocks(txt(r)); LIVE_NEWEST={n:Object.keys(bl).length,since:since,sample:String(txt(r)).replace(/\s+/g," ").slice(0,260)}; return bl; }).catch(function(e){ LIVE_NEWEST={n:0,since:since,err:String((e&&e.message)||e).slice(0,260)}; return {}; }); }
     return Promise.all(OPEN.map(pageStage).concat([pageNewest()])).then(function(parts){
       var B={}, counts=[]; parts.forEach(function(pt,i){ var k=Object.keys(pt); k.forEach(function(d){ B[d]=pt[d]; }); counts.push((OPEN[i]||"newest")+" "+k.length); });
       var ids=Object.keys(B);
       if (!ids.length){ LIVE_DISC_ERR="the list came back in a format the page could not read: "+lastRaw.replace(/\s+/g," ").slice(0,140); var n0=document.getElementById("liveNote"); if(n0) n0.textContent="New leads could not be read live ("+LIVE_DISC_ERR+")"; return; }
-      LIVE_COUNTS=counts.join(", ");
+      LIVE_COUNTS=counts.join(", "); try{ liveDiagDraw("Open deals read: "+ids.length); }catch(e){}
       var known={}; OPPS.concat(CLOSED).forEach(function(o){ known[o.id]=1; });
       var fresh=[]; ids.forEach(function(did){ var b=B[did], m=b.match(/people,[0-9a-f-]{36},([0-9a-f-]{36})/), pid=m&&m[1], st=attioVal(b,"stage"); if (pid && !known[pid] && OPEN.indexOf(st)>=0){ known[pid]=1; fresh.push({pid:pid,did:did,b:b,st:st}); } });
-      LIVE_DISC_ERR=null; var nn=document.getElementById("liveNote"); if (nn){ nn.textContent=""; nn.title=ids.length+" open deals read live from Attio ("+LIVE_COUNTS+"), "+fresh.length+" new"; } if (!fresh.length) return;
+      LIVE_DISC_ERR=null; try{ liveDiagDraw("Open deals read: "+ids.length+" | new to this page: "+fresh.length+(fresh.length?" ("+fresh.map(function(f){ return attioVal(f.b,"name"); }).join(", ")+")":"")); }catch(e){} var nn=document.getElementById("liveNote"); if (nn){ nn.textContent=""; nn.title=ids.length+" open deals read live from Attio ("+LIVE_COUNTS+"), "+fresh.length+" new"; } if (!fresh.length) return;
       return MCP.callTool("Attio","get-records-by-ids",{object:"people",record_ids:fresh.map(function(f){ return f.pid; })},{cache:false}).then(function(r2){
         var P=attioBlocks(txt(r2)), added=0;
         fresh.forEach(function(f){ var pb=P[f.pid]; if(!pb) return;
