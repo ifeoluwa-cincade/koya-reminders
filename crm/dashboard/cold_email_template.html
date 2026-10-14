@@ -176,6 +176,15 @@
   .tgbtn:hover{background:rgba(255,255,255,.16);}
   .tgbtn[aria-expanded="true"] svg{transform:rotate(180deg);}
   #targets[hidden]{display:none!important;}
+  .tpanel{position:fixed; inset:0; z-index:80;} .tscrim{position:absolute; inset:0; background:rgba(13,15,19,.38); animation:tFade .25s ease both;} @keyframes tFade{from{opacity:0;}to{opacity:1;}}
+  .tcard{position:absolute; top:0; right:0; bottom:0; width:min(440px,94vw); background:#fff; color:var(--ink); border-left:1px solid var(--line); box-shadow:-24px 0 60px -30px rgba(10,12,16,.5); display:flex; flex-direction:column; animation:tSlide .34s cubic-bezier(.2,.8,.2,1) both;} @keyframes tSlide{from{transform:translateX(100%);}to{transform:none;}}
+  .tph{display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--line);} .tph b{font-size:17px;} .tph .tx{width:32px; height:32px; border:1px solid var(--line); background:#fff; border-radius:9px; font-size:18px; cursor:pointer; color:var(--ink-2);} .tph .tx:hover{background:var(--bg-soft);}
+  .tpb{padding:18px 22px 28px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;}
+  .tcard .mprog{grid-template-columns:1fr; margin:0 0 6px; padding:0; border:0; gap:16px;} .tcard .mp .mpt{color:var(--ink-2); font-size:13.5px;} .tcard .mp .mpt b{color:var(--ink);} .tcard .mp .mpt span span{color:var(--ink-3)!important;} .tcard .mp .mpb{background:#e8eae5;} .tcard .mp .mps{color:var(--ink-3);}
+  .tcard .goal{margin:8px 0 0; max-width:none; color:var(--ink-2); font-size:13.5px; background:var(--bg-soft); border-radius:12px; padding:12px 14px;} .tcard .goal b{color:var(--ink);}
+  .tcard .chainlab{color:var(--ink-3); margin-top:18px;} .tcard .chain{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px;} .tcard .link{background:#fff; border-color:var(--line); color:var(--ink);} .tcard .link .l{color:var(--ink-3);} .tcard .link .r{color:var(--ink-2); border-top-color:var(--line);} .tcard .link.end{background:var(--bg-soft);}
+  #tgbtn[aria-expanded="true"] svg{transform:none;}
+  html[data-koya-theme="dark"] .tscrim{background:rgba(245,245,247,.62);} html[data-koya-theme="dark"] .tcard{background:#e4e7ea; box-shadow:0 0 0 1px rgba(0,0,0,.10), 0 40px 100px -24px rgba(255,255,255,.9);} html[data-koya-theme="dark"] .tph .tx{background:#e4e7ea;}
   header .wrap{padding-block:28px 26px;}
   .mprog{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px 22px; margin-top:20px; padding-top:16px; border-top:1px solid rgba(255,255,255,.12);} .mprog:empty{display:none;}
   .mp .mpt{display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:12.5px; color:rgba(255,255,255,.7);} .mp .mpt b{color:#fff; font-size:15px; font-weight:600; font-variant-numeric:tabular-nums;}
@@ -760,9 +769,9 @@
       <button class="tgbtn round" id="accentBtn" type="button" aria-label="Colour theme of the page" data-tip="Page colours"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3z"/><circle cx="7.5" cy="11.5" r="1" fill="currentColor"/><circle cx="10" cy="7.5" r="1" fill="currentColor"/><circle cx="15" cy="7.5" r="1" fill="currentColor"/></svg></button>
       <button class="tgbtn round" id="themeBtn" type="button" aria-label="Colour theme" data-tip="Theme: automatic"></button>
       <button class="tgbtn round" id="tourbtn" type="button" aria-label="Take a tour of this page">?</button>
-      <button class="tgbtn" id="tgbtn" type="button" aria-expanded="false" aria-controls="targets"><span id="tgtxt">Show targets</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" id="tgchev"><path d="M6 9l6 6 6-6"/></svg></button></div>
+      <button class="tgbtn round" id="tgbtn" type="button" aria-expanded="false" aria-controls="targets" aria-label="Targets and progress" data-tip="Targets and progress"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="tgchev"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg><span id="tgtxt" hidden>Show targets</span></button></div>
   </div>
-  <div id="targets" hidden>
+  <div id="targets" class="tpanel" hidden><div class="tscrim" id="tscrim"></div><aside class="tcard" role="dialog" aria-label="Targets and progress"><div class="tph"><b>Targets and progress</b><button type="button" class="tx" id="tclose" aria-label="Close">&times;</button></div><div class="tpb">
   <div class="mprog" id="mprog" aria-label="This month so far"></div>
   <p class="goal">To reach $100k a month we need <b>8 new clients (10 devs) every month</b>. <b>Email</b> carries <b>30%</b> of that
     (2–3 clients, 3 devs a month) and <b>cold calling</b> carries <b>20%</b> (1–2 clients, 2 devs a month). Every number below is
@@ -771,7 +780,7 @@
   <div class="chain" id="chain"></div>
   <div class="chainlab">Cold calling</div>
   <div class="chain" id="chain2"></div>
-  </div>
+  </div></aside></div>
 </div></header>
 
 <div class="controls"><div class="wrap">
@@ -1291,8 +1300,10 @@
   }
   // targets block in the header: hidden by default, no animation, the choice is remembered
   (function(){ var t=document.getElementById("targets"), b=document.getElementById("tgbtn"), x=document.getElementById("tgtxt");
+    try{ document.body.appendChild(t); }catch(e){}
+    function closeIt(){ if(!t.hidden) set(false); } document.addEventListener("keydown",function(e){ if(e.key==="Escape") closeIt(); }); t.addEventListener("click",function(e){ if(e.target.id==="tscrim"||e.target.id==="tclose") closeIt(); });
     function set(open){ t.hidden=!open; b.setAttribute("aria-expanded",String(open)); x.textContent=open?"Hide targets":"Show targets"; try{ localStorage.setItem("koya-targets",open?"1":"0"); }catch(e){} }
-    var open=false; try{ open=localStorage.getItem("koya-targets")==="1"; }catch(e){}
+    var open=false;
     set(open); b.addEventListener("click",function(){ set(t.hidden); }); })();
   TABKEYS.forEach(function(k){ document.getElementById("tabbtn-"+k).addEventListener("click",function(){ setTab(k); }); });
   (function(){ var b=document.getElementById("tabbtn-plan"); if (b && !(typeof DATA!=="undefined" && DATA.outreach)) b.hidden=true; })();   // the Outreach plan tab only appears once it has real numbers
