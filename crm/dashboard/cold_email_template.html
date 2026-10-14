@@ -2705,7 +2705,7 @@
       r.onPeers(function(ch){ CHAT_ONLINE={}; CHAT_TYPING={}; (ch.peers||[]).forEach(function(p){ if(p.by){ CHAT_ONLINE[p.by]=true; var ty=p.presence&&+p.presence.typing; if(ty) CHAT_TYPING[p.by]=ty; } }); chatDrawSide(); chatDrawHead(); chatTypingDraw(); },function(){}); setInterval(chatTypingDraw,1500); }).catch(function(){}); }catch(e){} }
   function chatAssetsInit(){ try{ if(!(window.claude&&window.claude.use)) return; window.claude.use("assets").then(function(a){ CHAT_ASSETS=a||null; chatDrawComposer(); }).catch(function(){}); }catch(e){} }
   function chatUnread(){ return CHAT.filter(function(m){ return m.fromId!==CHAT_ME.id && Date.parse(m.t)>CHAT_LAST; }); }
-  function chatBadge(){ var n=(tab==="chat")?0:chatUnread().length, b=document.getElementById("chatBadge"); if(b){ b.textContent=n; b.hidden=!n; } var tc=document.getElementById("tabcnt-chat"); if(tc){ tc.textContent=n; tc.hidden=!n; } var men=(tab==="chat")?0:CHAT.filter(function(m){ return (m.tagIds||[]).indexOf(CHAT_ME.id)>=0&&m.fromId!==CHAT_ME.id&&Date.parse(m.t)>CHAT_LAST; }).length, tm=document.getElementById("tabmen-chat"); if(tm){ tm.textContent="@"+men; tm.hidden=!men; } try{ document.title=(n?"("+n+") ":"")+"Koya Outbound"; }catch(e){} }
+  function chatBadge(){ try{ if(!CHAT_FLASH_ON) document.title=chatTitle(); }catch(e){} var n=(tab==="chat")?0:chatUnread().length, b=document.getElementById("chatBadge"); if(b){ b.textContent=n; b.hidden=!n; } var tc=document.getElementById("tabcnt-chat"); if(tc){ tc.textContent=n; tc.hidden=!n; } var men=(tab==="chat")?0:CHAT.filter(function(m){ return (m.tagIds||[]).indexOf(CHAT_ME.id)>=0&&m.fromId!==CHAT_ME.id&&Date.parse(m.t)>CHAT_LAST; }).length, tm=document.getElementById("tabmen-chat"); if(tm){ tm.textContent="@"+men; tm.hidden=!men; } try{ document.title=(n?"("+n+") ":"")+"Koya Outbound"; }catch(e){} }
   function chatMarkSeen(){ CHAT_LAST=Date.now(); try{ localStorage.setItem("koya-chat-last",String(CHAT_LAST)); }catch(e){} chatBadge();
     try{ if(db&&CHAT_ME.id&&CHAT_ROSTER_READY&&CHAT_ROSTER[CHAT_ME.id]&&!document.hidden){ var newest=CHAT.reduce(function(a,m){ return m.t>a?m.t:a; },""); if(newest&&(CHAT_ROSTER[CHAT_ME.id].seen||"")<newest&&Date.now()-CHAT_SEENPUSH>3000){ CHAT_SEENPUSH=Date.now(); db.collection("roster").doc(CHAT_ME.id).update({seen:newest}).catch(function(){}); } } }catch(e){} }
   function chatLeadOf(m){ var p=(m.parts||[]).filter(function(x){ return x.t==="lead"; })[0]; return p?p:null; }
@@ -2842,7 +2842,7 @@
       var blob=f.type===type?f:new Blob([f],{type:type});
       CHAT_ASSETS.upload(blob).then(function(r){ rec.id=r.id; rec.size=r.sizeBytes||rec.size; rec.busy=false; chatFileBarDraw(); },function(){ CHAT_FILES.splice(CHAT_FILES.indexOf(rec),1); chatFileBarDraw(); toast("Could not upload "+f.name); }); }); }
   // ----- sending
-  function chatSend(){ var ed=chatEd(), btn=document.getElementById("chatSend"); if(!ed) return; var rd=chatRead(), text=rd.text, parts=rd.parts, files=CHAT_FILES.filter(function(f){ return f.id; });
+  function chatSend(){ try{ if(window.Notification&&Notification.permission==="default") Notification.requestPermission(); }catch(e){} var ed=chatEd(), btn=document.getElementById("chatSend"); if(!ed) return; var rd=chatRead(), text=rd.text, parts=rd.parts, files=CHAT_FILES.filter(function(f){ return f.id; });
     if(CHAT_FILES.some(function(f){ return f.busy; })){ toast("Wait for the file to finish uploading"); return; }
     if(!text&&!files.length){ toast("Write a message first"); return; }
     if(!CHAT_ME.id){ toast("Sign in to Claude to post here"); return; } if(!db){ toast("Chat is not connected right now"); return; }
@@ -2852,13 +2852,16 @@
       .then(function(){ ed.innerHTML=""; CHAT_REPLY=null; CHAT_FILES=[]; try{ if(CHAT_ROOM) CHAT_ROOM.presence({typing:null}); }catch(e){} btn.disabled=false; document.getElementById("chatAc").hidden=true; chatReplyDraw(); chatFileBarDraw(); ed.focus(); },function(){ btn.disabled=false; toast("Could not send, try again"); }); }
   // ----- alerts for new messages
   function chatBeep(){ try{ var ac=new (window.AudioContext||window.webkitAudioContext)(), o=ac.createOscillator(), g=ac.createGain(); o.type="sine"; o.frequency.value=880; g.gain.value=.05; o.connect(g); g.connect(ac.destination); o.start(); setTimeout(function(){ try{ o.stop(); ac.close(); }catch(e){} },180); }catch(e){} }
-  function chatFlash(txt){ clearInterval(CHAT_FLASH); var on=false, n=0; CHAT_FLASH=setInterval(function(){ on=!on; try{ document.title=on?txt:"Koya Outbound"; }catch(e){} if(++n>60||(!document.hidden&&tab==="chat")){ clearInterval(CHAT_FLASH); chatBadge(); } },1200); }
+  var CHAT_FLASH_ON=false;
+  function chatTitle(){ var n=(tab==="chat")?0:chatUnread().length, men=(tab==="chat")?0:CHAT.filter(function(m){ return (m.tagIds||[]).indexOf(CHAT_ME.id)>=0&&m.fromId!==CHAT_ME.id&&Date.parse(m.t)>CHAT_LAST; }).length; return (n?"("+n+(men?" @":"")+") ":"")+"Koya Outbound"; }
+  function chatFlash(txt){ clearInterval(CHAT_FLASH); var on=false, n=0; CHAT_FLASH_ON=true; CHAT_FLASH=setInterval(function(){ on=!on; try{ document.title=on?txt:chatTitle(); }catch(e){} if(++n>60||(!document.hidden&&tab==="chat")){ clearInterval(CHAT_FLASH); CHAT_FLASH_ON=false; chatBadge(); } },1200); }
   function chatDesktop(t,b){ try{ if(window.Notification&&Notification.permission==="granted") new Notification(t,{body:b}); }catch(e){} }
   function chatCard(m,me,who){ var box=document.getElementById("chatCards"); if(!box){ box=document.createElement("div"); box.id="chatCards"; document.body.appendChild(box); }
     var c=document.createElement("button"); c.type="button"; c.className="cnote"+(me?" me":""); c.innerHTML=chatAv(m.fromId,who)+'<span class="nt"><b>'+esc(who)+(me?" mentioned you":" wrote")+' in Team chat</b><small>'+esc(String(m.text||((m.files||[]).length?"Shared a file":"")).slice(0,90))+'</small></span><span class="nx">Open</span>';
     box.appendChild(c); setTimeout(function(){ if(c.parentNode) c.parentNode.removeChild(c); },me?15000:8000); }
-  function chatNotify(m){ var me=(m.tagIds||[]).indexOf(CHAT_ME.id)>=0, who=chatName(m.fromId); chatCard(m,me,who);
-    if(me){ chatBeep(); chatFlash(who+" tagged you"); chatDesktop(who+" tagged you in Team chat",String(m.text||"").slice(0,140)); } }
+  function chatNotify(m){ var me=(m.tagIds||[]).indexOf(CHAT_ME.id)>=0, who=chatName(m.fromId); chatCard(m,me,who); if(me||document.hidden||tab!=="chat") chatBeep();
+    if(me){ chatFlash(who+" tagged you"); chatDesktop(who+" tagged you in Team chat",String(m.text||"").slice(0,140)); }
+    else if(document.hidden){ chatDesktop(who+" in Team chat",String(m.text||((m.files||[]).length?"Shared a file":"")).slice(0,140)); } }
   // ----- people and live data
   function chatRegisterSelf(){ try{ if(!db||!CHAT_ME.id||!CHAT_ROSTER_READY) return; var mine=CHAT_ROSTER[CHAT_ME.id], now=Date.now();
       if(!mine) db.collection("roster").doc(CHAT_ME.id).set({id:CHAT_ME.id,label:CHAT_ME.name||"",at:new Date().toISOString()}).catch(function(){});
