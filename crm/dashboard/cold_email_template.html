@@ -552,6 +552,9 @@
   .tab.typing::after{content:""; width:6px; height:6px; border-radius:50%; background:var(--violet); margin-left:6px; display:inline-block; animation:ctyp 1.2s infinite ease-in-out;}
   .alnote{font-size:12.5px; line-height:1.5; color:var(--ink-2); margin:2px 0 10px;} .alwait{display:flex; gap:8px; align-items:flex-start; font:500 12.5px var(--font) !important; text-transform:none !important; letter-spacing:0 !important; color:var(--ink-2) !important; margin:6px 0 10px !important;} .alwait input{width:auto !important; height:auto !important; margin-top:2px; accent-color:var(--violet);}
   .algrid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;} .algrid .chghost{height:40px;}
+  .cseen{display:flex; justify-content:flex-end; gap:2px; margin-top:3px; align-self:flex-end;} .cseen .cav{width:16px !important; height:16px !important; font-size:7px !important; margin:0 !important; box-shadow:0 0 0 1.5px #fff;} .cseen .cav .emo{font-size:10px !important;} .cseen .cav svg{width:100%; height:100%;}
+  /* scrolling the chat never scrolls or refreshes the page behind it */
+  #chatFeed,.chmbody,.tpb{overscroll-behavior:contain;} html.chatopen,html.chatopen body{overflow:hidden !important; overscroll-behavior:none;} html.chatopen #tab-chat{overscroll-behavior:contain;}
   /* chat v11: big panel by default, full screen on request, animated */
   #tab-chat>.wrap{max-width:1540px;} .tabpanel:not([hidden]){animation:chIn .26s ease both;}
   #tab-chat .chatpage{max-width:1480px; height:calc(100vh - 150px); min-height:620px; margin:14px auto 18px; grid-template-columns:minmax(0,1fr) 270px; transition:height .32s ease, margin .32s ease, max-width .32s ease; animation:chIn .3s ease both;}
@@ -1299,7 +1302,7 @@
     TABKEYS.forEach(function(k){ var b=document.getElementById("tabbtn-"+k); b.setAttribute("aria-selected", String(k===t)); });
     if (t==="opps") renderOpps();
     if (t==="plan") renderPlan();
-    try{ if(t!=="chat") document.documentElement.classList.remove("chatfull"); }catch(e){} try{ CHAT_OPEN=(t==="chat"); if (t==="chat"){ if(__from!=="chat") CHAT_FROM=__from; chatShow(); } else { CHAT_SHOWN=false; chatBadge(); } }catch(e){}
+    try{ document.documentElement.classList.toggle("chatopen",t==="chat"); if(t!=="chat") document.documentElement.classList.remove("chatfull"); }catch(e){} try{ CHAT_OPEN=(t==="chat"); if (t==="chat"){ if(__from!=="chat") CHAT_FROM=__from; chatShow(); } else { CHAT_SHOWN=false; chatBadge(); } }catch(e){}
     if (t==="sys") renderSys();
     if (!fromHash){ try{ history.replaceState(null,"", HASH[t]?("#"+HASH[t]):location.pathname+location.search); }catch(e){ try{ location.hash=HASH[t]; }catch(e2){} } }
     try{ localStorage.setItem("koya-tab", t); }catch(e){}
@@ -2868,14 +2871,15 @@
     return h+'</div>'; }
   function chatTicks(m){ var seen=Object.keys(CHAT_ROSTER).filter(function(i){ return i!==CHAT_ME.id&&CHAT_ROSTER[i].seen&&CHAT_ROSTER[i].seen>=m.t; }).map(chatName);
     return '<span class="ctick'+(seen.length?" on":"")+'" title="'+esc(seen.length?"Seen by "+seen.join(", "):"Sent")+'">'+(seen.length?ICO.seen:ICO.sent)+'</span>'; }
-  var CHAT_SEEN_ANIM={};
+  var CHAT_SEEN_ANIM={}, CHAT_SEENAT={};
+  function chatSeenHTML(id){ var us=CHAT_SEENAT[id]; if(!us||!us.length) return ""; return '<div class="cseen" title="Seen by '+esc(us.map(chatName).join(", "))+'">'+us.slice(0,6).map(function(u){ return chatAv(u,chatName(u),"xs"); }).join("")+'</div>'; }
   function chatMsgHTML(m,prev,lastMine){ var mine=m.fromId===CHAT_ME.id, nm=mine?(CHAT_ME.name||"You"):chatName(m.fromId), lp=chatLeadOf(m), files=m.files||[];
     var grouped=prev&&prev.fromId===m.fromId&&Date.parse(m.t)-Date.parse(prev.t)<5*60000&&chatDayLabel(prev.t)===chatDayLabel(m.t)&&!m.__newdiv;
     var quote=""; if(m.replyTo){ var rm=CHAT.filter(function(x){ return x.id===m.replyTo; })[0], rn=rm?(rm.fromId===CHAT_ME.id?(CHAT_ME.name||"You"):chatName(rm.fromId)):(m.replyName||"Someone"), rt=rm?rm.text:(m.replyText||"Message deleted"); quote='<div class="cquote"><b>'+esc(rn)+'</b><span>'+esc(String(rt).slice(0,90))+'</span></div>'; }
     var tools='<div class="ctool"><button type="button" data-crxmenu="'+esc(m.id)+'" aria-label="React" data-tip="React">'+ICO.smile+'</button><button type="button" data-creply="'+esc(m.id)+'" aria-label="Reply" data-tip="Reply">'+ICO.reply+'</button>'+(mine?'<button type="button" data-cedit="'+esc(m.id)+'" aria-label="Edit" data-tip="Edit">'+ICO.edit+'</button>':'')+((mine||CHAT_ME.admin)?'<button type="button" data-cdel="'+esc(m.id)+'" class="'+(CHAT_DELARM===m.id?"arm":"")+'" aria-label="Delete" data-tip="'+(CHAT_DELARM===m.id?"Click again to delete":"Delete")+'">'+(CHAT_DELARM===m.id?"Sure?":ICO.bin)+'</button>':'')+'</div>';
     var text=(m.parts&&m.parts.length)||m.text?'<div class="ctext">'+chatPartsHTML(m)+'</div>':'';
     var fresh=!CHAT_SEEN_ANIM[m.id]&&Date.now()-Date.parse(m.t)<8000; CHAT_SEEN_ANIM[m.id]=1;
-    return '<div class="cmsg'+(fresh?" fresh":"")+(mine?" mine":"")+((m.tagIds||[]).indexOf(CHAT_ME.id)>=0?" forme":"")+(grouped?" grp":"")+'" data-mid="'+esc(m.id)+'">'+(grouped?'<span class="cav gap"></span>':chatAv(m.fromId,nm))+'<div class="ccol">'+(grouped?'':'<div class="cwho"><b>'+esc(nm)+'</b><span>'+esc(chatClock(m.t))+'</span>'+(mine?chatTicks(m):'')+'</div>')+(m.sticker?'<div class="csticker">'+chatStkImg(m.sticker,"big")+tools+'</div>':'<div class="cbub"'+(CHAT_ROSTER[m.fromId]&&CHAT_ROSTER[m.fromId].bubble?' style="background:'+esc(CHAT_ROSTER[m.fromId].bubble)+'"':'')+'>'+quote+text+(m.edited?'<span class="cedited">edited</span>':'')+tools+'</div>')+(lp?chatLeadCard(lp):'')+files.map(chatFileCard).join("")+chatRxHTML(m)+'</div></div>'; }
+    return '<div class="cmsg'+(fresh?" fresh":"")+(mine?" mine":"")+((m.tagIds||[]).indexOf(CHAT_ME.id)>=0?" forme":"")+(grouped?" grp":"")+'" data-mid="'+esc(m.id)+'">'+(grouped?'<span class="cav gap"></span>':chatAv(m.fromId,nm))+'<div class="ccol">'+(grouped?'':'<div class="cwho"><b>'+esc(nm)+'</b><span>'+esc(chatClock(m.t))+'</span>'+(mine?chatTicks(m):'')+'</div>')+(m.sticker?'<div class="csticker">'+chatStkImg(m.sticker,"big")+tools+'</div>':'<div class="cbub"'+(CHAT_ROSTER[m.fromId]&&CHAT_ROSTER[m.fromId].bubble?' style="background:'+esc(CHAT_ROSTER[m.fromId].bubble)+'"':'')+'>'+quote+text+(m.edited?'<span class="cedited">edited</span>':'')+tools+'</div>')+(lp?chatLeadCard(lp):'')+files.map(chatFileCard).join("")+chatRxHTML(m)+chatSeenHTML(m.id)+'</div></div>'; }
   // ----- the page: header, filters, conversation and composer on the left; members and quick add on the right
   function chatPageBuild(){ var m=document.getElementById("chatMount"); if(!m||m.firstChild) return m;
     m.innerHTML='<div class="chatmain"><div class="chead"><span class="chico">'+ICO.chat+'</span><div class="ctitle"><b>Team chat</b><span>Share updates, discuss leads and stay in sync.</span></div><div class="chmeta" id="chatHeadMeta"></div><div class="chmenuwrap"><button type="button" class="chmenub" id="chatMenuBtn" aria-label="Chat options">'+ICO.dots+'</button><div class="chmenu" id="chatMenu" hidden></div></div><button type="button" class="chmenub" id="chatFull" aria-label="Make the chat full screen" title="Full screen"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button><button type="button" class="chmenub" id="chatBack" aria-label="Close chat">&times;</button></div>'+
@@ -2965,6 +2969,7 @@
     if(CHAT_FILTER) list=list.filter(function(m){ var lp=chatLeadOf(m); return lp&&lp.id===CHAT_FILTER; });
     if(q) list=list.filter(function(m){ var lp=chatLeadOf(m); return String(m.text||"").toLowerCase().indexOf(q)>=0||(lp&&String(lp.l||"").toLowerCase().indexOf(q)>=0)||(m.files||[]).some(function(x){ return String(x.name||"").toLowerCase().indexOf(q)>=0; }); });
     list=list.slice(-150);
+    CHAT_SEENAT={}; Object.keys(CHAT_ROSTER).forEach(function(u){ if(u===CHAT_ME.id||u==="preview") return; var sn=CHAT_ROSTER[u].seen; if(!sn) return; var last=null; for(var k=0;k<list.length;k++){ if(list[k].t<=sn) last=list[k]; } if(last) (CHAT_SEENAT[last.id]=CHAT_SEENAT[last.id]||[]).push(u); });
     var lastMineId=null; for(var li=list.length-1;li>=0;li--){ if(list[li].fromId===CHAT_ME.id){ lastMineId=list[li].id; break; } }
     var last="", prevM=null, newDone=false, html=list.map(function(m){ var dl=chatDayLabel(m.t), sep=dl!==last?'<div class="cday"><span>'+esc(dl)+'</span></div>':""; if(sep) prevM=null; last=dl;
       if(!newDone&&CHAT_NEWFROM>0&&m.fromId!==CHAT_ME.id&&Date.parse(m.t)>CHAT_NEWFROM){ newDone=true; sep+='<div class="cnew"><span>New messages</span></div>'; prevM=null; }
