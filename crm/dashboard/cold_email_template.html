@@ -2969,7 +2969,7 @@
     if(CHAT_FILTER) list=list.filter(function(m){ var lp=chatLeadOf(m); return lp&&lp.id===CHAT_FILTER; });
     if(q) list=list.filter(function(m){ var lp=chatLeadOf(m); return String(m.text||"").toLowerCase().indexOf(q)>=0||(lp&&String(lp.l||"").toLowerCase().indexOf(q)>=0)||(m.files||[]).some(function(x){ return String(x.name||"").toLowerCase().indexOf(q)>=0; }); });
     list=list.slice(-150);
-    CHAT_SEENAT={}; Object.keys(CHAT_ROSTER).forEach(function(u){ if(u===CHAT_ME.id||u==="preview") return; var sn=CHAT_ROSTER[u].seen; if(!sn) return; var last=null; for(var k=0;k<list.length;k++){ if(list[k].t<=sn) last=list[k]; } if(last) (CHAT_SEENAT[last.id]=CHAT_SEENAT[last.id]||[]).push(u); });
+    CHAT_SEENAT={}; Object.keys(CHAT_ROSTER).forEach(function(u){ if(u===CHAT_ME.id||u==="preview") return; var sn=CHAT_ROSTER[u].seen; if(!sn) return; var last=null; for(var k=0;k<list.length;k++){ if(list[k].t<=sn&&list[k].fromId===CHAT_ME.id) last=list[k]; } if(last) (CHAT_SEENAT[last.id]=CHAT_SEENAT[last.id]||[]).push(u); });
     var lastMineId=null; for(var li=list.length-1;li>=0;li--){ if(list[li].fromId===CHAT_ME.id){ lastMineId=list[li].id; break; } }
     var last="", prevM=null, newDone=false, html=list.map(function(m){ var dl=chatDayLabel(m.t), sep=dl!==last?'<div class="cday"><span>'+esc(dl)+'</span></div>':""; if(sep) prevM=null; last=dl;
       if(!newDone&&CHAT_NEWFROM>0&&m.fromId!==CHAT_ME.id&&Date.parse(m.t)>CHAT_NEWFROM){ newDone=true; sep+='<div class="cnew"><span>New messages</span></div>'; prevM=null; }
