@@ -1371,7 +1371,8 @@
   function tabFromHash(){ var h=(location.hash||"").replace("#",""); if(h==="opps") return "opps"; if(h==="plan") return "plan"; if(h==="systems") return "sys"; return null; }
 
   // ----- opportunities
-  function T(v){ return v?new Date(v).getTime():null; }
+  function T(v){ if(!v) return null; var n=new Date(v).getTime(); return isNaN(n)?null:n; }
+  function TT(o){ var x=T(o.last_touch); if(x==null&&o.live_at) x=o.live_at; return x; }   // a lead found live with no usable touch date counts as just now, never as the oldest
   var BORDER={meeting:0,followup:1,chasing:2,callback:3,later:4};
   // "Needs attention first": brand-new leads, then leads with no follow-up date (Pending), then overdue (the most overdue first), due today, and the rest by date
   // the New tag goes away once the lead has been opened, or after a day; the next hourly build also drops it for good
@@ -1380,8 +1381,8 @@
   function markNewSeen(id){ if(!NEWSEEN||NEWSEEN[id]) return; NEWSEEN[id]=Date.now(); try{ localStorage.setItem("koya-new-seen",JSON.stringify(NEWSEEN)); }catch(e){} }
   function prio(o){ if (o.live_new && !newSeen(o.id)) return 0; var d=dueInfo(o); if (d.n==null) return 1; if (d.cls==="over") return 2; if (d.cls==="today") return 3; return 4; }
   var SORTS={
-    priority:function(a,b){ var x=prio(a), y=prio(b); if (x!==y) return x-y; if (x===0||x===1) return (T(b.last_touch)||0)-(T(a.last_touch)||0); var da=dueInfo(a).n, db=dueInfo(b).n; return (da==null?9e9:da)-(db==null?9e9:db); },
-    recent:function(a,b){ var na=a.live_new&&!newSeen(a.id), nb=b.live_new&&!newSeen(b.id); if(na!==nb) return na?-1:1; var x=T(a.last_touch), y=T(b.last_touch); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1; return y-x; },   // newest first
+    priority:function(a,b){ var x=prio(a), y=prio(b); if (x!==y) return x-y; if (x===0||x===1) return (TT(b)||0)-(TT(a)||0); var da=dueInfo(a).n, db=dueInfo(b).n; return (da==null?9e9:da)-(db==null?9e9:db); },
+    recent:function(a,b){ var na=a.live_new&&!newSeen(a.id), nb=b.live_new&&!newSeen(b.id); if(na!==nb) return na?-1:1; var x=TT(a), y=TT(b); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1; return y-x; },   // newest first
     due:function(a,b){ var x=a.due_set&&T(a.due)!=null?T(a.due):9e15, y=b.due_set&&T(b.due)!=null?T(b.due):9e15; return x-y; },                                                          // earliest first
     tag:function(a,b){ var d=(BORDER[a.bucket]||0)-(BORDER[b.bucket]||0); return d||SORTS.recent(a,b); },
     name:function(a,b){ return String(a.name||"").localeCompare(String(b.name||"")); },
@@ -1609,7 +1610,7 @@
           var bk=stageBucket(f.st)||"followup", parts=dname.split("/");
           OPPS.push(tidyOpp({id:f.pid,name:attioVal(pb,"name")||dname,company:parts.length>1?parts.slice(1).join("/").trim():null,email:em,phone:((pb.match(/phone_numbers\[\d+\]:\s*(\S+)/)||[])[1]||null),linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:f.st,source:/call/i.test(ch)?"Call":"Email",
             last_touch:(function(){ var best=null; ["last_contacted_at","last_reply_at"].forEach(function(k){ var v=nextIso(attioVal(pb,k)); if(v&&(!best||v>best)) best=v; }); ["last_activity_at","created_at"].forEach(function(k){ var v=nextIso(attioVal(f.b,k)); if(v&&(!best||v>best)) best=v; }); return best; })(),due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,summary:attioVal(pb,"last_reply_summary")||null,call_at:null,attempts:null,campaign:null,
-            links:{attio:"https://app.attio.com/koya-talent/person/"+f.pid,deal:"https://app.attio.com/koya-talent/deals/record/"+f.did,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[],live_new:true})); added++; });
+            links:{attio:"https://app.attio.com/koya-talent/person/"+f.pid,deal:"https://app.attio.com/koya-talent/deals/record/"+f.did,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[],live_new:true,live_at:Date.now()})); added++; });
         OPPS.filter(function(o){ return o.live_new && o.email && !o.sequence; }).forEach(function(o){                       // PlusVibe: where this lead is in the sequences, straight away
           o.sequence=[];
           MCP.callTool("PlusVibe","find_lead_by_email",{workspace_id:PVWS_ID,email:o.email},{cache:false}).then(function(r){
