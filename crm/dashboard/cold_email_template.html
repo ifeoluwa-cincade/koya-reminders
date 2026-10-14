@@ -508,6 +508,12 @@
   .avgrid{grid-template-columns:repeat(6,1fr) !important;} .chmbody{max-height:56vh; overflow-y:auto; padding:0 2px 4px;} .chmbody input{width:100%;}
   .chghost{height:34px; border:1px solid var(--line); background:#fff; border-radius:10px; cursor:pointer; font:500 13px var(--font); color:var(--ink-2); padding:0 12px;} .chghost:hover{background:var(--bg-soft);} .chghost.wide{width:100%; margin-top:6px;} .wallrow{display:flex; gap:8px; flex-wrap:wrap;} .chmnote2{font-size:11.5px; color:var(--ink-3); margin-top:8px;}
   #chatFeed[data-wall="img"]{background-size:cover; background-position:center;}
+  /* dark mode: the page is inverted, so a light scrim becomes the dark one and the card gets a lighter base with a thin edge */
+  html[data-koya-theme="dark"] body #tab-chat{background:rgba(245,245,247,.62);} html[data-koya-theme="dark"].chatfull body #tab-chat{background:#fff;}
+  html[data-koya-theme="dark"] body #tab-chat .chatmain, html[data-koya-theme="dark"] body #tab-chat .chatside .csec{background:#e4e7ea; box-shadow:0 0 0 1px rgba(0,0,0,.10);}
+  html[data-koya-theme="dark"] body #tab-chat .chatpage{box-shadow:0 0 0 1px rgba(0,0,0,.10), 0 40px 100px -24px rgba(255,255,255,.9);} html[data-koya-theme="dark"].chatfull body #tab-chat .chatpage{box-shadow:none;}
+  html[data-koya-theme="dark"] .chmenu, html[data-koya-theme="dark"] .cstkpop{background:#e4e7ea; box-shadow:0 0 0 1px rgba(0,0,0,.10), 0 18px 40px -16px rgba(255,255,255,.85);}
+  html[data-koya-theme="dark"] #chatFeed[data-wall="img"]{filter:invert(1) hue-rotate(180deg);}
   /* chat v11: big panel by default, full screen on request, animated */
   #tab-chat>.wrap{max-width:1540px;} .tabpanel:not([hidden]){animation:chIn .26s ease both;}
   #tab-chat .chatpage{max-width:1480px; height:calc(100vh - 150px); min-height:620px; margin:14px auto 18px; grid-template-columns:minmax(0,1fr) 270px; transition:height .32s ease, margin .32s ease, max-width .32s ease; animation:chIn .3s ease both;}
