@@ -2983,7 +2983,7 @@
   function chatFileType(f){ var t=f.type||"", n=String(f.name||"").toLowerCase(); if(t) return t; if(/\.csv$/.test(n)) return "text/csv"; if(/\.md$/.test(n)) return "text/markdown"; if(/\.json$/.test(n)) return "application/json"; if(/\.txt$/.test(n)) return "text/plain"; return ""; }
   function chatAttach(files){ if(!CHAT_ASSETS){ toast("Only people who can edit the dashboard can attach files"); return; }
     [].forEach.call(files||[],function(f){ var type=chatFileType(f), isAud=/^audio\//.test(f.type||"")||/\.(m4a|aac|caf)$/i.test(f.name||"");
-      if(isAud){ if(/mp4|m4a|aac|x-m4a/i.test(f.type||"")||/\.(m4a|aac)$/i.test(f.name||"")) type="video/mp4"; else if(/webm/i.test(f.type||"")) type="video/webm"; else { toast("That audio type cannot be sent here. Voice memos from a phone (.m4a) can."); return; } }
+      if(isAud){ chatSendAudioFile(f); return; }
       if(!CHAT_OKTYPE.test(type)){ toast("That file type cannot be attached. Images, videos, PDF, CSV, text and JSON can."); return; } if(f.size>20*1048576){ toast("That file is over 20 MB"); return; }
       var rec={name:f.name,size:f.size,type:type,busy:true}; if(isAud){ rec.voice=true; rec.dur=""; } CHAT_FILES.push(rec); chatFileBarDraw();
       var blob=f.type===type?f:new Blob([f],{type:type});
@@ -3011,6 +3011,17 @@
   function chatSendSticker(s){ if(!CHAT_ME.id){ toast("Sign in to Claude to post here"); return; } if(!db){ toast("Chat is not connected right now"); return; }
     var id=Date.now().toString(36)+Math.random().toString(36).slice(2,6); db.collection("chat").doc(id).set({fromId:CHAT_ME.id,text:"",parts:[],files:[],sticker:s,t:new Date().toISOString(),replyTo:null,replyText:null,replyName:null,tagIds:[],leads:[]}).then(function(){ chatStkDraw(false); if(CHAT_BIGDAY[s]) chatConfetti(); },function(){ toast("Could not send the sticker"); }); }
   document.addEventListener("click",function(e){ var c=e.target.closest&&e.target.closest("[data-cstk]"); if(c){ chatSendSticker(c.getAttribute("data-cstk")); return; } if(e.target.closest&&e.target.closest("#chatStk")){ var pop=document.getElementById("chatStkPop"); chatStkDraw(!pop||pop.hidden); return; } if(!(e.target.closest&&e.target.closest("#chatStkPop"))){ var p2=document.getElementById("chatStkPop"); if(p2&&!p2.hidden) p2.hidden=true; } });
+  // a recorded voice memo (m4a from a phone, mp3, wav...) is replayed into a recorder inside the page and kept as webm, because the file store does not take audio files. No microphone is used.
+  function chatSendAudioFile(f){ if(!CHAT_ASSETS){ toast("Only people who can edit the dashboard can send files"); return; } if(!window.MediaRecorder||!MediaRecorder.isTypeSupported("audio/webm;codecs=opus")){ toast("This browser cannot convert audio. Use Chrome."); return; }
+    chatAudioUnlock(); var ac=CHAT_AC_CTX; if(!ac){ toast("Audio is not available here"); return; }
+    var rec={name:"Voice note",size:f.size,type:"video/webm",voice:true,dur:"",busy:true}; CHAT_FILES.push(rec); chatFileBarDraw(); toast("Preparing the voice note...");
+    var fail=function(m){ CHAT_FILES.splice(CHAT_FILES.indexOf(rec),1); chatFileBarDraw(); toast(m||"Could not read that audio file"); };
+    f.arrayBuffer().then(function(buf){ return ac.decodeAudioData(buf); }).then(function(ab){
+      if(ab.duration>300){ fail("That clip is over 5 minutes"); return; } var sec=Math.max(1,Math.round(ab.duration)); rec.dur=Math.floor(sec/60)+":"+("0"+(sec%60)).slice(-2); rec.name="Voice note "+rec.dur;
+      var dest=ac.createMediaStreamDestination(), src=ac.createBufferSource(); src.buffer=ab; src.connect(dest); var mr=new MediaRecorder(dest.stream,{mimeType:"audio/webm;codecs=opus"}), chunks=[];
+      mr.ondataavailable=function(e){ if(e.data&&e.data.size) chunks.push(e.data); };
+      mr.onstop=function(){ var blob=new Blob(chunks,{type:"video/webm"}); rec.size=blob.size; CHAT_ASSETS.upload(blob).then(function(r){ rec.id=r.id; rec.size=r.sizeBytes||rec.size; rec.busy=false; chatFileBarDraw(); toast("Voice note ready. Press send."); },function(){ fail("Could not upload the voice note"); }); };
+      src.onended=function(){ setTimeout(function(){ try{ mr.stop(); }catch(e){} },250); }; mr.start(); src.start(); }).catch(function(){ fail(); }); }
   // ----- sending
   function chatSend(){ try{ if(window.Notification&&Notification.permission==="default") Notification.requestPermission(); }catch(e){} var ed=chatEd(), btn=document.getElementById("chatSend"); if(!ed) return; var rd=chatRead(), text=rd.text, parts=rd.parts, files=CHAT_FILES.filter(function(f){ return f.id; });
     if(CHAT_FILES.some(function(f){ return f.busy; })){ toast("Wait for the file to finish uploading"); return; }
