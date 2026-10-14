@@ -560,6 +560,11 @@
   .newscard{position:fixed; right:20px; bottom:20px; z-index:75; width:min(380px,calc(100vw - 32px)); background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:18px; padding:16px 18px 18px; box-shadow:0 26px 60px -22px rgba(20,23,26,.5); animation:chIn .3s ease both; transition:opacity .2s, transform .2s;} .newscard.out{opacity:0; transform:translateY(8px);}
   .newscard .nh{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;} .newscard .nh b{font-size:16px;} .newscard .nh button{border:0; background:none; font-size:20px; cursor:pointer; color:var(--ink-3);} .newscard ul{margin:0 0 14px; padding-left:18px; display:grid; gap:7px; font-size:13.5px; line-height:1.45; color:var(--ink-2);} .newscard .chsave{width:100%; height:38px; border:0; border-radius:10px; background:var(--violet); color:#fff; font:600 14px var(--font); cursor:pointer;}
   html[data-koya-theme="dark"] .newscard{background:#e4e7ea; box-shadow:0 0 0 1px rgba(0,0,0,.10), 0 18px 40px -16px rgba(255,255,255,.85);}
+  .nadd{margin:2px 0 12px; padding:12px; border:1px solid var(--line); border-radius:14px; background:#fff; box-shadow:0 1px 0 rgba(20,23,26,.03);} .nadd .rnote{min-height:64px; background:var(--bg-soft); border-color:transparent;} .nadd .rnote:focus{background:#fff;} .nadd .rzb{margin-top:8px;}
+  .pbtn.primary{background:var(--violet); color:#fff; border-color:var(--violet); font-weight:600; padding:8px 18px;} .pbtn.primary:hover{filter:brightness(1.07);}
+  .nolds{border:1px solid var(--line); border-radius:12px; overflow:hidden; margin:6px 0 10px;} .nold + .nold{border-top:1px solid var(--line);} .nrow{display:grid; grid-template-columns:auto 1fr auto auto; gap:10px; align-items:center; width:100%; border:0; background:#fff; padding:9px 12px; text-align:left; cursor:pointer; font:inherit; font-size:13px; color:var(--ink-2);} .nrow:hover{background:var(--bg-soft);} .nrow .nk{font-style:normal; font-size:11px; font-weight:600; color:var(--ink-3); text-transform:uppercase; letter-spacing:.04em;} .nrow .nt{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;} .nrow .nd{font-size:12px; color:var(--ink-3); white-space:nowrap;} .nrow .nch{transition:transform .2s;} .nold.on .nch{transform:rotate(180deg);}
+  .nobody{padding:4px 12px 12px 12px; font-size:13.5px; line-height:1.5; color:var(--ink-2); background:#fff; max-height:240px; overflow-y:auto; overflow-wrap:anywhere;}
+  .viewonly{position:fixed; left:50%; top:14px; transform:translateX(-50%); z-index:90; max-width:calc(100vw - 32px); background:#14171a; color:#fff; border-radius:12px; padding:10px 14px; font-size:13.5px; display:flex; gap:12px; align-items:center; box-shadow:0 14px 34px -14px rgba(0,0,0,.6);} .viewonly button{border:0; background:none; color:#fff; font-size:18px; cursor:pointer;}
   /* chat v11: big panel by default, full screen on request, animated */
   #tab-chat>.wrap{max-width:1540px;} .tabpanel:not([hidden]){animation:chIn .26s ease both;}
   #tab-chat .chatpage{max-width:1480px; height:calc(100vh - 150px); min-height:620px; margin:14px auto 18px; grid-template-columns:minmax(0,1fr) 270px; transition:height .32s ease, margin .32s ease, max-width .32s ease; animation:chIn .3s ease both;}
@@ -1529,7 +1534,7 @@
       (others.length?'<h4>Also at '+esc(o.company)+'</h4><div class="plinked">'+others.map(function(x){ return '<button type="button" data-id="'+esc(x.id)+'">'+esc(x.name)+'</button>'; }).join("")+'</div>':"")+
       '</div><div class="pcol pright">'+
       (MCP?'<h4>Calls in CloudTalk</h4><div id="ctcalls">'+callsHTML(o)+'</div>':"")+
-      '<h4>Notes in Attio</h4><div id="nlist">'+notesHTML(o)+'</div>'+
+      '<h4>Notes</h4>'+noteBoxHTML(o)+'<div id="nlist">'+notesHTML(o)+'</div>'+
       (o.summary?'<h4>'+(o.call_at?"Call summary":"Latest reply")+'</h4><p class="ptext">'+esc(o.summary)+'</p>':"")+
       '<div id="seqwrap">'+seqAll(o)+'</div>'+
       (thread?'<h4>Email thread in PlusVibe, newest first</h4>'+(o.thread_sent_only?'<p class="tnote">No reply yet. These are the emails we sent.</p>':'')+'<ol class="thread">'+thread+'</ol>':(o.email?'<h4>Email thread in PlusVibe</h4><p class="tnote">'+((o.sequence||[]).length?'Nothing has been sent or received yet.':'This lead is not in any PlusVibe campaign (it came from a call or was added by hand), so there is no email history.')+'</p>':""))+
@@ -1746,7 +1751,7 @@
   var REASONS=["NOT_INTERESTED","NO_RESPONSE","BAD_FIT","TIMING","PRICE","COMPETITOR","OTHER"];
   function resolveHTML(o){
     if (MCP){
-      return '<h4>Stage</h4><div class="resolve">'+RZORDER.map(function(k){ var on=RZ[k].deal && RZ[k].deal===o.stage && k!=="notint"; return '<button class="rbtn s-'+k+(on?' on':'')+'" type="button" data-rz="'+k+'" aria-pressed="'+(!!on)+'">'+(RZEMO[k]?RZEMO[k]+' ':'')+RZ[k].label+'</button>'; }).join("")+'</div><div class="rzx"><button class="rbtn" type="button" data-rz="followup">Follow up on a date</button><button class="rbtn" type="button" id="rcontact" title="Use this after you reached out some other way, like LinkedIn or WhatsApp. It clears Overdue.">Mark as contacted</button><span class="pstat" id="rcmsg"></span></div>'+(o.due_set?'<div class="fset"><span class="fl">Follow-up set</span><b>'+esc(fmtWhen(o.due))+'</b><button class="plusbtn" type="button" data-rz="followup" style="margin-top:0">Change</button><button class="plusbtn" type="button" id="rfcancel" style="margin-top:0">Cancel</button><span class="pstat" id="rfcmsg"></span></div>':'')+'<p class="tnote hint2">One place for where this lead is. Pick a stage and you see what will change before you confirm. Meeting booked, Won, Lost and Not interested also update the person and stop the emails in PlusVibe. The other stages change the deal only. Follow up on a date sets a reminder.</p><div id="rzone"></div>';
+      return '<h4>Stage</h4><div class="resolve">'+RZORDER.map(function(k){ var on=RZ[k].deal && RZ[k].deal===o.stage && k!=="notint"; return '<button class="rbtn s-'+k+(on?' on':'')+'" type="button" data-rz="'+k+'" aria-pressed="'+(!!on)+'">'+(RZEMO[k]?RZEMO[k]+' ':'')+RZ[k].label+'</button>'; }).join("")+'</div><div class="rzx"><button class="rbtn" type="button" data-rz="followup">Follow up on a date</button><button class="rbtn" type="button" id="rcontact" title="Use this after you reached out some other way, like LinkedIn or WhatsApp. It clears Overdue.">Mark as contacted</button><span class="pstat" id="rcmsg"></span></div>'+(o.due_set?'<div class="fset"><span class="fl">Follow-up set</span><b>'+esc(fmtWhen(o.due))+'</b><button class="plusbtn" type="button" data-rz="followup" style="margin-top:0">Change</button><button class="plusbtn" type="button" id="rfcancel" style="margin-top:0">Cancel</button><span class="pstat" id="rfcmsg"></span></div>':'')+'<div id="rzone"></div>';
     }
     return '<h4>Stage</h4><p class="tnote">This window is not connected to Attio yet, so the buttons are off. Reload the page and allow the Attio connector if it asks. Make sure you are signed in to claude.ai with your work account.</p>';
   }
@@ -1755,11 +1760,9 @@
   function editHTML(o){
     if (!MCP) return "";
     var did=dealIdOf(o);
-    return '<div class="nhead"><h4>Notes</h4><button class="plusbtn" type="button" id="rnoteopen" aria-expanded="false" aria-controls="nbox"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>Add note</span></button></div>'+
-      '<div class="nbox" id="nbox"><textarea id="rnote" class="rnote" rows="3" placeholder="What happened? It is saved on this person in Attio."></textarea>'+
-      '<div class="rzb"><button class="pbtn" type="button" id="rnotego">Save note</button><button class="pbtn ghost" type="button" id="rnotecancel">Cancel</button><span class="pstat" id="rnotemsg"></span></div></div>'+
-      (did?'':'<h4>Create a deal</h4><p class="tnote">This lead has no deal in Attio yet, so there is no stage or follow-up date to set. Pick the stage and create one.</p><div class="stagechips" id="rnewchips">'+STAGES.filter(function(x){ return !/^(Won|Lost)/.test(x); }).map(function(x){ return '<button type="button" class="schip" data-newstage="'+esc(x)+'" aria-pressed="'+(x===guessStage(o))+'">'+esc(x)+'</button>'; }).join("")+'</div><div class="rzb"><button class="pbtn" type="button" id="rdealgo">Create deal</button><span class="pstat" id="rdealmsg"></span></div>');
+    return (did?'':'<h4>Create a deal</h4><p class="tnote">This lead has no deal in Attio yet, so there is no stage or follow-up date to set. Pick the stage and create one.</p><div class="stagechips" id="rnewchips">'+STAGES.filter(function(x){ return !/^(Won|Lost)/.test(x); }).map(function(x){ return '<button type="button" class="schip" data-newstage="'+esc(x)+'" aria-pressed="'+(x===guessStage(o))+'">'+esc(x)+'</button>'; }).join("")+'</div><div class="rzb"><button class="pbtn" type="button" id="rdealgo">Create deal</button><span class="pstat" id="rdealmsg"></span></div>');
   }
+  function noteBoxHTML(o){ if(!MCP) return ""; return '<div class="nadd"><textarea id="rnote" class="rnote" rows="2" placeholder="Write a note about this lead..."></textarea><div class="rzb"><button class="pbtn primary" type="button" id="rnotego">Add note</button><span class="pstat" id="rnotemsg"></span></div></div>'; }
   // notes written in Attio (read at build time), plus any saved from this page since
   // Emails Attio holds for this address, for leads PlusVibe has no thread for (sent from elsewhere): read live when the window opens
   // Every call to this lead's number from CloudTalk, answered or not, so a lead dialled three times without a pickup shows that
@@ -1875,16 +1878,18 @@
   var NSHOW={};
   function planOf(o){ var n=(o.notes||[]).filter(function(x){ return /^Follow-up (plan|note)/.test(x.title||"") && !isHidden(o,x); })[0]; return n?n.text:""; }
   function notesHTML(o){
-    var vis=(o.notes||[]).filter(function(n){ return n.kind!=="auto" && !isHidden(o,n); }), hid=(o.notes||[]).filter(function(n){ return isHidden(o,n); });
-    var team=vis.filter(function(n){ return n.kind==="note"; }), rest=vis.filter(function(n){ return n.kind!=="note"; });
-    if (!vis.length && !hid.length) return '<p class="tnote nnone">No notes in Attio for this lead yet.</p>';
-    function card(n,hidden){ var long=(n.text||"").length>420, open=NSHOW["x"+n.id];
-      var body=esc(long&&!open?n.text.slice(0,420)+"…":(n.text||"")).replace(/\n/g,"<br>");
-      return '<div class="ncard k-'+n.kind+(hidden?' nhid':'')+'"><div class="nmeta"><span><i class="nk">'+({note:"Team note",call:"Call",auto:"Automatic"}[n.kind]||"Note")+'</i><b>'+esc(n.kind==="note"?(n.title&&!/^Note ·/.test(n.title)?n.title:"Note"):n.title)+'</b></span><span>'+esc(n.label||fmtDate(n.t))+(n.on==="deal"?" · on the deal":"")+'</span></div><div class="ntext">'+body+'</div>'+
-        '<div class="nact">'+(long?'<button type="button" class="nmore" data-nmore="'+esc(n.id)+'">'+(open?"Show less":"Show more")+'</button>':'')+(db?(hidden?'<button type="button" class="nmore" data-nrestore="'+esc(n.id)+'">Bring back</button>':'<button type="button" class="nmore" data-nhide="'+esc(n.id)+'" data-tip="Deletes it from this dashboard. It stays in Attio, because the connector cannot delete notes there">Delete</button>'):'')+'</div></div>'; }
-    return (team.length?team.map(function(n){ return card(n,false); }).join(""):'<p class="tnote nnone">No notes written by the team yet.</p>')+
-      (rest.length?'<button type="button" class="nmore nauto" data-nauto="1">'+(NSHOW.auto?"Hide":"Show")+' '+rest.length+' call note'+(rest.length>1?"s":"")+'</button>'+(NSHOW.auto?rest.map(function(n){ return card(n,false); }).join(""):""):"")+
-""; 
+    var vis=(o.notes||[]).filter(function(n){ return n.kind!=="auto" && !isHidden(o,n); });
+    var byNew=function(x,y){ return String(y.t||"").localeCompare(String(x.t||"")); };
+    var team=vis.filter(function(n){ return n.kind==="note"; }).sort(byNew), calls=vis.filter(function(n){ return n.kind!=="note"; }).sort(byNew);
+    if (!vis.length) return '<p class="tnote nnone">No notes on this lead yet.</p>';
+    function card(n){ var long=(n.text||"").length>420, open=NSHOW["x"+n.id];
+      var body=esc(long&&!open?n.text.slice(0,420)+"\u2026":(n.text||"")).replace(/\n/g,"<br>");
+      return '<div class="ncard k-'+n.kind+'"><div class="nmeta"><span><i class="nk">'+({note:"Team note",call:"Call",auto:"Automatic"}[n.kind]||"Note")+'</i><b>'+esc(n.kind==="note"?(n.title&&!/^Note \u00b7/.test(n.title)?n.title:"Note"):n.title)+'</b></span><span>'+esc(n.label||fmtDate(n.t))+(n.on==="deal"?" \u00b7 on the deal":"")+'</span></div><div class="ntext">'+body+'</div>'+
+        '<div class="nact">'+(long?'<button type="button" class="nmore" data-nmore="'+esc(n.id)+'">'+(open?"Show less":"Show more")+'</button>':'')+(db?'<button type="button" class="nmore" data-nhide="'+esc(n.id)+'" data-tip="Deletes it from this dashboard. It stays in Attio, because the connector cannot delete notes there">Delete</button>':'')+'</div></div>'; }
+    var older=team.slice(1).concat(calls.slice(1)).sort(byNew);
+    function row(n){ var open=NSHOW["o"+n.id]; return '<div class="nold'+(open?" on":"")+'"><button type="button" class="nrow" data-nold="'+esc(n.id)+'" aria-expanded="'+(!!open)+'"><i class="nk">'+(n.kind==="note"?"Team note":"Call")+'</i><span class="nt">'+esc(String(n.text||"").replace(/\s+/g," ").slice(0,70))+'</span><span class="nd">'+esc(n.label||fmtDate(n.t))+'</span><svg class="nch" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>'+(open?'<div class="nobody">'+esc(n.text||"").replace(/\n/g,"<br>")+'</div>':'')+'</div>'; }
+    return (team.length?card(team[0]):"")+(calls.length?card(calls[0]):"")+
+      (older.length?'<button type="button" class="nmore nauto" data-nauto="1">'+(NSHOW.auto?"Hide older notes":"Older notes ("+older.length+")")+'</button>'+(NSHOW.auto?'<div class="nolds">'+older.map(row).join("")+'</div>':""):"");
   }
   function redrawNotes(){ var o=oppById(openId), el=document.getElementById("nlist"); if(o&&el) el.innerHTML=notesHTML(o); }
   var LICONN=["Not connected","Request sent","Connected"];
@@ -2215,6 +2220,7 @@
     if (e.target.closest("[data-nhidden]")){ NSHOW.hid=!NSHOW.hid; redrawNotes(); return; }
     var nm=e.target.closest("[data-nmore]"); if (nm){ NSHOW["x"+nm.dataset.nmore]=!NSHOW["x"+nm.dataset.nmore]; redrawNotes(); return; }
     if (e.target.closest("[data-nauto]")){ NSHOW.auto=!NSHOW.auto; redrawNotes(); return; }
+    var no=e.target.closest("[data-nold]"); if (no){ NSHOW["o"+no.dataset.nold]=!NSHOW["o"+no.dataset.nold]; redrawNotes(); return; }
     var ns=e.target.closest("[data-newstage]"); if (ns){ document.querySelectorAll("#rnewchips .schip").forEach(function(x){ x.setAttribute("aria-pressed",String(x===ns)); }); return; }
     if (e.target.closest("#rdealgo")){ createDeal(); return; }
     var sc=e.target.closest("[data-stage]"); if (sc){ document.querySelectorAll("#rstagechips .schip").forEach(function(x){ x.setAttribute("aria-pressed",String(x===sc)); }); return; }
@@ -2848,7 +2854,7 @@
     return '<span class="cav '+(cls||"")+'" style="background:hsl('+h+' 70% 92%);color:hsl('+h+' 45% 32%)">'+esc(chatInit(name))+'</span>'; }
   function chatResolve(ids){ if(!CHAT_USER||!CHAT_USER.profiles) return Promise.resolve(); var need=ids.filter(function(i){ return i&&!CHAT_NAMES[i]; }); if(!need.length) return Promise.resolve();
     return CHAT_USER.profiles(need).then(function(ps){ Object.keys(ps||{}).forEach(function(k){ var p=ps[k]; if(p&&p.name) CHAT_NAMES[k]=p.name; if(p&&p.avatarUrl&&p.name) CHAT_AVATARS[k]=p.avatarUrl; }); }).catch(function(){}); }
-  function chatUserInit(){ try{ if(!(window.claude&&window.claude.use)) return; window.claude.use("user").then(function(u){ if(!u) return; CHAT_USER=u;
+  function chatUserInit(){ try{ if(!(window.claude&&window.claude.use)) return; window.claude.use("user").then(function(u){ if(!u) return; CHAT_USER=u; try{ if(u.can&&u.can("data.write")===false&&!document.getElementById("viewOnly")){ var vb=document.createElement("div"); vb.id="viewOnly"; vb.className="viewonly"; vb.innerHTML='You can look at this dashboard but not change anything. Ask Ife to give you edit access from the Share menu.<button type="button" aria-label="Close">&times;</button>'; vb.querySelector("button").onclick=function(){ vb.remove(); }; document.body.appendChild(vb); } }catch(e){}
       return u.me().then(function(m){ CHAT_ME={id:m.id||null,name:m.name||"",admin:!!m.canEdit}; if(m.id&&m.name){ CHAT_NAMES[m.id]=m.name; if(m.avatarUrl) CHAT_AVATARS[m.id]=m.avatarUrl; } return u.search?u.search(""):[]; }).then(function(hits){
         CHAT_PEOPLE=(hits||[]).filter(function(h){ return h&&h.id; }).map(function(h){ if(h.name) CHAT_NAMES[h.id]=h.name; return {id:h.id,name:h.name||""}; }); chatRegisterSelf(); chatRedraw(); }); }).catch(function(){}); }catch(e){} }
   function chatRoomInit(){ try{ if(!(window.claude&&window.claude.use)) return; window.claude.use("room").then(function(r){ if(!r) return; CHAT_ROOM=r; try{ r.presence({chat:true}); }catch(e){}
