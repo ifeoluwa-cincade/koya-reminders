@@ -1377,6 +1377,11 @@
     loadLeadLive(id);
   }
   // a lead added after the last hourly update: read it from Attio now and open it
+  function liveThread(o){ if(!MCP||!MCP.isServer||!o||!o.email) return Promise.resolve(); o._thAt=Date.now();
+    return MCP.callTool("PlusVibe","get_thread",{email:o.email,n:6},{cache:false}).then(function(r){ var j=pvJson(r); if(!j||!Array.isArray(j.thread)||!j.thread.length) return; var th=j.thread; if(JSON.stringify(th)===JSON.stringify(o.thread||[])) return;
+      o.thread=th; var newest=th[0]&&th[0].t; if(newest&&(!o.last_touch||String(newest)>String(o.last_touch))) o.last_touch=newest; var rep=th.filter(function(m){ return m.from_lead; })[0]; if(rep&&!o.summary) o.summary=rep.text; o.thread_sent_only=!rep;
+      if(tab==="opps") renderOpps(); if(openId===o.id) openPanel(o.id,true); }).catch(function(){}); }
+  function liveThreadOpen(id){ var o=oppById(id); if(o&&o.email&&Date.now()-(o._thAt||0)>60000) liveThread(o); }
   function loadLeadLive(id){
     var note=document.getElementById("liveNote"); if(note) note.textContent="Opening that lead from Attio…";
     MCP.callTool("Attio","get-records-by-ids",{object:"people",record_ids:[id]},{cache:false}).then(function(r){
@@ -1407,10 +1412,11 @@
   var NEWSEEN={}; try{ NEWSEEN=JSON.parse(localStorage.getItem("koya-new-seen")||"{}"); }catch(e){}
   function newSeen(id){ return !!(NEWSEEN&&NEWSEEN[id]); }
   function markNewSeen(id){ if(!NEWSEEN||NEWSEEN[id]) return; NEWSEEN[id]=Date.now(); try{ localStorage.setItem("koya-new-seen",JSON.stringify(NEWSEEN)); }catch(e){} }
-  function prio(o){ if (o.live_new && !newSeen(o.id)) return 0; var d=dueInfo(o); if (d.n==null) return 1; if (d.cls==="over") return 2; if (d.cls==="today") return 3; return 4; }
+  function isFresh(o){ return !!(o.live_new && !newSeen(o.id) && (Date.now()-(o.live_at||0))<10000); }
+  function prio(o){ if (isFresh(o)) return 0; var d=dueInfo(o); if (d.n==null) return 1; if (d.cls==="over") return 2; if (d.cls==="today") return 3; return 4; }
   var SORTS={
     priority:function(a,b){ var x=prio(a), y=prio(b); if (x!==y) return x-y; if (x===0||x===1) return (TT(b)||0)-(TT(a)||0); var da=dueInfo(a).n, db=dueInfo(b).n; return (da==null?9e9:da)-(db==null?9e9:db); },
-    recent:function(a,b){ var na=a.live_new&&!newSeen(a.id), nb=b.live_new&&!newSeen(b.id); if(na!==nb) return na?-1:1; var x=TT(a), y=TT(b); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1; return y-x; },   // newest first
+    recent:function(a,b){ var na=isFresh(a), nb=isFresh(b); if(na!==nb) return na?-1:1; var x=TT(a), y=TT(b); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1; return y-x; },   // newest first
     due:function(a,b){ var x=a.due_set&&T(a.due)!=null?T(a.due):9e15, y=b.due_set&&T(b.due)!=null?T(b.due):9e15; return x-y; },                                                          // earliest first
     tag:function(a,b){ var d=(BORDER[a.bucket]||0)-(BORDER[b.bucket]||0); return d||SORTS.recent(a,b); },
     name:function(a,b){ return String(a.name||"").localeCompare(String(b.name||"")); },
@@ -1493,7 +1499,7 @@
     var IC={Email:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 7l8.5 6 8.5-6"/></svg>',Call:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>'};
     function srcIcons(o){ var t=String(o.source||""), r=""; if(t.indexOf("Email")>=0) r+='<span data-tip="Email">'+IC.Email+'</span>'; if(t.indexOf("Call")>=0) r+='<span data-tip="Cold call">'+IC.Call+'</span>'; return r||'<span class="oseen">'+esc(t)+'</span>'; }
     var h=list.map(function(o){ var d=dueInfo(o);
-      return '<button class="orow ogrid" draggable="true" data-id="'+esc(o.id)+'"><span class="olead"><span class="odot '+d.cls+'"></span><span class="omain"><span class="oname"><b>'+esc(o.name||o.email)+'</b>'+(o.live_new&&!newSeen(o.id)?'<span class="newtag">New</span>':'')+'</span><span class="ocomp">'+esc(o.company||o.email||"")+'</span></span></span>'+
+      return '<button class="orow ogrid" draggable="true" data-id="'+esc(o.id)+'"><span class="olead"><span class="odot '+d.cls+'"></span><span class="omain"><span class="oname"><b>'+esc(o.name||o.email)+'</b>'+(isFresh(o)?'<span class="newtag">New</span>':'')+'</span><span class="ocomp">'+esc(o.company||o.email||"")+'</span></span></span>'+
         '<span class="ostage"><span class="tag '+o.bucket+'">'+esc(stLabel(o))+'</span>'+'</span>'+
         '<span class="osrc">'+srcIcons(o)+'</span>'+
         '<span class="oseen">'+esc(relAgo(o.last_touch))+'</span><span class="odue '+d.cls+'">'+esc(d.label)+'</span>'+
@@ -1596,7 +1602,7 @@
     var cp=e.target.closest("[data-cpi]"); if(cp){ try{ navigator.clipboard.writeText(cp.dataset.cpi).then(function(){ cp.classList.add("ok"); cp.innerHTML=CKSVG; setTimeout(function(){ cp.classList.remove("ok"); cp.innerHTML=CPSVG; },1200); }); }catch(x){} return; }
     var pm=e.target.closest("[data-pmore]"); if(pm){ var bx=pm.parentNode.querySelector(".pxt"); if(bx){ var open=!bx.classList.contains("clamp"); if(open){ bx.classList.add("clamp"); pm.textContent="Show more"; } else { bx.classList.remove("clamp"); pm.textContent="Show less"; } } return; }
   },true);
-  function openPanel(id,keepScroll){ try{ markNewSeen(id); }catch(e){} try{ chatSeenLead(id); }catch(e){}
+  function openPanel(id,keepScroll){ try{ markNewSeen(id); }catch(e){} try{ liveThreadOpen(id); }catch(e){} try{ chatSeenLead(id); }catch(e){}
     var o=oppById(id); if(!o) return; mergeNotes(); if(!keepScroll||openId!==id) PTAB="overview"; openId=id; var prevScroll=keepScroll?[].map.call(document.querySelectorAll("#panel .pcol"),function(c){ return c.scrollTop; }):[], prevOuter=keepScroll?document.getElementById("panel").scrollTop:0;
     var d=dueInfo(o), L=o.links||{};
     function link(href,label){ var ic=LINKICON(label); return href ? '<a class="plink ico" href="'+esc(href)+'" target="_blank" rel="noopener noreferrer" data-tip="'+esc(label)+'" aria-label="'+esc(label)+'">'+ic+'<span class="vh">'+label+'</span></a>' : '<span class="plink ico off" data-tip="'+esc(label)+' (nothing to open yet)">'+ic+'<span class="vh">'+label+'</span></span>'; }
@@ -1701,10 +1707,10 @@
           var dname=attioVal(f.b,"name")||"", nx=attioVal(f.b,"next_action_at"), em=(pb.match(/email_addresses\[\d+\]:\s*(\S+)/)||[])[1]||null, li=attioVal(pb,"linkedin"), ch=attioVal(f.b,"source_channel")||"";
           var bk=stageBucket(f.st)||"followup", parts=dname.split("/");
           OPPS.push(tidyOpp({id:f.pid,name:attioVal(pb,"name")||dname,company:parts.length>1?parts.slice(1).join("/").trim():null,email:em,phone:((pb.match(/phone_numbers\[\d+\]:\s*(\S+)/)||[])[1]||null),linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:f.st,source:/call/i.test(ch)?"Call":"Email",
-            last_touch:(function(){ var best=null; ["last_contacted_at","last_reply_at"].forEach(function(k){ var v=nextIso(attioVal(pb,k)); if(v&&(!best||v>best)) best=v; }); ["last_activity_at","created_at"].forEach(function(k){ var v=nextIso(attioVal(f.b,k)); if(v&&(!best||v>best)) best=v; }); return best; })(),due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,summary:attioVal(pb,"last_reply_summary")||null,call_at:null,attempts:null,campaign:null,
+            last_touch:(function(){ var best=null; ["last_contacted_at","last_reply_at"].forEach(function(k){ var v=nextIso(attioVal(pb,k)); if(v&&(!best||v>best)) best=v; }); ["last_activity_at","created_at"].forEach(function(k){ var v=nextIso(attioVal(f.b,k)); if(v&&(!best||v>best)) best=v; }); var nowIso=new Date().toISOString(); return (!best||best<nowIso)?nowIso:best; })(),due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,summary:attioVal(pb,"last_reply_summary")||null,call_at:null,attempts:null,campaign:null,
             links:{attio:"https://app.attio.com/koya-talent/person/"+f.pid,deal:"https://app.attio.com/koya-talent/deals/record/"+f.did,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[],live_new:true,live_at:Date.now()})); added++; });
         OPPS.filter(function(o){ return o.live_new && o.email && !o.sequence; }).forEach(function(o){                       // PlusVibe: where this lead is in the sequences, straight away
-          o.sequence=[];
+          o.sequence=[]; liveThread(o);
           MCP.callTool("PlusVibe","find_lead_by_email",{workspace_id:PVWS_ID,email:o.email},{cache:false}).then(function(r){
             var j=pvJson(r); if(!Array.isArray(j)) return;
             o.sequence=j.map(function(x){ var ld=x.lead_data||{}; return {id:x.campaign||ld.campaign_id,name:x.campaign_name||"",sub:false,status:x.status||ld.status||"",label:x.label||ld.label||"",camp:"ACTIVE",step:+ld.sent_step||0,steps:0,last:ld.last_sent_at||null,next:null,sent:[]}; }).filter(function(q){ return q.id; });
@@ -1712,7 +1718,7 @@
             if (tab==="opps") renderOpps(); if (openId===o.id) openPanel(o.id,true);
           }).catch(function(){});
         });
-        if (added){ var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=oppNL().length; if(tab==="opps") renderOpps(); var n=document.getElementById("liveNote"); if(n){ n.textContent=""; n.title=added+" new lead"+(added>1?"s":"")+" found live in Attio"; } }
+        if (added){ var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=oppNL().length; if(tab==="opps") renderOpps(); setTimeout(function(){ if(tab==="opps") renderOpps(); },10500); var n=document.getElementById("liveNote"); if(n){ n.textContent=""; n.title=added+" new lead"+(added>1?"s":"")+" found live in Attio"; } }
       });
     }).catch(function(e){ LIVE_DISC_ERR=errText(e); var n1=document.getElementById("liveNote"); if(n1) n1.textContent="New leads could not be read live ("+LIVE_DISC_ERR+")"; });
   }
