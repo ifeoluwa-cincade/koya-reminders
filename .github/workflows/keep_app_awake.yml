@@ -5,7 +5,7 @@ name: Keep the team app awake and watch it
 # The address is a secret and the call carries no lead data. Public repositories do not use up Actions minutes.
 on:
   schedule:
-    - cron: "*/10 5-23 * * *"      # 06:00 to 00:50 Lagos
+    - cron: "*/10 * * * *"         # all night too: Attio and PlusVibe webhooks arrive at any hour
   workflow_dispatch:
 permissions: {}
 jobs:
