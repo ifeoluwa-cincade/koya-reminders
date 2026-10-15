@@ -1828,7 +1828,7 @@
     acc=acc||{n:0,conv:0,known:0};
     return MCP.callTool("CloudTalk","cloudtalk_search_calls",{date_from:d+" 00:00:00",date_to:d+" 23:59:59",direction:"outgoing",limit:200,page:page},{cache:{staleTime:60000}}).then(function(r){
       var j=pvJson(r); if(!j||!j.pagination||!j.calls) throw {code:"upstream_error",message:"CloudTalk returned nothing readable"};
-      if(!acc.keys&&j.calls[0]) acc.keys=Object.keys(j.calls[0]).slice(0,14).join(", "); acc.n+=j.calls.length; j.calls.forEach(function(c){ var t=talkOf(c); if (t!==null){ acc.known++; if (t>0) acc.conv++; } });
+      if(!acc.keys&&j.calls[0]) acc.keys=Object.keys(j.calls[0]).slice(0,14).join(", "); acc.n+=j.calls.length; j.calls.forEach(function(c){ var t=talkOf(c); if (t!==null){ acc.known++; if (t>=30) acc.conv++; }   // a conversation is 30 seconds or more of talk, the same floor the hourly numbers and the transcription queue use; voicemail and phone menus are shorter });
       return (j.pagination.next_page && page<20) ? ctDay(d,page+1,acc) : acc;
     });
   }
