@@ -1,0 +1,17 @@
+name: Keep the team app awake
+# Render's free plan sleeps after about 15 minutes with no visits. This asks the app if it is fine every 10 minutes.
+# The address is a secret and the call carries no data. Public repositories do not use up Actions minutes.
+on:
+  schedule:
+    - cron: "*/10 5-23 * * *"      # 06:00 to 00:50 Lagos
+  workflow_dispatch:
+permissions: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ask the app if it is awake
+        env:
+          KOYA_APP_URL: ${{ secrets.KOYA_APP_URL }}
+        run: curl -sS -m 90 --retry 2 --retry-delay 5 -o /dev/null -w "app answered %{http_code}\n" "$KOYA_APP_URL/healthz"
