@@ -1,6 +1,8 @@
-name: Keep the team app awake
-# Render's free plan sleeps after about 15 minutes with no visits. This asks the app if it is fine every 10 minutes.
-# The address is a secret and the call carries no data. Public repositories do not use up Actions minutes.
+name: Keep the team app awake and watch it
+# Render's free plan sleeps after about 15 minutes with no visits. This asks the app how it is every 10 minutes.
+# /api/deep-health also checks the database and the stored dashboard page, which keeps the free database project active.
+# If the app does not answer properly twice in a row, a plain message goes to the system channel.
+# The address is a secret and the call carries no lead data. Public repositories do not use up Actions minutes.
 on:
   schedule:
     - cron: "*/10 5-23 * * *"      # 06:00 to 00:50 Lagos
@@ -9,9 +11,22 @@ permissions: {}
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 6
     steps:
-      - name: Ask the app if it is awake
+      - name: Check the app
         env:
           KOYA_APP_URL: ${{ secrets.KOYA_APP_URL }}
-        run: curl -sS -m 90 --retry 2 --retry-delay 5 -o /dev/null -w "app answered %{http_code}\n" "$KOYA_APP_URL/healthz"
+          SYSTEM_WEBHOOK_URL: ${{ secrets.SYSTEM_WEBHOOK_URL }}
+        run: |
+          ok=0
+          for i in 1 2; do
+            code=$(curl -sS -m 100 -o /tmp/h.json -w "%{http_code}" "$KOYA_APP_URL/api/deep-health" || echo 000)
+            echo "try $i: HTTP $code"
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            sleep 45
+          done
+          if [ "$ok" != "1" ]; then
+            msg="Koya team app is not answering properly (last answer HTTP $code). Open the app address and check Render, or ask Claude to look."
+            curl -sS -m 30 -H "Content-Type: application/json" -d "{\"content\":\"$msg\"}" "$SYSTEM_WEBHOOK_URL" -o /dev/null || true
+            exit 1
+          fi
