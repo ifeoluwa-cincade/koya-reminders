@@ -565,6 +565,7 @@
   .cbub{padding-right:38px !important;} .cbub .cchev{top:8px; right:8px;}
   .cflag{display:inline-grid; place-items:center; margin-left:6px; color:var(--violet);} .cflag svg{width:12px; height:12px;} .cflag.st{color:#d9a400;} .cflag.st svg{fill:#d9a400;}
   .cflash{background:rgba(110,86,240,.16) !important;}
+  .cmem:not(:has(.pres.on)) .tx b,.cmem:not(:has(.pres.on)) .cavw{opacity:.55;}
   .cmenu{position:fixed; z-index:99990; width:250px; background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:0 24px 50px -14px rgba(20,23,26,.4); padding:6px;}
   .cmemo{display:flex; justify-content:space-between; padding:4px 4px 8px; border-bottom:1px solid var(--line); margin-bottom:4px;} .cmemo button{width:34px; height:34px; border:0; background:none; border-radius:50%; cursor:pointer; font-size:20px; display:grid; place-items:center; padding:0;} .cmemo button:hover{background:var(--bg-soft); transform:scale(1.12);}
   .cmi{display:flex; align-items:center; gap:12px; width:100%; border:0; background:none; padding:9px 10px; border-radius:9px; cursor:pointer; font:500 14px var(--font); color:var(--ink); text-align:left;} .cmi svg{color:var(--ink-2); flex:none;} .cmi:hover{background:var(--bg-soft);} .cmi.red,.cmi.red svg{color:#c2382c;}
@@ -3131,7 +3132,7 @@
   setInterval(chatPingLast,60000); document.addEventListener("visibilitychange",function(){ if(!document.hidden) setTimeout(chatPingLast,800); }); setTimeout(chatPingLast,6000);
   function chatLastSeen(i){ var r=CHAT_ROSTER[i]||{}, t=r.last||r.seen||r.at; if(!t) return "Offline"; var m=Math.round((Date.now()-new Date(t).getTime())/6e4); if(isNaN(m)) return "Offline"; if(m<2) return "Last seen just now"; if(m<60) return "Last seen "+m+" min ago"; if(m<1440) return "Last seen "+Math.round(m/60)+" h ago"; var d=Math.round(m/1440); return "Last seen "+d+" day"+(d===1?"":"s")+" ago"; }
   function chatMembersHTML(){ var ids={}; Object.keys(CHAT_ROSTER).forEach(function(i){ ids[i]=1; }); if(CHAT_ME.id) ids[CHAT_ME.id]=1; var ks=Object.keys(ids).sort(function(a,b){ var oa=(CHAT_ONLINE[a]||a===CHAT_ME.id)?0:1, ob=(CHAT_ONLINE[b]||b===CHAT_ME.id)?0:1; return oa-ob||chatName(a).localeCompare(chatName(b)); });
-    var mn=document.getElementById("chatMemN"); if(mn) mn.textContent=ks.length+" member"+(ks.length===1?"":"s");
+    var mn=document.getElementById("chatMemN"); if(mn) mn.textContent=ks.filter(function(i){ return CHAT_ONLINE[i]||i===CHAT_ME.id; }).length+" online";
     if(!ks.length) return '<div class="cempty sm">Nobody yet. People appear here when they open the dashboard.</div>';
     return ks.map(function(i){ var me=i===CHAT_ME.id, nm=me?(CHAT_ME.name||"You"):chatName(i), on=CHAT_ONLINE[i]||me, role=(CHAT_ROSTER[i]||{}).role||""; return '<div class="cmem">'+'<span class="cavw">'+chatAv(i,nm)+'<i class="pres'+(on?" on":"")+'" title="'+(on?"Online":"Offline")+'"></i></span><span class="tx"><b>'+esc(nm)+(me?' <em>you</em>':'')+'</b><small>'+esc(on?(role||"Online"):((role?role+" · ":"")+chatLastSeen(i)))+'</small></span></div>'; }).join(""); }
   function chatQuickHTML(){ var q=String(CHAT_QA||"").toLowerCase().trim(), arr=OPPS.slice();
