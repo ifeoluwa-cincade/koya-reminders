@@ -613,7 +613,7 @@ def fetch_notes(c: AttioClient, opps: list[dict]) -> None:
                 when, label = n.get("created_at"), None
                 m = re.match(r"Call · (\d{4}-\d\d-\d\d)(?: (\d\d:\d\d))?", title)
                 if m:                                                   # a note about one call: show the call's own day (and time when the title has one), not when the note was written
-                    when = f"{m.group(1)}T{m.group(2) or '12:00'}:00+00:00"
+                    when = f"{m.group(1)}T{m.group(2)}:00+02:00" if m.group(2) else f"{m.group(1)}T12:00:00+00:00"   # the time in the title is CloudTalk's own clock (UTC+2), not UTC
                 elif title.startswith("Call history"):                 # written on 1-2 Oct when the call lists were loaded; the real call dates are in the text
                     mons = {k: i + 1 for i, k in enumerate(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])}
                     ds = sorted(f"{y}-{mons[mo]:02d}-{int(d):02d}" for d, mo, y in re.findall(r"(\d{1,2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4})", body))
