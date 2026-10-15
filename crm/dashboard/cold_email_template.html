@@ -3241,7 +3241,7 @@
     else if(s==="glass"){ chatNote(ac,2093,n,1,.15,"sine"); chatNote(ac,3136,n,.7,.07,"sine"); chatNote(ac,4186,n,.4,.03,"sine"); }
     else { chatNote(ac,1046,n,.5,.17); chatNote(ac,1318,n+.11,.5,.17); chatNote(ac,1568,n+.22,.75,.17); } }catch(e){} }
   var CHAT_FLASH_ON=false;
-  function chatTitle(){ var n=(tab==="chat")?0:chatUnread().length, men=(tab==="chat")?0:CHAT.filter(function(m){ return (m.tagIds||[]).indexOf(CHAT_ME.id)>=0&&m.fromId!==CHAT_ME.id&&Date.parse(m.t)>CHAT_LAST; }).length; return (n?"("+n+(men?" @":"")+") ":"")+"Koya Outbound"; }
+  function chatTitle(){ var n=(tab==="chat")?0:chatUnread().length, men=(tab==="chat")?0:CHAT.filter(function(m){ return (m.tagIds||[]).indexOf(CHAT_ME.id)>=0&&m.fromId!==CHAT_ME.id&&Date.parse(m.t)>CHAT_LAST; }).length; return (men?"(@"+men+") ":(n?"\u2022 ":""))+"Koya Outbound"; }
   function chatFlash(txt){ clearInterval(CHAT_FLASH); var on=false, n=0; CHAT_FLASH_ON=true; CHAT_FLASH=setInterval(function(){ on=!on; try{ document.title=on?txt:chatTitle(); }catch(e){} if(++n>60||(!document.hidden&&tab==="chat")){ clearInterval(CHAT_FLASH); CHAT_FLASH_ON=false; chatBadge(); } },1200); }
   function chatDesktop(t,b){ try{ if(window.Notification&&Notification.permission==="granted") new Notification(t,{body:b}); }catch(e){} }
   function chatCard(m,me,who){ var box=document.getElementById("chatCards"); if(!box){ box=document.createElement("div"); box.id="chatCards"; document.body.appendChild(box); }
