@@ -16,12 +16,25 @@ on:
 
 permissions: {}
 
-concurrency:
-  group: calllist-label
-  cancel-in-progress: false
-
+# CloudTalk allows 60 calls a minute for the WHOLE company. The hourly routine push starts every hourly job in the same second,
+# so on that push only this job first waits 4 minutes (after Call dispositions and the start of the Dashboard build, before the CRM sync at 10).
+# The wait is its own job with no concurrency group, so a call-list change that arrives meanwhile is never held up by it.
+# The concurrency group sits on the real job: two label runs still never overlap.
 jobs:
+  stagger:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Wait 4 minutes so the hourly jobs do not all call CloudTalk at once
+        run: sleep 240
+
   label:
+    needs: stagger
+    if: ${{ !cancelled() && needs.stagger.result != 'failure' }}
+    concurrency:
+      group: calllist-label
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
