@@ -76,11 +76,17 @@ jobs:
       - name: Restore the encrypted memory of finished calls
         uses: actions/cache@v4
         with:
-          path: |
-            data/working/live/live_state.json.enc
-            data/working/live/review_skip.json.enc
+          # ONE path only: the cache version includes the path list, so adding a file here hides every earlier
+          # copy of the memory (that happened on 16 Oct: every run redid 1,000 calls and was cancelled).
+          path: data/working/live/live_state.json.enc
           key: call-state-enc-${{ github.run_id }}
           restore-keys: call-state-enc-
+      - name: Restore the Call review skip list (its own cache, so the call memory above keeps its key)
+        uses: actions/cache@v4
+        with:
+          path: data/working/live/review_skip.json.enc
+          key: review-skip-enc-${{ github.run_id }}
+          restore-keys: review-skip-enc-
       - name: Decrypt it
         run: |
           mkdir -p data/working/live
