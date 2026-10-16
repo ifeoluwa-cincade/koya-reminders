@@ -44,6 +44,9 @@ jobs:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       ENC_CACHE_KEY: ${{ secrets.ENC_CACHE_KEY }}
       PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}     # a not-interested call stops the lead's PlusVibe emails (apply_call_verdicts.py)
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}                       # Call review: the team app's database and its PRIVATE call-audio bucket
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      TRANSCRIBER: groq                                               # Call review transcripts; "deepgram" (diarized) needs DEEPGRAM_API_KEY and Ife's yes
       DRY: ${{ github.event.inputs.dry_run }}
       RECHECK: ${{ github.event.inputs.recheck }}
     steps:
@@ -73,7 +76,9 @@ jobs:
       - name: Restore the encrypted memory of finished calls
         uses: actions/cache@v4
         with:
-          path: data/working/live/live_state.json.enc
+          path: |
+            data/working/live/live_state.json.enc
+            data/working/live/review_skip.json.enc
           key: call-state-enc-${{ github.run_id }}
           restore-keys: call-state-enc-
       - name: Decrypt it
@@ -81,6 +86,9 @@ jobs:
           mkdir -p data/working/live
           if [ -f data/working/live/live_state.json.enc ]; then
             openssl enc -d -aes-256-cbc -pbkdf2 -in data/working/live/live_state.json.enc -out data/working/live/live_state.json -pass env:ENC_CACHE_KEY || rm -f data/working/live/live_state.json
+          fi
+          if [ -f data/working/live/review_skip.json.enc ]; then
+            openssl enc -d -aes-256-cbc -pbkdf2 -in data/working/live/review_skip.json.enc -out data/working/live/review_skip.json -pass env:ENC_CACHE_KEY || rm -f data/working/live/review_skip.json
           fi
       - name: Work out an outcome for every new call
         run: python crm/scripts/live_call_dispositions.py --since "$SINCE" $COMMIT
@@ -101,10 +109,22 @@ jobs:
       - name: Put the outcomes back on the call-list queue
         if: ${{ env.DRY != 'true' }}
         run: python crm/scripts/calls_to_call_lists.py --commit
+      # Call review (the team app's Call review page): real conversations of 45 s or more get their audio copied once into the
+      # private call-audio bucket, a transcript with times, and a short breakdown. Logs show counts only (public repo).
+      # It runs after the CRM writers and never stops them; a failure here only delays a review to the next run.
+      - name: Make call reviews for real conversations
+        if: ${{ env.DRY != 'true' }}
+        continue-on-error: true
+        run: |
+          command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null)
+          python crm/scripts/call_review.py --since "$SINCE" --limit 40 --commit
       - name: Encrypt the memory again
         if: ${{ always() }}
         run: |
           if [ -f data/working/live/live_state.json ]; then
             openssl enc -aes-256-cbc -pbkdf2 -salt -in data/working/live/live_state.json -out data/working/live/live_state.json.enc -pass env:ENC_CACHE_KEY
+          fi
+          if [ -f data/working/live/review_skip.json ]; then
+            openssl enc -aes-256-cbc -pbkdf2 -salt -in data/working/live/review_skip.json -out data/working/live/review_skip.json.enc -pass env:ENC_CACHE_KEY
           fi
           rm -rf data/working/live/*.json
