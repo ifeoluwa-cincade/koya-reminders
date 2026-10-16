@@ -52,18 +52,53 @@ def auth() -> dict:
     return {"Authorization": f"Basic {t}", "Content-Type": "application/json"}
 
 
-def req(method: str, path: str, H: dict, tries: int = 5, **kw):
-    delay, last = 2.0, None
+RATE_WAIT_BUDGET = 360   # seconds a run may spend waiting out CloudTalk 429s in total (the job timeout is 15 min)
+_waited = 0.0
+
+
+def _rate_wait(r, fallback: float) -> float:
+    """Seconds to wait after a 429. CloudTalk allows 60 calls a minute for the WHOLE company, shared by every job and the
+    Apps Script call watcher, so the hourly burst of jobs can use it up for a while. CloudTalk says when the window
+    resets (X-CloudTalkAPI-ResetTime, a Unix time): wait for that, else Retry-After, else the back-off."""
+    try:
+        reset = float(r.headers.get("X-CloudTalkAPI-ResetTime") or 0)
+        if reset > 0:
+            return min(max(reset - time.time(), 0) + 2, 70)
+        ra = float(r.headers.get("Retry-After") or 0)
+        if ra > 0:
+            return min(ra + 1, 70)
+    except (TypeError, ValueError):
+        pass
+    return fallback
+
+
+def req(method: str, path: str, H: dict, tries: int = 10, **kw):
+    """CloudTalk call that rides out the shared rate limit. path is relative to the core API, or a full URL (Dialer)."""
+    global _waited
+    url = path if path.startswith("http") else CT + path
+    delay, last, r = 2.0, None, None
     for _ in range(tries):
         try:
-            r = requests.request(method, CT + path, headers=H, timeout=90, **kw)
+            r = requests.request(method, url, headers=H, timeout=90, **kw)
             if r.status_code != 429:
                 return r
+            wait, last = _rate_wait(r, delay), None
         except requests.exceptions.RequestException as ex:
-            last = type(ex).__name__
-        time.sleep(delay); delay *= 2
+            wait, last = delay, type(ex).__name__
+        if _waited + wait > RATE_WAIT_BUDGET:
+            break
+        time.sleep(wait); _waited += wait; delay = min(delay * 2, 60)
     if last:
         raise RuntimeError(f"CloudTalk request failed ({last})")
+    if r is not None and r.status_code == 429:
+        print(f"CloudTalk still refusing (HTTP 429) after waiting {int(_waited)} s in total: the company's 60 calls a minute are being used up elsewhere")
+    return r
+
+
+def read_ok(r, what: str):
+    """A read that failed stops the run: carrying on with an empty answer would plan the wrong tags or send false alerts."""
+    if r.status_code >= 300:
+        raise SystemExit(f"CloudTalk {what}: HTTP {r.status_code}")
     return r
 
 
@@ -73,7 +108,7 @@ DIALER = "https://api.cloudtalk.io/v1"
 def campaign_statuses(H):
     """({legacy id: status}, {dialer id: (name, status)}). Read-only."""
     legacy, dialer = {}, {}
-    r = req("GET", "/campaigns/index.json", H, params={"limit": 100})
+    r = read_ok(req("GET", "/campaigns/index.json", H, params={"limit": 100}), "campaigns")
     for x in (r.json().get("responseData", {}).get("data") or []):
         c0 = x.get("Campaign", x); legacy[str(c0.get("id"))] = c0.get("status")
     cursor = None
@@ -81,10 +116,7 @@ def campaign_statuses(H):
         prm = {"limit": 100}
         if cursor:
             prm["cursor"] = cursor
-        r = requests.get(DIALER + "/dialer/campaigns", headers=H, params=prm, timeout=60)
-        if r.status_code >= 300:
-            break
-        j = r.json()
+        j = read_ok(req("GET", DIALER + "/dialer/campaigns", H, params=prm), "dialer campaigns").json()
         for x in j.get("data") or []:
             dialer[str(x["id"])] = (x.get("name"), x.get("status"))
         cursor = (j.get("meta") or {}).get("nextCursor")
@@ -160,7 +192,7 @@ def main() -> int:
     print(f"CloudTalk contacts read: {rows_n:,}")
 
     tag_ids = {}
-    for row in (req("GET", "/tags/index.json", H, params={"limit": 200}).json().get("responseData", {}).get("data") or []):
+    for row in (read_ok(req("GET", "/tags/index.json", H, params={"limit": 200}), "tags").json().get("responseData", {}).get("data") or []):
         tg = row.get("Tag", row); tag_ids[tg.get("name")] = tg.get("id")
     tagged_now = defaultdict(set)
     for L in spec:
@@ -169,7 +201,7 @@ def main() -> int:
             continue
         pg = 1
         while True:
-            d = req("GET", "/contacts/index.json", H, params={"tag_id": tid, "limit": 1000, "page": pg}).json().get("responseData", {}) or {}
+            d = read_ok(req("GET", "/contacts/index.json", H, params={"tag_id": tid, "limit": 1000, "page": pg}), "tagged contacts").json().get("responseData", {}) or {}
             rows = d.get("data") or []
             tagged_now[L["tag"]] |= {str((x.get("Contact", x)).get("id")) for x in rows}
             if len(tagged_now[L["tag"]]) >= int(d.get("itemsCount") or 0) or not rows:
@@ -317,4 +349,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    finally:
+        if _waited:
+            print(f"waited {int(_waited)} s in total for CloudTalk's shared rate limit")
