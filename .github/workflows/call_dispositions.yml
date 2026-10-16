@@ -33,7 +33,7 @@ concurrency:
 jobs:
   dispositions:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 55   # 16 Oct: listing 3 days of CloudTalk calls can take ~17 min under the shared rate limit; 25 min left no time to transcribe
     env:
       CALL_DATA_DIR: data/working/live
       ATTIO_KEY_VAR: ATTIO_API_KEY_2
