@@ -46,7 +46,11 @@ jobs:
       PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}     # a not-interested call stops the lead's PlusVibe emails (apply_call_verdicts.py)
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}                       # Call review: the team app's database and its PRIVATE call-audio bucket
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      TRANSCRIBER: groq                                               # Call review transcripts; "deepgram" (diarized) needs DEEPGRAM_API_KEY and Ife's yes
+      # Call review transcripts. groq = Whisper large-v3, speakers estimated. gemini = Gemini 3.5 Transcribe with real speaker
+      # turns, the 16 Oct 2026 accuracy winner: switch to it once Ife says yes AND the GEMINI_API_KEY secret is a paid key
+      # (free-tier audio may be used by Google for training). A Gemini failure on one call falls back to groq.
+      TRANSCRIBER: groq
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       DRY: ${{ github.event.inputs.dry_run }}
       RECHECK: ${{ github.event.inputs.recheck }}
     steps:
@@ -109,7 +113,7 @@ jobs:
       - name: Put the outcomes back on the call-list queue
         if: ${{ env.DRY != 'true' }}
         run: python crm/scripts/calls_to_call_lists.py --commit
-      # Call review (the team app's Call review page): real conversations of 45 s or more get their audio copied once into the
+      # Call review (the team app's Call review page): real conversations of 20 s or more (voicemails dropped by the transcript) get their audio copied once into the
       # private call-audio bucket, a transcript with times, and a short breakdown. Logs show counts only (public repo).
       # It runs after the CRM writers and never stops them; a failure here only delays a review to the next run.
       - name: Make call reviews for real conversations
