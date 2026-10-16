@@ -36,6 +36,9 @@ import requests
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "crm" / "scripts"))
+import ct_client  # noqa: E402  (one CloudTalk pacer for every job)
+from ct_client import CTBusy  # noqa: E402
+from job_status import JobStatus  # noqa: E402  (progress for the app's Refresh button: counts only)
 from classify_calls import PROMPT  # noqa: E402  (the prompt with Ife's strict rules)
 sys.path.insert(0, str(ROOT / "pipeline"))
 from lite_claude import call_claude_lite  # noqa: E402  (no CLAUDE.md auto-load: ~65% cheaper per call)
@@ -49,7 +52,7 @@ def classify(text: str) -> dict:
         return {"verdict": "NO_CONVERSATION", "summary": "Too little said to judge.", "objection": None}
     err = ""
     try:
-        res = call_claude_lite(PROMPT + text[:12000], model="sonnet", timeout_sec=240)   # returns the parsed JSON
+        res = call_claude_lite(PROMPT + text[:12000], model="sonnet", timeout_sec=int(os.environ.get("CALL_CLASSIFY_TIMEOUT") or 150))   # returns the parsed JSON
         if isinstance(res, dict) and res.get("verdict"):
             return res
         err = f"unexpected reply {str(res)[:80]}"
@@ -84,6 +87,7 @@ AUDIO = WORK / "audio"
 MODEL = "whisper-large-v3-turbo"
 REAL_VERDICTS = {"MEETING_BOOKED", "SEND_FOLLOW_UP", "CALLBACK", "NOT_NOW", "NOT_INTERESTED", "DO_NOT_CALL", "WRONG_PERSON"}
 MIN_TALK = 3            # seconds; below this there is nothing to transcribe
+DEADLINE = float("inf")  # set by main(): no Groq back-off waits past the run's time budget
 # Groq free tier: 28,800 audio seconds a day and 7,200 an hour. Stop at about 80% and carry on next run.
 DAILY_BUDGET = int(os.environ.get("GROQ_DAILY_AUDIO_BUDGET") or 23000)
 HOURLY_BUDGET = int(os.environ.get("GROQ_HOURLY_AUDIO_BUDGET") or 5800)
@@ -180,24 +184,19 @@ def env(k: str) -> str:
 
 
 def ct_get(path: str, H: dict, **kw):
-    """CloudTalk 429s under load and stalls; back off and retry, never treat a 429 as 'no data'."""
-    delay, r = 2.0, None
-    for _ in range(6):
-        try:
-            r = requests.get(CT + path, headers=H, timeout=120, **kw)
-        except requests.exceptions.RequestException:
-            time.sleep(delay); delay *= 2
-            continue
-        if r.status_code != 429:
-            return r
-        time.sleep(delay); delay *= 1.8
-    return r
+    """Every CloudTalk read goes through the shared client (ct_client.py): paced under the company's 60 a minute,
+    waits for CloudTalk's reset time after a 429, bounded retries. Raises CTBusy when this run has waited long enough:
+    the caller stops and the next run carries on. H is kept for older callers; the shared client has the same key."""
+    return ct_client.shared().get(path, **kw)
 
 
 def fetch_calls(H: dict, since: str) -> list[dict]:
     out, page = [], 1
     while True:
-        r = ct_get("/calls/index.json", H, params={"date_from": since, "limit": 100, "page": page})
+        try:
+            r = ct_get("/calls/index.json", H, params={"date_from": since, "limit": 100, "page": page})
+        except (CTBusy, requests.exceptions.RequestException) as ex:
+            sys.exit(f"CloudTalk calls list could not be read ({type(ex).__name__}); nothing changed, the next run tries again")
         if r is None or r.status_code >= 300:
             sys.exit(f"CloudTalk calls list failed: {getattr(r, 'status_code', '?')}")
         rows = (r.json().get("responseData", {}) or {}).get("data") or []
@@ -249,6 +248,8 @@ def transcribe(cid: str, H: dict, G: dict) -> tuple[str | None, str | None]:
         if g.status_code != 429:
             break
         if (attempt + 1) % len(keys) == 0:      # every key was limited: wait before the next round
+            if time.time() + delay > DEADLINE:  # never wait past the run's budget: the call is retried next run
+                break
             time.sleep(delay); delay = min(delay * 1.6, 240)
     if g is None or g.status_code >= 300:
         return None, f"groq {getattr(g, 'status_code', '?')}: {getattr(g, 'text', '')[:120]}"
@@ -282,12 +283,18 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", default=None, help="YYYY-MM-DD; default 3 days ago")
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--max-transcripts", type=int, default=int(os.environ.get("CALL_MAX_TRANSCRIPTS") or 20),
+                    help="at most this many calls get a transcript in one run; the rest wait for the next run (a backlog can never time a run out)")
+    ap.add_argument("--time-budget", type=int, default=int(os.environ.get("CALL_TIME_BUDGET") or 720),
+                    help="seconds: after this no new call is started, so the run always ends in time to save what it did")
     ap.add_argument("--commit", action="store_true")
     a = ap.parse_args()
+    t0 = time.time()
     since = a.since or (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
+    js = JobStatus("dispositions")
+    js.update(phase="reading", text="Reading new calls")
 
-    tok = base64.b64encode(f"{env('CLOUD_TALK_API_KEY_ID')}:{env('CLOUD_TALK_API_KEY')}".encode()).decode()
-    H = {"Authorization": f"Basic {tok}"}
+    H = ct_client.auth_header()
     G = {}                                   # keys are read per request in groq_keys()
 
     WORK.mkdir(parents=True, exist_ok=True)
@@ -297,48 +304,76 @@ def main() -> int:
     agent = {cid: av for cid, r in byid.items() for av in [tag_verdict(r) or agent_verdict(call_note(r))] if av}      # the caller's tag first, then the wording of the note
     todo = [cid for cid in byid if cid not in state or state[cid].get("retry")
             or (cid in agent and (state[cid].get("agent_note") != call_note(byid[cid]) or state[cid].get("agent_tags", []) != call_tags(byid[cid])))]      # a note or tag added or changed after the call is picked up too
+    # newest first: a person pressing Refresh after a call wants THAT call; an older one held back is picked up by the next run
+    todo.sort(key=lambda c: str((byid[c].get("Cdr") or {}).get("started_at") or ""), reverse=True)
     if a.limit:
         todo = todo[:a.limit]
-    print(f"{len(rows)} calls since {since}  |  already done {len(byid) - len(todo)}  |  to do {len(todo)}")
+    print(f"{len(rows)} calls since {since}  |  already done {len(byid) - len(todo)}  |  to do {len(todo)}", flush=True)
     mech = sum(1 for cid in todo if cid in agent or int(byid[cid]["Cdr"].get("talking_time") or 0) < MIN_TALK)
-    print(f"   {sum(1 for cid in todo if cid in agent)} decided by the caller's own note, {mech - sum(1 for cid in todo if cid in agent)} need no AI (no answer / under {MIN_TALK}s), {len(todo) - mech} get a transcript")
+    print(f"   {sum(1 for cid in todo if cid in agent)} decided by the caller's own note, {mech - sum(1 for cid in todo if cid in agent)} need no AI (no answer / under {MIN_TALK}s), {len(todo) - mech} get a transcript", flush=True)
     if not a.commit:
         print("\nDRY RUN — nothing transcribed or written.")
+        print("   " + ct_client.shared().summary())
         return 0
 
     def used(prefix: str) -> int:
         return sum(r.get("talk", 0) for r in state.values() if r.get("transcribed_at", "").startswith(prefix))
 
-    # 1. decide up front which calls fit inside Groq's audio budget; the rest wait for the next run
+    def needs_transcript(cid: str) -> bool:
+        cdr = byid[cid].get("Cdr") or {}
+        return cid not in agent and int(cdr.get("talking_time") or 0) >= MIN_TALK and bool(cdr.get("recorded"))
+
+    # 1. decide up front which calls fit inside Groq's audio budget AND this run's transcript cap; the rest wait for the next run
     now = datetime.now(timezone.utc)
     day_used, hour_used = used(now.strftime("%Y-%m-%d")), used(now.strftime("%Y-%m-%dT%H"))
-    work, held = [], 0
+    work, held_audio, held_cap, n_tr = [], 0, 0, 0
     for cid in todo:
-        cdr = byid[cid].get("Cdr") or {}
-        talk = int(cdr.get("talking_time") or 0)
-        if cid not in agent and talk >= MIN_TALK and cdr.get("recorded"):
+        if needs_transcript(cid):
+            talk = int((byid[cid].get("Cdr") or {}).get("talking_time") or 0)
             if day_used + talk > DAILY_BUDGET or hour_used + talk > HOURLY_BUDGET:
-                held += 1            # not lost: it stays out of state and is picked up next run
+                held_audio += 1            # not lost: it stays out of state and is picked up next run
                 continue
-            day_used += talk; hour_used += talk
+            if n_tr >= a.max_transcripts:
+                held_cap += 1
+                continue
+            day_used += talk; hour_used += talk; n_tr += 1
         work.append(cid)
+    js.update(phase="outcomes", text="Working out call outcomes", done=0, total=len(work), transcripts=n_tr,
+              held=held_audio + held_cap, calls_seen=len(rows))
 
     # 2. do them in parallel (CloudTalk 429s above ~3 downloads at once), saving after every call
+    stop = {"why": None}
+    global DEADLINE
+    deadline = DEADLINE = t0 + a.time_budget
+
     def one(cid):
+        if stop["why"] or time.time() > deadline:
+            stop["why"] = stop["why"] or "time"
+            return cid, None                 # not started: stays out of state, the next run does it
         row = byid[cid]; cdr = row.get("Cdr") or {}
         if cid in agent:
             return cid, dict(agent[cid])
         try:
             return cid, decide(cdr, cid, H, G)
+        except CTBusy:
+            stop["why"] = "cloudtalk"
+            return cid, None
         except Exception as ex:      # a dropped connection or timeout: leave it for the next run, never crash the batch
             return cid, {"verdict": "UNKNOWN", "summary": f"{type(ex).__name__}: {str(ex)[:100]}", "objection": None, "retry": True}
 
-    done = 0
+    done, skipped, real = 0, 0, 0
     with ThreadPoolExecutor(max_workers=3) as ex:
         for cid, v in ex.map(one, work):
+            if v is None or (time.time() > deadline and v.get("verdict") not in REAL_VERDICTS and not v.get("text")):
+                skipped += 1                 # not started, or a cheap one reached after the time budget: the next run does it
+                stop["why"] = stop["why"] or "time"
+                continue
             row = byid[cid]; cdr = row.get("Cdr") or {}
             try:
                 emails, nums = contact_bits(row, H)
+            except CTBusy:
+                stop["why"] = "cloudtalk"; skipped += 1
+                continue                     # without the person's emails the CRM writers cannot find them: do it next run
             except Exception:
                 emails = []
             ctc = row.get("Contact") or {}
@@ -350,15 +385,24 @@ def main() -> int:
                           "type": cdr.get("type"), "agent_note": call_note(row), "agent_tags": call_tags(row), "applied_a": False, "applied_l": False, **v}      # the two Attio writers look up only calls still marked False (attio_fast.py)
             STATE.write_text(json.dumps(state, indent=1))        # save after every call
             done += 1
+            if v["verdict"] in REAL_VERDICTS:
+                real += 1
             if v["verdict"] not in ("VOICEMAIL", "NO_ANSWER", "NO_CONVERSATION"):
                 print(f"   -> {v['verdict']} (judged by {v.get('judged_by', 'claude')})", flush=True)
-            if done % 25 == 0 or done == len(work):
+            if done % 10 == 0 or done == len(work):
                 print(f"   [{done}/{len(work)}] last: {v['verdict']}", flush=True)
+            js.update(done=done, real=real)
 
     if not STATE.exists():
         STATE.write_text(json.dumps(state, indent=1))        # an empty day still leaves a state file for the next steps
-    if held:
-        print(f"   {held} calls held for the next run to stay inside Groq's audio limits")
+    held = held_audio + held_cap + skipped
+    if held_audio:
+        print(f"   {held_audio} calls held for the next run to stay inside Groq's audio limits", flush=True)
+    if held_cap:
+        print(f"   {held_cap} calls held for the next run (at most {a.max_transcripts} transcripts a run)", flush=True)
+    if skipped:
+        why = {"time": f"the run's {a.time_budget} s budget was used", "cloudtalk": "CloudTalk was too busy"}.get(stop["why"], "stopped early")
+        print(f"   {skipped} calls not started ({why}); they are done next run", flush=True)
     # the two files the existing Attio writers read: only the calls in the window, never the Mac's history
     window = {cid: state[cid] for cid in byid if cid in state}
     (WORK / "call_verdicts.json").write_text(json.dumps(
@@ -369,6 +413,10 @@ def main() -> int:
          for cid, r in window.items()}, indent=1))
     (WORK / "cloudtalk_calls.json").write_text(json.dumps([byid[cid] for cid in window], indent=1))
     print("\n" + str(dict(collections.Counter(r["verdict"] for r in window.values()))))
+    print(f"RESULT worked out {done} (real conversations {real}), held for next run {held}, in {int(time.time() - t0)} s", flush=True)
+    print("   " + ct_client.shared().summary(), flush=True)
+    js.update(phase="outcomes_done", text="Call outcomes worked out", done=done, real=real, held=held,
+              outcomes_result="partial" if held else "ok", ct=dict(ct_client.shared().stats))
     return 0
 
 

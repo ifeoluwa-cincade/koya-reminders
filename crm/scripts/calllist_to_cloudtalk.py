@@ -24,6 +24,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from attio_client import AttioClient
+import ct_client  # noqa: E402  (one CloudTalk pacer for every job)
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 SPEC = ROOT / "crm/schema/call_lists.json"
@@ -72,24 +73,24 @@ def _rate_wait(r, fallback: float) -> float:
     return fallback
 
 
+_CLIENT = None
+
+
 def req(method: str, path: str, H: dict, tries: int = 10, **kw):
-    """CloudTalk call that rides out the shared rate limit. path is relative to the core API, or a full URL (Dialer)."""
-    global _waited
-    url = path if path.startswith("http") else CT + path
-    delay, last, r = 2.0, None, None
-    for _ in range(tries):
-        try:
-            r = requests.request(method, url, headers=H, timeout=90, **kw)
-            if r.status_code != 429:
-                return r
-            wait, last = _rate_wait(r, delay), None
-        except requests.exceptions.RequestException as ex:
-            wait, last = delay, type(ex).__name__
-        if _waited + wait > RATE_WAIT_BUDGET:
-            break
-        time.sleep(wait); _waited += wait; delay = min(delay * 2, 60)
-    if last:
-        raise RuntimeError(f"CloudTalk request failed ({last})")
+    """CloudTalk call through the shared pacer (ct_client.py): stays under the company's 60 a minute, waits for CloudTalk's
+    reset time after a 429, and gives up after RATE_WAIT_BUDGET seconds of waiting in total (the answer is then a 429,
+    which the callers already treat as a failure). path is relative to the core API, or a full URL (Dialer)."""
+    global _CLIENT, _waited
+    if _CLIENT is None:
+        _CLIENT = ct_client.CT(H, wait_budget=RATE_WAIT_BUDGET, tries=tries)
+    try:
+        r = _CLIENT.request(method, path, **kw)
+    except ct_client.CTBusy:
+        r = ct_client.BusyResponse()
+    except requests.exceptions.RequestException as ex:
+        raise RuntimeError(f"CloudTalk request failed ({type(ex).__name__})")
+    finally:
+        _waited = _CLIENT.stats["waited_s"]
     if r is not None and r.status_code == 429:
         print(f"CloudTalk still refusing (HTTP 429) after waiting {int(_waited)} s in total: the company's 60 calls a minute are being used up elsewhere")
     return r
@@ -354,3 +355,5 @@ if __name__ == "__main__":
     finally:
         if _waited:
             print(f"waited {int(_waited)} s in total for CloudTalk's shared rate limit")
+        if _CLIENT is not None:
+            print(_CLIENT.summary())

@@ -45,6 +45,10 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "crm" / "scripts"))
 from live_call_dispositions import (env, ct_get, fetch_calls, contact_bits, groq_keys, rule_verdict,  # noqa: E402
                                     REAL_VERDICTS, WORK)
+import ct_client  # noqa: E402  (the same CloudTalk pacer as the disposition job)
+from ct_client import CTBusy  # noqa: E402
+from job_status import JobStatus  # noqa: E402
+DEADLINE = float("inf")          # set by main(): no new call and no long Groq wait past the run's time budget
 sys.path.insert(0, str(ROOT / "pipeline"))
 from lite_claude import call_claude_lite  # noqa: E402
 
@@ -177,6 +181,8 @@ def transcribe_groq(wav: Path) -> list[dict]:
         if g.status_code != 429:
             break
         if (attempt + 1) % len(keys) == 0:
+            if time.time() + delay > DEADLINE:
+                break
             time.sleep(delay); delay = min(delay * 1.6, 240)
     if g is None or g.status_code >= 300:
         raise RuntimeError(f"groq {getattr(g, 'status_code', '?')}")
@@ -366,6 +372,8 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=40)
     ap.add_argument("--commit", action="store_true")
     ap.add_argument("--max-ok", type=int, default=0, help="stop once this many reviews are written (0 = no cap)")
+    ap.add_argument("--time-budget", type=int, default=int(os.environ.get("REVIEW_TIME_BUDGET") or 0),
+                    help="seconds: after this no new review is started (0 = no limit); the rest are done next run")
     ap.add_argument("--delete", metavar="CALL_ID", help="remove one call's audio, review, comments and clips (on request)")
     a = ap.parse_args()
     if a.delete:
@@ -374,8 +382,11 @@ def main() -> int:
     if TRANSCRIBER not in TRANSCRIBERS:
         sys.exit(f"TRANSCRIBER must be one of {sorted(TRANSCRIBERS)}")
     since = a.since or (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
-    tok = base64.b64encode(f"{env('CLOUD_TALK_API_KEY_ID')}:{env('CLOUD_TALK_API_KEY')}".encode()).decode()
-    H = {"Authorization": f"Basic {tok}"}
+    t0 = time.time()
+    global DEADLINE
+    if a.time_budget:
+        DEADLINE = t0 + a.time_budget
+    H = ct_client.auth_header()
 
     state_f = WORK / "live_state.json"              # the disposition job's verdicts, when it ran first in the same job
     state = json.loads(state_f.read_text()) if state_f.exists() else {}
@@ -400,15 +411,22 @@ def main() -> int:
     ensure_bucket()
 
     wrote = [0]
+    stop = [None]
+    JobStatus("dispositions").update(phase="reviews", text="Making call reviews", reviews_todo=len(todo))
 
     def one(cid):
         if a.max_ok and wrote[0] >= a.max_ok:
             return cid, "held"
+        if stop[0] or time.time() > DEADLINE:
+            return cid, "held"                       # not started: the next run does it
         try:
             out = review(cid, byid[cid], H, (state.get(cid) or {}).get("verdict"))
             if out[1] == "ok":
                 wrote[0] += 1
             return out
+        except CTBusy:
+            stop[0] = "cloudtalk"
+            return cid, "held"
         except Exception as ex:                      # type only: messages can carry what was said
             return cid, f"error {type(ex).__name__}"
 
@@ -420,7 +438,9 @@ def main() -> int:
                 skipped[cid] = res
                 skip_f.write_text(json.dumps(skipped))
             print(f"   [{i}/{len(todo)}] {res}", flush=True)
-    print("result: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
+    print("result: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())) + f" | in {int(time.time() - t0)} s", flush=True)
+    print("   " + ct_client.shared().summary(), flush=True)
+    JobStatus("dispositions").update(reviews=wrote[0])
     return 0
 
 
