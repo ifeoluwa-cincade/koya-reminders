@@ -2,7 +2,7 @@ name: Call dispositions
 
 # New CloudTalk calls get an outcome worked out from the call itself (nobody clicks anything), then the outcome is written to the CRM:
 #   1. live_call_dispositions.py  - no answer / voicemail by talk time, otherwise a transcript and a verdict
-#   2. apply_call_verdicts.py     - a note per call on the person, and their stage only where the call is the strongest signal
+#   2. apply_call_verdicts.py     - a note per call on the person, and their stage only where the call is the strongest signal; a "not interested" call also stops their PlusVibe emails
 #   3. calls_to_call_lists.py     - the dialler queue stops re-ringing people who already answered
 # Starts within minutes of a call (the CloudTalk note that lands in Attio fires a webhook -> relay -> call_note), runs every hour from the routine push as a safety net,
 # keeps its morning and evening timers, and can be started by hand. (Ife 2026-10-12: it used to run only at 08 and 20 UTC to save GitHub minutes; the public repo has no such limit.)
@@ -43,6 +43,7 @@ jobs:
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       ENC_CACHE_KEY: ${{ secrets.ENC_CACHE_KEY }}
+      PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}     # a not-interested call stops the lead's PlusVibe emails (apply_call_verdicts.py)
       DRY: ${{ github.event.inputs.dry_run }}
       RECHECK: ${{ github.event.inputs.recheck }}
     steps:

@@ -17,6 +17,9 @@ WHAT IT WILL NOT DO:
   - never downgrade a CUSTOMER (a client who took a cold call is still a client)
   - never un-block someone already DNC
   - NO_CONVERSATION writes a note but changes no state — a voicemail is not a verdict
+
+ALSO (2026-10-16): a new NOT_INTERESTED call stops every PlusVibe sequence the lead is still in
+(call_stop_plusvibe.py). WRONG_PERSON does not: the number was wrong, the lead said nothing.
   - creates a person ONLY for an OUTBOUND call that produced a real conversation (Ife, 2026-10-02).
     His rule that a lead enters the CRM only once the record is filled was about SCRAPED leads
     with no email — not about people we deliberately phoned. If we dialled someone and they
@@ -36,7 +39,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "crm" / "scripts"))
+sys.path.insert(0, str(ROOT / "crm" / "dashboard"))
 from attio_client import AttioClient, api_key
+import call_stop_plusvibe as PVSTOP  # noqa: E402  (a not-interested call stops the lead's PlusVibe emails)
+import collect_ops as CO  # noqa: E402
 
 WORK = Path(os.environ.get("CALL_DATA_DIR") or ROOT / "data/working")   # cloud job uses its own folder
 IN = WORK / "call_verdicts.json"
@@ -193,7 +199,34 @@ def main() -> int:
         print(f"   {n:>4}  {k}")
     prot = sum(1 for _, _, b, cur in plan if b and cur in PROTECTED)
     print(f"   {prot} are CUSTOMERS and will keep their state (note only)")
+
+    # A NEW call whose newest real verdict is NOT_INTERESTED stops the lead's PlusVibe emails (Ife, 2026-10-16).
+    # Never for a customer, never for WRONG_PERSON (that only marks the phone bad). See call_stop_plusvibe.py.
+    pv_plan = [(p["id"]["record_id"], PVSTOP.person_emails(p)) for p, _, b, cur in plan
+               if b and b["verdict"] in PVSTOP.STOP_VERDICTS and b["cid"] in scope and cur != "CUSTOMER"]
+    hdr = PVSTOP.pv_header()
+    camps = CO.pv_campaigns(hdr) if (hdr and pv_plan) else {}
+
+    def pv_stops(commit: bool) -> set:
+        """Runs the PlusVibe stops one person at a time. Returns the people whose stop did not fully work."""
+        bad_people, n = set(), collections.Counter()
+        if pv_plan and not hdr:
+            print(f"   PLUS_VIBE_API_KEY not set: {len(pv_plan)} not-interested people NOT stopped in PlusVibe, kept for the next run")
+            return {rid for rid, _ in pv_plan}
+        for rid, ems in pv_plan:
+            if not ems:
+                n["no email"] += 1; continue
+            res = PVSTOP.stop_person(ems, hdr, camps, commit, tag=rid)
+            n["sequences live"] += res["live"]; n["stopped"] += res["stopped"]
+            n["not in PlusVibe" if not res["found"] and not res["bad"] else "in PlusVibe"] += 1
+            if res["bad"]:
+                bad_people.add(rid); n["problems"] += res["bad"]
+        if pv_plan:
+            print(f"   PlusVibe ({'COMMIT' if commit else 'dry run'}): {len(pv_plan)} not-interested people, " + ", ".join(f"{k} {v}" for k, v in n.items()))
+        return bad_people
+
     if not a.commit:
+        pv_stops(False)
         print("\nDRY RUN — nothing written.")
         return 0
 
@@ -302,6 +335,7 @@ def main() -> int:
 
     with ThreadPoolExecutor(max_workers=6) as ex:       # people are independent: write six at a time
         list(ex.map(one, plan))
+    failed |= pv_stops(True)                             # after the threads, one person at a time: PlusVibe 429s hard. A failed stop keeps the call pending
     written, skipped, moved, deals_made = ctr["w"], ctr["s"], ctr["m"], ctr["d"]
     if pend is not None:                                 # the calls of people whose writes all worked are done; the rest are tried again next run
         failed_cids = {x["cid"] for p, calls, best, cur in plan if p["id"]["record_id"] in failed for x in calls}
