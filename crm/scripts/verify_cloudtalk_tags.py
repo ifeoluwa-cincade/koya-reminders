@@ -24,6 +24,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "crm" / "scripts"))
 from attio_client import AttioClient
+import ct_client  # noqa: E402  (one CloudTalk pacer for every job)
 
 CT = "https://my.cloudtalk.io/api"
 DONE_OUTCOMES = {"NOT_INTERESTED", "DO_NOT_CALL", "WRONG_PERSON", "MEETING_BOOKED"}
@@ -39,19 +40,23 @@ def auth() -> dict:
     return {"Authorization": f"Basic {t}", "Content-Type": "application/json"}
 
 
+_CLIENT = None
+
+
 def ct(method: str, path: str, H: dict, tries: int = 5, **kw):
-    delay, r = 2.0, None
-    for _ in range(tries):
-        try:
-            r = requests.request(method, CT + path, headers=H, timeout=90, **kw)
-        except requests.exceptions.RequestException:   # CloudTalk stalls under load; retry, don't crash
-            time.sleep(delay); delay *= 2
-            continue
-        if r.status_code != 429:
-            return r
-        time.sleep(delay)
-        delay *= 2
-    return r if r is not None else requests.request(method, CT + path, headers=H, timeout=90, **kw)
+    """Through the shared CloudTalk pacer (ct_client.py). Returns a 429-like answer when the run has waited long enough,
+    so callers that check status codes treat it as 'not now' instead of crashing."""
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = ct_client.shared()      # the same pacer as anything else in this process (the dashboard build uses both)
+    try:
+        return _CLIENT.request(method, path, **kw)
+    except ct_client.CTBusy:
+        return ct_client.BusyResponse()
+
+
+def ct_summary() -> str:
+    return _CLIENT.summary() if _CLIENT is not None else "CloudTalk: no requests"
 
 
 def first(ev: dict, key: str):

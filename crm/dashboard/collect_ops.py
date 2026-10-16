@@ -205,34 +205,67 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
     return opps
 
 
+LINK_CACHE = Path(os.environ.get("CT_LINK_CACHE") or ROOT / "data/caches/cloudtalk_link_cache.json")
+LINK_MAX = int(os.environ.get("CT_LINK_MAX") or 25)              # leads looked up in CloudTalk per run; the rest next run
+LINK_MISS_DAYS = float(os.environ.get("CT_LINK_MISS_DAYS") or 3)  # a lead not found in CloudTalk is looked up again after this
+
+
 def link_cloudtalk(opps: list[dict]) -> None:
     """A lead can be in CloudTalk without any Attio call list recording its CloudTalk id (called by hand, or a list that never synced).
-    Look the contact up by phone number, then by email, so the lead window can open it. Cached per lead."""
+    Look the contact up by phone number, then by email, so the lead window can open it.
+    The answers are KEPT BETWEEN RUNS (the workflow restores and saves the file in the private store): this used to be the
+    biggest CloudTalk burst of the hour (50-120 lookups every run, because the memory was thrown away each time).
+    Found: kept for good. Not found: asked again after LINK_MISS_DAYS. At most LINK_MAX leads are looked up per run."""
     try:
         import verify_cloudtalk_tags as V
         H = V.auth()
     except Exception as ex:
         print("  cloudtalk lookup skipped:", type(ex).__name__); return
-    cache_p = ROOT / "data/caches/cloudtalk_link_cache.json"
     try:
-        cache = json.loads(cache_p.read_text())
+        cache = json.loads(LINK_CACHE.read_text())
     except Exception:
         cache = {}
     digits = lambda x: re.sub(r"\D", "", str(x or ""))
-    found = 0
+    now_s = time.time()
+
+    def known(key):                     # -> (decided, contact id or None)
+        v = cache.get(key, "unset")
+        if v == "unset":
+            return False, None
+        if isinstance(v, dict):
+            if v.get("id"):
+                return True, v["id"]
+            return now_s - float(v.get("miss") or 0) < LINK_MISS_DAYS * 86400, None
+        if v:                           # older files: the contact id itself
+            return True, v
+        return False, None              # older files: None meant "not found" with no date, so ask again once
+
+    found = from_cache = looked = deferred = 0
+    busy = False
     for o in opps:
         if o["links"].get("cloudtalk"):
             continue
         key = o["id"]
-        cid = cache.get(key)
-        if cid is None and key not in cache:
+        decided, cid = known(key)
+        if decided:
+            from_cache += 1
+        elif busy or looked >= LINK_MAX:
+            deferred += 1
+            continue
+        else:
+            looked += 1
             pd, em = digits(o.get("phone")), (o.get("email") or "").lower()
+            answered = True
             for kw in [x for x in (o.get("phone"), o.get("email")) if x]:
                 try:
                     r = V.ct("GET", "/contacts/index.json", H, params={"keyword": kw, "limit": 10})
+                    if r.status_code == 429:
+                        busy = True; answered = False; break     # CloudTalk is busy: stop looking up this run
                     items = r.json().get("responseData", {}).get("data", []) if r.status_code < 300 else []
+                    if r.status_code >= 300:
+                        answered = False
                 except Exception:
-                    items = []
+                    items = []; answered = False
                 for it in items:
                     one_num = lambda n: n.get("public_number") or n.get("number") if isinstance(n, dict) else n
                     one_mail = lambda m: (m.get("email") or "") if isinstance(m, dict) else m
@@ -243,14 +276,19 @@ def link_cloudtalk(opps: list[dict]) -> None:
                         cid = it["Contact"]["id"]; break
                 if cid:
                     break
-            cache[key] = cid
+            if cid:
+                cache[key] = {"id": cid, "at": int(now_s)}
+            elif answered:
+                cache[key] = {"miss": int(now_s)}
+            # a lookup CloudTalk did not answer is not remembered: it is asked again next run
         if cid:
             o["links"]["cloudtalk"] = f"https://dashboard.cloudtalk.io/menu/contacts/details/{cid}"; found += 1
     try:
-        cache_p.parent.mkdir(parents=True, exist_ok=True); cache_p.write_text(json.dumps(cache))
+        LINK_CACHE.parent.mkdir(parents=True, exist_ok=True); LINK_CACHE.write_text(json.dumps(cache))
     except Exception:
         pass
-    print(f"  CloudTalk contact found by phone or email for {found} more lead(s)")
+    print(f"  CloudTalk contact links: {found} linked, {from_cache} answered from memory, {looked} looked up now, "
+          f"{deferred} left for the next run{' (CloudTalk busy)' if busy else ''}")
 
 
 def as_text(v) -> str:
@@ -441,11 +479,10 @@ def github_checks() -> list[dict]:
 
 
 def cloudtalk_checks(spec: dict, opps: list[dict]) -> list[dict]:
-    e = CM.env()
-    tok = __import__("base64").b64encode(f"{e['CLOUD_TALK_API_KEY_ID']}:{e['CLOUD_TALK_API_KEY']}".encode()).decode()
-    hdr = {"Authorization": f"Basic {tok}"}
+    import ct_client                      # the shared CloudTalk pacer: this check and the link lookups above share one clock
+    cl = ct_client.shared()
     out = []
-    r = requests.get(f"{CT}/calls/index.json", headers=hdr, params={"limit": 1}, timeout=60)
+    r = cl.get("/calls/index.json", params={"limit": 1}, timeout=60)
     rows = ((r.json().get("responseData") or {}).get("data") or []) if r.status_code == 200 else []
     if rows:
         at = rows[0]["Cdr"]["started_at"]
@@ -457,7 +494,7 @@ def cloudtalk_checks(spec: dict, opps: list[dict]) -> list[dict]:
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
     calls, page = [], 1
     while True:
-        rr = requests.get(f"{CT}/calls/index.json", headers=hdr, params={"limit": 1000, "page": page, "date_from": CALLS_FROM}, timeout=90)
+        rr = cl.get("/calls/index.json", params={"limit": 1000, "page": page, "date_from": CALLS_FROM})
         d = (rr.json().get("responseData") or {}) if rr.status_code == 200 else {}
         calls += d.get("data") or []
         if page >= int(d.get("pageCount") or 1) or not d.get("data"):
@@ -473,7 +510,7 @@ def cloudtalk_checks(spec: dict, opps: list[dict]) -> list[dict]:
                   + (f" (oldest {ago(oldest.isoformat())})" if waiting and oldest else "")))
     # people with a real result still in the dial queue
     tags = {}
-    for row in requests.get(f"{CT}/tags/index.json", headers=hdr, params={"limit": 200}, timeout=60).json()["responseData"]["data"]:
+    for row in cl.get("/tags/index.json", params={"limit": 200}, timeout=60).json()["responseData"]["data"]:
         t = row.get("Tag", row); tags[t["name"]] = t["id"]
     real_ct = {o["links"]["cloudtalk"].rsplit("/", 1)[-1] for o in opps if o["links"].get("cloudtalk") and o["bucket"] in ("meeting", "followup", "later")}
     tagged = set()
@@ -482,7 +519,7 @@ def cloudtalk_checks(spec: dict, opps: list[dict]) -> list[dict]:
             continue
         pg = 1
         while True:
-            rr = requests.get(f"{CT}/contacts/index.json", headers=hdr, params={"tag_id": tags[tg], "limit": 1000, "page": pg}, timeout=90).json().get("responseData", {})
+            rr = cl.get("/contacts/index.json", params={"tag_id": tags[tg], "limit": 1000, "page": pg}).json().get("responseData", {})
             tagged |= {str((x.get("Contact") or {}).get("id")) for x in rr.get("data") or []}
             if pg >= int(rr.get("pageCount") or 1) or not rr.get("data"):
                 break
@@ -491,6 +528,7 @@ def cloudtalk_checks(spec: dict, opps: list[dict]) -> list[dict]:
     out.append(mk("dialler_overlap", "cloudtalk", "Leads with a result still in the dial queue", "info",
                   f"{still} of {len(real_ct)} leads with a booked meeting, follow-up or not-now result are still tagged in the dialler. "
                   "Answered contacts have not been redialled so far; this line tells us if that changes."))
+    print("  " + cl.summary())
     return out
 
 

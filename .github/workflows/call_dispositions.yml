@@ -7,6 +7,11 @@ name: Call dispositions
 # Starts within minutes of a call (the CloudTalk note that lands in Attio fires a webhook -> relay -> call_note), runs every hour from the routine push as a safety net,
 # keeps its morning and evening timers, and can be started by hand. (Ife 2026-10-12: it used to run only at 08 and 20 UTC to save GitHub minutes; the public repo has no such limit.)
 # Calls already handled are remembered, so a run only works on new calls. A manual run defaults to a DRY RUN.
+# A run never tries to do everything at once (16 Oct 2026: a 66-call backlog timed run after run out, and a run that timed out
+# saved NOTHING, so the next one started over): at most CALL_MAX_TRANSCRIPTS transcripts and CALL_TIME_BUDGET seconds of work,
+# the rest is left for the next run, and the memory is saved even when a run fails or is cancelled.
+# Progress (counts only) goes to the team app's database (jobrun/dispositions) for the app's Refresh button. When someone pressed
+# Refresh, the run ends by starting the Dashboard build so the numbers are rebuilt too (job "rebuild" below).
 on:
   push:
     branches: [crm-trigger]      # the hourly routine in claude.ai pushes here: GitHub's own timer is unreliable
@@ -27,13 +32,37 @@ on:
 permissions: {}
 
 concurrency:
-  group: call-dispositions
+  # the hourly push only hands over to main (job "handoff"), so it has its own group and never waits behind, or cancels, a real run
+  group: ${{ github.event_name == 'push' && 'call-dispositions-handoff' || 'call-dispositions' }}
   cancel-in-progress: false
 
 jobs:
+  # The hourly routine pushes to the crm-trigger branch. A run on that branch would keep its OWN memory of finished calls
+  # (GitHub keeps caches per branch, and a run on main never sees one saved on crm-trigger), so the two memories drifted
+  # apart and each redid the other's calls (seen 16 Oct 2026: main last saved 09:31, crm-trigger 12:09). So the push only
+  # starts the same job on main, unless one is already running or waiting there.
+  handoff:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Start the call outcome job on main
+        run: |
+          busy=$(gh run list -R "$GITHUB_REPOSITORY" --workflow call_dispositions.yml --branch main --limit 10 --json status -q '[.[] | select(.status != "completed")] | length')
+          if [ "${busy:-0}" != "0" ]; then echo "a run on main is already going or waiting: it covers this hour"; exit 0; fi
+          gh workflow run call_dispositions.yml -R "$GITHUB_REPOSITORY" --ref main -f dry_run=false -f recheck=0
+          echo "started the hourly run on main"
+
   dispositions:
+    if: ${{ github.event_name != 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    outputs:
+      rebuild: ${{ steps.rebuild.outputs.rebuild }}
     env:
       CALL_DATA_DIR: data/working/live
       ATTIO_KEY_VAR: ATTIO_API_KEY_2
@@ -47,6 +76,11 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}                       # Call review: the team app's database and its PRIVATE call-audio bucket
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       TRANSCRIBER: groq                                               # Call review transcripts; "deepgram" (diarized) needs DEEPGRAM_API_KEY and Ife's yes
+      PYTHONUNBUFFERED: "1"                                           # lines reach the log as they happen (they used to arrive in one lump at the end)
+      CALL_MAX_TRANSCRIPTS: "20"                                      # per run; a backlog is worked through over several runs instead of timing one out
+      CALL_TIME_BUDGET: "720"                                         # seconds of outcome work per run, then save and stop (the job limit is 25 min)
+      REVIEW_TIME_BUDGET: "300"                                       # seconds of call reviews per run
+      CT_WAIT_BUDGET: "240"                                           # seconds a run may wait for CloudTalk's shared limit before leaving the rest for later
       DRY: ${{ github.event.inputs.dry_run }}
       RECHECK: ${{ github.event.inputs.recheck }}
     steps:
@@ -73,16 +107,21 @@ jobs:
           # Look back 3 days, but never before 11 Oct 2026: calls up to then were handled by the old job, so they must not be redone.
           echo "SINCE=$(python3 -c "import datetime as d; print(max(d.date(2026,10,11), d.date.today()-d.timedelta(days=3)).isoformat())")" >> "$GITHUB_ENV"
       # The memory of which calls are done holds what was said on calls, so it is encrypted before GitHub stores it.
+      - name: Tell the app this run has started
+        continue-on-error: true
+        run: python crm/scripts/job_status.py set dispositions --phase starting --text "Starting"
+      # restore and save are separate steps so the memory is saved even when a later step fails or the run is cancelled
+      # (actions/cache saves only after a fully successful run: a run that timed out used to lose all its work).
       - name: Restore the encrypted memory of finished calls
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
-          # ONE path only: the cache version includes the path list, so adding a file here hides every earlier
-          # copy of the memory (that happened on 16 Oct: every run redid 1,000 calls and was cancelled).
+          # ONE path only, and the SAME path in the save step below: the cache version includes the path list, so adding a
+          # file here hides every earlier copy of the memory (that happened on 16 Oct: every run redid 1,000 calls).
           path: data/working/live/live_state.json.enc
           key: call-state-enc-${{ github.run_id }}
           restore-keys: call-state-enc-
       - name: Restore the Call review skip list (its own cache, so the call memory above keeps its key)
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: data/working/live/review_skip.json.enc
           key: review-skip-enc-${{ github.run_id }}
@@ -111,7 +150,9 @@ jobs:
           PY
       - name: Write the outcomes onto the people in the CRM
         if: ${{ env.DRY != 'true' }}
-        run: python crm/scripts/apply_call_verdicts.py --commit
+        run: |
+          python crm/scripts/job_status.py set dispositions --phase writing --text "Writing outcomes to the CRM" || true
+          python crm/scripts/apply_call_verdicts.py --commit
       - name: Put the outcomes back on the call-list queue
         if: ${{ env.DRY != 'true' }}
         run: python crm/scripts/calls_to_call_lists.py --commit
@@ -123,7 +164,7 @@ jobs:
         continue-on-error: true
         run: |
           command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null)
-          python crm/scripts/call_review.py --since "$SINCE" --limit 40 --commit
+          python crm/scripts/call_review.py --since "$SINCE" --limit 12 --commit
       - name: Encrypt the memory again
         if: ${{ always() }}
         run: |
@@ -134,3 +175,49 @@ jobs:
             openssl enc -aes-256-cbc -pbkdf2 -salt -in data/working/live/review_skip.json -out data/working/live/review_skip.json.enc -pass env:ENC_CACHE_KEY
           fi
           rm -rf data/working/live/*.json
+      - name: Save the encrypted memory of finished calls (also when a step failed or the run was cancelled)
+        if: ${{ always() && hashFiles('data/working/live/live_state.json.enc') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: data/working/live/live_state.json.enc
+          key: call-state-enc-${{ github.run_id }}
+      - name: Save the Call review skip list
+        if: ${{ always() && hashFiles('data/working/live/review_skip.json.enc') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: data/working/live/review_skip.json.enc
+          key: review-skip-enc-${{ github.run_id }}
+      - name: Did someone press Refresh? Then the numbers are rebuilt next
+        id: rebuild
+        if: ${{ always() && env.DRY != 'true' }}
+        continue-on-error: true
+        run: python crm/scripts/job_status.py rebuild-needed
+      - name: Tell the app how the run ended
+        if: ${{ always() }}
+        continue-on-error: true
+        run: |
+          python crm/scripts/job_status.py set dispositions --phase finished --finished \
+            --result "$( [ '${{ job.status }}' = 'success' ] && echo ok || echo failed )" \
+            --text "Finished (${{ job.status }})" \
+            --json '{"rebuild": "${{ steps.rebuild.outputs.rebuild }}"}'
+
+  # Someone pressed Refresh in the team app: rebuild the dashboard numbers now instead of at the next hourly build.
+  # A separate job with ONLY the right to start another workflow; nothing here reads call data or runs AI.
+  rebuild:
+    needs: dispositions
+    if: ${{ always() && needs.dispositions.outputs.rebuild == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Start the Dashboard build (unless one is already running or waiting)
+        run: |
+          busy=$(gh run list -R "$GITHUB_REPOSITORY" --workflow crm_dashboard.yml --limit 5 --json status -q '[.[] | select(.status != "completed")] | length')
+          if [ "${busy:-0}" != "0" ]; then echo "a Dashboard build is already running or waiting: it will have the new numbers"; exit 0; fi
+          gh workflow run crm_dashboard.yml -R "$GITHUB_REPOSITORY" --ref main -f test=false
+          echo "Dashboard build started"

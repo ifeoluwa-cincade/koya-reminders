@@ -41,6 +41,9 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       PRIVATE_STORE_REPO: ${{ secrets.PRIVATE_STORE_REPO }}
       TEST: ${{ github.event.inputs.test }}
+      PYTHONUNBUFFERED: "1"
+      CT_LINK_CACHE: data/working/cloudtalk_link_cache.json   # which leads are which CloudTalk contact: kept between runs in the private store
+      CT_WAIT_BUDGET: "180"                                   # seconds this build may wait for CloudTalk's shared limit; then the rest waits for the next build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,6 +53,13 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: pip install requests pyyaml
+      - name: Tell the team app a build has started (for its Refresh button; counts only)
+        if: ${{ env.TEST != 'true' }}
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python crm/scripts/job_status.py set dashboard --phase building --text "Rebuilding numbers"
       - name: Set up the key for the private repository
         env:
           DEPLOY_KEY: ${{ secrets.DASHBOARD_DEPLOY_KEY }}
@@ -86,6 +96,7 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/data/working"
           git show FETCH_HEAD:check_history.json > "$GITHUB_WORKSPACE/data/working/check_history.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/check_history.json"
           git show FETCH_HEAD:ops_last_good.json > "$GITHUB_WORKSPACE/data/working/ops_last_good.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/ops_last_good.json"
+          git show FETCH_HEAD:cloudtalk_link_cache.json > "$GITHUB_WORKSPACE/data/working/cloudtalk_link_cache.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/cloudtalk_link_cache.json"
       - name: Collect opportunities and system checks
         continue-on-error: true
         run: python crm/dashboard/collect_ops.py
@@ -108,6 +119,7 @@ jobs:
           rm -rf /tmp/out && mkdir /tmp/out
           cp data/working/koya_cold_email.html /tmp/out/koya_cold_email.html
           [ -f data/working/check_history.json ] && cp data/working/check_history.json /tmp/out/check_history.json || true
+          [ -f data/working/cloudtalk_link_cache.json ] && cp data/working/cloudtalk_link_cache.json /tmp/out/cloudtalk_link_cache.json || true
           # keep the last list that was read properly, so one bad hour never blanks the Opportunities tab
           python3 - <<'PY'
           import json, shutil, os
@@ -130,6 +142,15 @@ jobs:
           git commit -q -m "Dashboard build $(cat built_at.txt)"
           git push -q --force "git@github.com:${PRIVATE_STORE_REPO}.git" "$TARGET_BRANCH"
           echo "saved to branch $TARGET_BRANCH in the private repository"
+      - name: Tell the team app how the build ended
+        if: ${{ always() && env.TEST != 'true' }}
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          python crm/scripts/job_status.py set dashboard --phase finished --finished \
+            --result "$( [ '${{ job.status }}' = 'success' ] && echo ok || echo failed )" --text "Finished (${{ job.status }})"
       - name: Remove everything that held lead details
         if: ${{ always() }}
         run: |
