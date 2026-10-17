@@ -17,9 +17,19 @@ A reply from someone we do not hold is reported, not inserted.
     python crm/scripts/sync_plusvibe.py                # dry run
     python crm/scripts/sync_plusvibe.py --commit
     python crm/scripts/sync_plusvibe.py --campaign <id>
+
+RESUME (2026-10-17): a full run is ~25 min and growing (limit 45). It keeps a checkpoint in
+data/caches/sync_plusvibe_checkpoint.json (the GitHub job encrypts it and carries it between runs):
+which campaigns are already pulled (with what they held) and which people and list entries were already
+written. A run that stops part-way (time budget, timeout, crash) is resumed by the next run within
+SYNC_PV_RESUME_HOURS (default 6): it skips the pulled campaigns and the finished writes instead of
+starting over. A run that reaches the end with nothing failed deletes the checkpoint. Writes are plain
+PATCH/PUT of the same values, so the checkpoint only saves time; it never changes what gets written.
+    SYNC_PV_TIME_BUDGET_MIN=40   stop cleanly (exit 75, checkpoint saved) once 40 minutes have passed
+    SYNC_PV_STOP_AFTER_CAMPAIGNS=N   test only: stop after pulling N campaigns, to check that a resume plans the same writes
 """
 from __future__ import annotations
-import argparse, collections, json, sys, time
+import argparse, collections, hashlib, json, os, sys, threading, time
 from datetime import datetime, timedelta, date
 from pathlib import Path
 
@@ -93,6 +103,50 @@ def get(path: str, params: dict, hdr: dict, tries: int = 6):
     return r
 
 
+T0 = time.monotonic()
+CKPT = ROOT / "data/caches/sync_plusvibe_checkpoint.json"
+RESUME_EXIT = 75          # "stopped on purpose, checkpoint saved: run me again"
+
+
+def over_budget() -> bool:
+    mins = float(os.environ.get("SYNC_PV_TIME_BUDGET_MIN") or 0)
+    return bool(mins) and (time.monotonic() - T0) / 60 >= mins
+
+
+def load_ckpt() -> dict:
+    """The previous run's checkpoint, if it is recent enough to trust; otherwise a fresh one."""
+    fresh = {"v": 1, "started": time.time(), "pulled": {}, "pull_done": False,
+             "people_done": [], "entries_done": []}
+    try:
+        ck = json.loads(CKPT.read_text())
+    except Exception:
+        return fresh
+    if not ck:
+        return fresh                                   # the empty marker a finished run leaves
+    age_h = (time.time() - float(ck.get("started") or 0)) / 3600
+    if ck.get("v") != 1 or age_h > float(os.environ.get("SYNC_PV_RESUME_HOURS") or 6):
+        print(f"(old checkpoint, {age_h:.1f} h, not used: starting over)")
+        return fresh
+    print(f"RESUMING a run started {age_h * 60:.0f} min ago: {len(ck['pulled'])} campaigns already pulled, "
+          f"{len(ck['people_done']):,} people and {len(ck['entries_done']):,} list entries already written")
+    return ck
+
+
+def save_ckpt(ck: dict) -> None:
+    CKPT.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CKPT.with_suffix(".tmp")
+    tmp.write_text(json.dumps(ck))
+    tmp.replace(CKPT)                                  # never a half-written checkpoint
+
+
+def digest(items) -> str:
+    """A short fingerprint of a plan, so two runs can be compared in the log without printing any lead."""
+    h = hashlib.sha256()
+    for x in sorted(json.dumps(i, sort_keys=True, default=str) for i in items):
+        h.update(x.encode())
+    return h.hexdigest()[:16]
+
+
 def d(s):
     if not s:
         return None
@@ -100,6 +154,34 @@ def d(s):
         return datetime.fromisoformat(str(s).replace("Z", "+00:00")).date()
     except Exception:
         return None
+
+
+PULL_FIELDS = ("email", "label", "status", "bounce_type", "last_sent_at", "replied_count")
+
+
+def merge_rows(leads: dict, per_camp: dict, registered: dict, cid, name: str, rows: list) -> None:
+    """Folds one page of a campaign's leads into the running picture (the same for a fresh pull and a replayed one)."""
+    for x in rows:
+        e = (x.get("email") or "").strip().lower()
+        if not e:
+            continue
+        cur = leads.setdefault(e, {"label": "", "status": "", "sent": None,
+                                   "bounce": "", "camp": name, "replied": 0})
+        lb = (x.get("label") or "").strip()
+        if lb and lb in LABEL:
+            cur["label"] = lb              # a real verdict beats a blank
+        st = (x.get("status") or "").strip()
+        if st in ("BOUNCED", "UNSUBSCRIBED") or not cur["status"]:
+            cur["status"] = st or cur["status"]
+        if (x.get("bounce_type") or ""):
+            cur["bounce"] = x["bounce_type"]
+        t = d(x.get("last_sent_at"))
+        if t and (not cur["sent"] or t > cur["sent"]):
+            cur["sent"], cur["camp"] = t, name
+        cur["replied"] = max(cur["replied"], int(x.get("replied_count") or 0))
+        if str(cid) in registered:
+            per_camp[str(cid)][e] = {"sent": t, "status": st, "label": lb,
+                                     "bounce": x.get("bounce_type") or ""}
 
 
 def main() -> int:
@@ -122,12 +204,27 @@ def main() -> int:
     registered = json.loads(REGISTRY.read_text())["campaigns"] if REGISTRY.exists() else {}
     per_camp = collections.defaultdict(dict)       # campaign id -> email -> that campaign's row
 
+    # a --campaign run is a one-off check: it neither resumes nor leaves a checkpoint
+    ck = load_ckpt() if not a.campaign else None
+    stop_after = int(os.environ.get("SYNC_PV_STOP_AFTER_CAMPAIGNS") or 0)
+    pulled_now = 0
+
     leads = {}
     for c in camps:
         cid = c.get("id") or c.get("_id")
         name = c.get("camp_name") or c.get("name") or str(cid)
         if not c.get("lead_count"):
             continue                       # empty campaign, skip the two round-trips
+        if ck is not None and str(cid) in ck["pulled"]:
+            rows = ck["pulled"][str(cid)]  # pulled by the run that stopped: replay it in the same order
+            merge_rows(leads, per_camp, registered, cid, name, rows)
+            print(f"   {name[:44]:<44} {len(rows):>6,}   (from checkpoint)")
+            continue
+        if ck is not None and ((stop_after and pulled_now >= stop_after) or over_budget()):
+            save_ckpt(ck)
+            print(f"\nSTOPPED after pulling {len(ck['pulled'])} campaigns ({'test stop' if stop_after else 'time budget'}); "
+                  f"checkpoint saved, the next run resumes from here")
+            return RESUME_EXIT
         # cheap truth check FIRST — if the paged pull disagrees with this, we were rate-limited
         cnt = get("/lead/count/lead-status", {"workspace_id": WORKSPACE_ID, "campaign_id": cid}, hdr)
         # /lead/count/lead-status returns an ARRAY of {status, count, sender_count,
@@ -137,7 +234,7 @@ def main() -> int:
             body = cnt.json()
             if isinstance(body, list):
                 expect = sum(int(x.get("count") or 0) for x in body)
-        got, page = 0, 1
+        got, page, camp_rows = 0, 1, []
         while True:
             r = get("/lead/workspace-leads",
                     {"workspace_id": WORKSPACE_ID, "campaign_id": cid, "limit": 1000, "page": page},
@@ -146,27 +243,9 @@ def main() -> int:
                 print(f"   {name[:40]}: HTTP {r.status_code}")
                 break
             rows = r.json() or []
-            for x in rows:
-                e = (x.get("email") or "").strip().lower()
-                if not e:
-                    continue
-                cur = leads.setdefault(e, {"label": "", "status": "", "sent": None,
-                                           "bounce": "", "camp": name, "replied": 0})
-                lb = (x.get("label") or "").strip()
-                if lb and lb in LABEL:
-                    cur["label"] = lb              # a real verdict beats a blank
-                st = (x.get("status") or "").strip()
-                if st in ("BOUNCED", "UNSUBSCRIBED") or not cur["status"]:
-                    cur["status"] = st or cur["status"]
-                if (x.get("bounce_type") or ""):
-                    cur["bounce"] = x["bounce_type"]
-                t = d(x.get("last_sent_at"))
-                if t and (not cur["sent"] or t > cur["sent"]):
-                    cur["sent"], cur["camp"] = t, name
-                cur["replied"] = max(cur["replied"], int(x.get("replied_count") or 0))
-                if str(cid) in registered:
-                    per_camp[str(cid)][e] = {"sent": t, "status": st, "label": lb,
-                                             "bounce": x.get("bounce_type") or ""}
+            slim = [{k: x.get(k) for k in PULL_FIELDS} for x in rows]
+            merge_rows(leads, per_camp, registered, cid, name, slim)
+            camp_rows += slim
             got += len(rows)
             if len(rows) < 1000:
                 break
@@ -175,6 +254,13 @@ def main() -> int:
         if expect and abs(expect - got) > max(5, expect * 0.02):
             flag = f"   <-- MISMATCH, expected ~{expect:,} (rate-limited?)"
         print(f"   {name[:44]:<44} {got:>6,}{flag}")
+        if ck is not None:
+            ck["pulled"][str(cid)] = camp_rows
+            pulled_now += 1
+            save_ckpt(ck)
+    if ck is not None:
+        ck["pull_done"] = True
+        save_ckpt(ck)
 
     cache = ROOT / "data/caches/plusvibe_sync_pull.json"
     cache.parent.mkdir(parents=True, exist_ok=True)
@@ -302,23 +388,69 @@ def main() -> int:
     print(f"\n{len(plan):,} records to update")
     for k, n in stats.most_common():
         print(f"   {n:6,}  {k}")
+    # Fingerprints of the full plan (before skipping what a stopped run already wrote): a resumed dry run and an
+    # uninterrupted one must print the same two values.
+    print(f"plan fingerprint: people {digest(plan)}  entries {digest(entry_plan)}")
+    if ck is not None and (ck["people_done"] or ck["entries_done"]):
+        pdone, edone = set(ck["people_done"]), {tuple(x) for x in ck["entries_done"]}
+        n0, e0 = len(plan), len(entry_plan)
+        plan = [it for it in plan if it[0] not in pdone]
+        entry_plan = [it for it in entry_plan if (it[0], it[1]) not in edone]
+        print(f"resume: {n0 - len(plan):,} people and {e0 - len(entry_plan):,} list entries already written by the stopped run, skipped")
     if not a.commit:
+        if ck is not None and not ck["people_done"] and not ck["entries_done"]:
+            CKPT.unlink(missing_ok=True)           # a finished dry run leaves nothing behind (a stopped real run's progress is kept)
         print("\nDRY RUN — nothing written.")
         return 0
-    res = c.map(lambda it: c.req("PATCH", f"/objects/people/records/{it[0]}",
-                                 json={"data": {"values": it[1]}}).status_code, plan, label="synced ")
-    bad = [x for x in res if x >= 300]
-    print(f"\n{len(res)-len(bad):,} updated, {len(bad)} failed")
-    if entry_plan:
-        er = c.map(lambda it: c.req("PUT", f"/lists/{it[0]}/entries", json={"data": {
-            "parent_object": "people", "parent_record_id": it[1], "entry_values": it[2]}}),
-            entry_plan, label="entries ")
-        ebad = [x for x in er if x.status_code >= 300]
-        print(f"{len(er)-len(ebad):,} campaign-list entries updated, {len(ebad)} failed")
-        if ebad:
-            print(f"   first failure: {ebad[0].status_code}")
-            return 1
-    return 1 if bad else 0
+
+    lock, last_save, stopped = threading.Lock(), [time.monotonic()], threading.Event()
+
+    def note_done(kind, k):
+        """Remembers a finished write; saves the checkpoint at most every 20 s (and at the end)."""
+        if ck is None:
+            return
+        with lock:
+            ck[kind].append(k)
+            if time.monotonic() - last_save[0] > 20:
+                save_ckpt(ck); last_save[0] = time.monotonic()
+
+    def patch(it):
+        if stopped.is_set() or over_budget():
+            stopped.set(); return None             # out of time: leave it for the resumed run
+        st = c.req("PATCH", f"/objects/people/records/{it[0]}", json={"data": {"values": it[1]}}).status_code
+        if st < 300:
+            note_done("people_done", it[0])
+        return st
+
+    def put(it):
+        if stopped.is_set() or over_budget():
+            stopped.set(); return None
+        st = c.req("PUT", f"/lists/{it[0]}/entries", json={"data": {
+            "parent_object": "people", "parent_record_id": it[1], "entry_values": it[2]}}).status_code
+        if st < 300:
+            note_done("entries_done", [it[0], it[1]])
+        return st
+
+    try:
+        res = [x for x in c.map(patch, plan, label="synced ") if x is not None]
+        bad = [x for x in res if x >= 300]
+        print(f"\n{len(res)-len(bad):,} updated, {len(bad)} failed")
+        ebad = []
+        if entry_plan and not stopped.is_set():
+            er = [x for x in c.map(put, entry_plan, label="entries ") if x is not None]
+            ebad = [x for x in er if x >= 300]
+            print(f"{len(er)-len(ebad):,} campaign-list entries updated, {len(ebad)} failed")
+            if ebad:
+                print(f"   first failure: {ebad[0]}")
+    finally:
+        if ck is not None:
+            save_ckpt(ck)                          # whatever happened, the next run knows what is already written
+    if stopped.is_set():
+        print("STOPPED: time budget reached; checkpoint saved, the next run resumes the writes")
+        return RESUME_EXIT
+    if ck is not None and not bad and not ebad:
+        CKPT.unlink(missing_ok=True)               # finished cleanly: tomorrow starts fresh
+    return 1 if (bad or ebad) else 0
 
 
 if __name__ == "__main__":
