@@ -103,7 +103,7 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
     CLOSED_AFTER = "2026-10-02"
     # "after the import" is judged by WHEN THE STAGE BECAME Won/Lost, not when the deal was created: placement deals were all
     # created by the 1 Oct import, so one moved Trial -> Won on 8 Oct was left out of the build and only appeared when a page
-    # opened it live (Benjamin at Stratishield AI, 17 Oct 2026)
+    # opened it live (17 Oct 2026)
     deals = [d for d in c.query_all("deals") if val(d, "stage") in OPEN_STAGES
              or (str(val(d, "stage") or "").startswith(("Lost", "Won")) and str(stage_since(d) or d.get("created_at") or "") >= CLOSED_AFTER)]
     print(f"  open deals: {sum(1 for d in deals if val(d, 'stage') in OPEN_STAGES)}, closed since the import: {sum(1 for d in deals if val(d, 'stage') not in OPEN_STAGES)}")
