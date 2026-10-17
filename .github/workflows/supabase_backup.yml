@@ -4,7 +4,7 @@ name: Supabase backup
 #  1. Export with the service key (read only): every row of the docs table, the NAMES of app_secrets (never the values),
 #     the logins (id, email, app_metadata; never password hashes) and a manifest of Storage objects (names, sizes, dates).
 #     Storage file BYTES are not backed up (call audio is too big for a git store): lost audio cannot come back from here.
-#  2. gzip, encrypt with ENC_CACHE_KEY (same openssl recipe as the encrypted caches) and save as backups/YYYY-MM-DD.json.gz.enc
+#  2. gzip, encrypt with BACKUP_ENC_KEY (the dedicated backup key; ENC_CACHE_KEY stays for the job caches only) and save as backups/YYYY-MM-DD.json.gz.enc
 #     on the "koya-backups" branch of the PRIVATE store repository. The branch is rewritten as one commit holding the last 30
 #     days, so old backups really go away.
 #  3. Restore drill: read the file back from the private repository, restore it into a throwaway Postgres (+ PostgREST, the
@@ -42,7 +42,7 @@ jobs:
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
     env:
       PRIVATE_STORE_REPO: ${{ secrets.PRIVATE_STORE_REPO }}
-      ENC_CACHE_KEY: ${{ secrets.ENC_CACHE_KEY }}
+      BACKUP_ENC_KEY: ${{ secrets.BACKUP_ENC_KEY }}   # ENC_CACHE_KEY is deliberately absent: the drill must prove the new key
       PYTHONUNBUFFERED: "1"
       BK: ${{ github.workspace }}/../bk
     steps:
@@ -70,9 +70,9 @@ jobs:
       - name: Compress and encrypt
         run: |
           set -euo pipefail
-          [ -n "$ENC_CACHE_KEY" ] || { echo "::error::ENC_CACHE_KEY is empty"; exit 1; }
+          [ -n "$BACKUP_ENC_KEY" ] || { echo "::error::BACKUP_ENC_KEY is empty"; exit 1; }
           gzip -9 -n "$BK/backup.json"
-          openssl enc -aes-256-cbc -pbkdf2 -salt -in "$BK/backup.json.gz" -out "$BK/$DAY.json.gz.enc" -pass env:ENC_CACHE_KEY
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in "$BK/backup.json.gz" -out "$BK/$DAY.json.gz.enc" -pass env:BACKUP_ENC_KEY
           rm -f "$BK/backup.json.gz"
           python crm/backup/supabase_backup.py digest "$BK/$DAY.json.gz.enc" > /dev/null   # it decrypts and its digest checks out
           echo "encrypted backup: $(stat -c %s "$BK/$DAY.json.gz.enc") bytes"

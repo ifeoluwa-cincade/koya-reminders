@@ -31,7 +31,7 @@ for f in backups/*.json.gz.enc; do
   if [[ "$d" < "$CUT" ]]; then git rm -q --cached --ignore-unmatch "$f" >/dev/null; unlink "$f"; pruned=$((pruned + 1)); fi
 done
 after=$(find backups -name '*.json.gz.enc' | wc -l | tr -d ' ')
-printf 'Encrypted Supabase backups (openssl aes-256-cbc -pbkdf2, ENC_CACHE_KEY), last 30 days.\nWritten by koya-reminders .github/workflows/supabase_backup.yml. Restore: crm/backup/supabase_backup.py there.\n' > README.txt
+printf 'Encrypted Supabase backups (openssl aes-256-cbc -pbkdf2, BACKUP_ENC_KEY; before 17 Oct 2026 ENC_CACHE_KEY), last 30 days.\nWritten by koya-reminders .github/workflows/supabase_backup.yml. Restore: crm/backup/supabase_backup.py there.\n' > README.txt
 git add -A README.txt backups
 TREE=$(git write-tree)
 C=$(git commit-tree "$TREE" -m "Supabase backup $DAY")

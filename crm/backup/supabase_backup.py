@@ -16,7 +16,9 @@ What a backup holds (one JSON document, gzipped and encrypted by the workflow, k
     python crm/backup/supabase_backup.py verify  BACKUP --target-url URL --target-key-env VAR [--rest-prefix /rest/v1]
     python crm/backup/supabase_backup.py digest  BACKUP                     # prints count + digest (for an SQL cross-check)
 
-BACKUP may be .json, .json.gz or .json.gz.enc (decrypted with openssl and ENC_CACHE_KEY, like the encrypted caches).
+BACKUP may be .json, .json.gz or .json.gz.enc. Encrypted backups are decrypted with openssl (aes-256-cbc -pbkdf2) using the key
+in BACKUP_ENC_KEY (the dedicated backup key since 17 Oct 2026). Backups made before the switch used ENC_CACHE_KEY: when that
+variable is also set, it is tried second. The log says which key name worked, never the key.
 
 Restore refuses, before any network call, when the target is the PRODUCTION project. Production is read from
 PROD_SUPABASE_URL (or SUPABASE_URL); when neither is set it refuses too, because it cannot tell. The target must
@@ -39,6 +41,7 @@ import requests
 
 FORMAT = "koya-supabase-backup/1"
 PAGE = 1000
+KEY_ENVS = ("BACKUP_ENC_KEY", "ENC_CACHE_KEY")   # new dedicated key first; the old one only for backups made before 17 Oct 2026
 TIMEOUT = 60
 
 
@@ -203,13 +206,18 @@ def cmd_export(a) -> None:
 
 def load_backup(path: str) -> dict:
     if path.endswith(".enc"):
-        if not os.environ.get("ENC_CACHE_KEY"):
-            raise Fail("ENC_CACHE_KEY must be set to decrypt the backup")
-        p = subprocess.run(["openssl", "enc", "-d", "-aes-256-cbc", "-pbkdf2", "-in", path, "-pass", "env:ENC_CACHE_KEY"],
-                           capture_output=True)
-        if p.returncode != 0:
-            raise Fail("could not decrypt the backup (wrong ENC_CACHE_KEY or damaged file)")
-        raw = p.stdout
+        raw = None
+        tried = [k for k in KEY_ENVS if os.environ.get(k)]
+        if not tried:
+            raise Fail("set BACKUP_ENC_KEY to decrypt the backup")
+        for k in tried:
+            p = subprocess.run(["openssl", "enc", "-d", "-aes-256-cbc", "-pbkdf2", "-in", path, "-pass", f"env:{k}"], capture_output=True)
+            if p.returncode == 0 and p.stdout[:2] == b"\x1f\x8b":     # a wrong key can pass the padding check; it never yields gzip
+                raw = p.stdout
+                print(f"decrypted with {k}", file=sys.stderr)
+                break
+        if raw is None:
+            raise Fail(f"could not decrypt the backup with {', '.join(tried)} (wrong key or damaged file)")
     else:
         with open(path, "rb") as f:
             raw = f.read()

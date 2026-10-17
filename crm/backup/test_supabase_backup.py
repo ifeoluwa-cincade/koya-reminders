@@ -57,4 +57,26 @@ with tempfile.TemporaryDirectory() as t:
         B.load_backup(p); raise AssertionError("damaged backup accepted")
     except B.Fail:
         pass
+
+# encrypted backups: the new key first, the old one as a fallback for backups made before the switch
+import subprocess
+with tempfile.TemporaryDirectory() as t:
+    gz = os.path.join(t, "b.json.gz"); open(gz, "wb").write(gzip.compress(json.dumps(doc).encode()))
+    def enc(keyval, out):
+        subprocess.run(["openssl", "enc", "-aes-256-cbc", "-pbkdf2", "-salt", "-in", gz, "-out", out, "-pass", "env:K"], check=True, env=dict(os.environ, K=keyval))
+    new, old = os.path.join(t, "new.json.gz.enc"), os.path.join(t, "old.json.gz.enc")
+    enc("new-key", new); enc("old-key", old)
+    def load(p, **keys):
+        for k in B.KEY_ENVS: os.environ.pop(k, None)
+        os.environ.update(keys)
+        with contextlib.redirect_stderr(io.StringIO()) as e:
+            try:
+                B.load_backup(p); return e.getvalue().strip()
+            except B.Fail:
+                return "FAIL"
+    assert load(new, BACKUP_ENC_KEY="new-key") == "decrypted with BACKUP_ENC_KEY"
+    assert load(old, BACKUP_ENC_KEY="new-key", ENC_CACHE_KEY="old-key") == "decrypted with ENC_CACHE_KEY"
+    assert load(new, BACKUP_ENC_KEY="new-key", ENC_CACHE_KEY="old-key") == "decrypted with BACKUP_ENC_KEY"
+    assert load(old, BACKUP_ENC_KEY="new-key") == "FAIL"
+    assert load(new) == "FAIL"
 print("supabase_backup offline checks: all passed")
