@@ -44,3 +44,11 @@ jobs:
         continue-on-error: true
         run: |
           if [ "$DRY" = "true" ]; then python crm/scripts/merge_cloudtalk_twins.py --days 3; else python crm/scripts/merge_cloudtalk_twins.py --commit --days 3; fi
+      # Safety net for the Deal stage to PlusVibe workflow: if a webhook was ever missed, any closed deal whose emails are still running gets them stopped.
+      # Stop-only (--no-tags): it never changes a tag, so it cannot fight the labels people set in PlusVibe. Idempotent: a second run changes nothing.
+      - name: Closed deals must have no sequence still running (safety net)
+        continue-on-error: true
+        env:
+          PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}
+        run: |
+          if [ "$DRY" = "true" ]; then python crm/scripts/stage_to_plusvibe.py --sweep-closed --no-tags; else python crm/scripts/stage_to_plusvibe.py --sweep-closed --no-tags --commit; fi

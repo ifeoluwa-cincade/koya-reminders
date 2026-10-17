@@ -20,8 +20,12 @@ on:
 
 permissions: {}
 
+# One group PER RUN on purpose. A single shared group keeps only one waiting run: a burst of deal changes made GitHub cancel the
+# older waiting runs, and with them the deal ids in their client_payload (those stage changes were lost). stage_to_plusvibe.py only
+# changes what does not already match and reads every change back, so two runs at once (even for the same deal) are harmless.
+# The daily sweep in crm_daily.yml is the safety net for anything that still slips through.
 concurrency:
-  group: stage-sync
+  group: stage-sync-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:

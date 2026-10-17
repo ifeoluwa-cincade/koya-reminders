@@ -21,6 +21,7 @@ already match, so running it twice does nothing the second time. Every change is
     python crm/scripts/stage_to_plusvibe.py --deal <deal record id>             # dry run
     python crm/scripts/stage_to_plusvibe.py --deal <deal record id> --commit
     python crm/scripts/stage_to_plusvibe.py --sweep-closed --commit             # closed stages only: stop any sequence still running
+    python crm/scripts/stage_to_plusvibe.py --sweep-closed --no-tags --commit   # same, but never touches a tag (daily safety net in crm_daily)
 
 Public repo: only counts and status codes are printed, never names or emails.
 """
@@ -97,7 +98,7 @@ def pv_post(path, body, hdr):
     return r
 
 
-def apply(stage: str, reason: str, email: str, hdr, camps, commit: bool, chosen: str = "") -> tuple[int, int]:
+def apply(stage: str, reason: str, email: str, hdr, camps, commit: bool, chosen: str = "", no_tags: bool = False) -> tuple[int, int]:
     """Returns (changes made or planned, problems)."""
     rule = RULES.get(stage)
     if not rule or not email:
@@ -109,6 +110,8 @@ def apply(stage: str, reason: str, email: str, hdr, camps, commit: bool, chosen:
         tag = None
     elif chosen:                                                # the tag picked on the dashboard wins over the default
         tag = chosen
+    if no_tags:                                                 # stop-only mode (daily safety net): never touch a tag
+        tag = None
     rows = CO.pv_sequence(email, hdr, camps)
     todo, bad = 0, 0
     for x in rows:
@@ -149,6 +152,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--deal", action="append", default=[], help="deal record id (repeat for several)")
     ap.add_argument("--sweep-closed", action="store_true", help="every deal in a closed stage: stop sequences still running")
+    ap.add_argument("--no-tags", action="store_true", help="only stop sequences, never set or change a PlusVibe tag (used by the daily safety-net sweep)")
     ap.add_argument("--commit", action="store_true")
     ap.add_argument("--pretend-stage", help="DRY RUN ONLY: show what this stage would do to the deal's lead")
     a = ap.parse_args()
@@ -178,9 +182,9 @@ def main() -> int:
         if not em:
             print(f"   {st}: no email on the person, skipped"); continue
         ch = chosen_tag(d)
-        t, b = apply(st, lost_reason(d), em, hdr, camps, a.commit, ch)
+        t, b = apply(st, lost_reason(d), em, hdr, camps, a.commit, ch, a.no_tags)
         total += t; bad += b
-        if a.commit and ch and not b and d.get("id", {}).get("record_id"):     # one-shot: the choice is used once, then cleared
+        if a.commit and ch and not b and not a.no_tags and d.get("id", {}).get("record_id"):     # one-shot: the choice is used once, then cleared
             c.req("PATCH", f"/objects/deals/records/{d['id']['record_id']}", json={"data": {"values": {"plusvibe_tag": [{"value": ""}]}}})
     print(f"{total} change(s) {'made' if a.commit else 'planned'}, {bad} problem(s)")
     return 1 if bad else 0
