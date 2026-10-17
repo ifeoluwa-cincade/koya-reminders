@@ -40,7 +40,37 @@ jobs:
       LEAD: ${{ github.event.client_payload.lead }}
       TEST: ${{ github.event.client_payload.test || github.event.inputs.test }}
     steps:
+      # "Already posted" memory (2026-10-17): the same reminder delivered twice (a GitHub re-run, or the relay sending the same
+      # dispatch again) is posted once. Key = the event id when the sender gives one, else a keyed hash of the message, lead,
+      # label, channel and UTC day (HMAC with ENC_CACHE_KEY, so the public cache key reveals nothing). A manual test run is keyed on
+      # its own run id, so every new test still posts. The marker is an empty GitHub cache entry under that key.
+      - name: Work out this reminder's id
+        id: key
+        env:
+          ENC_CACHE_KEY: ${{ secrets.ENC_CACHE_KEY }}
+          EVENT_ID: ${{ github.event.client_payload.event_id }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' && github.run_id || '' }}
+        run: |
+          python3 - <<'PY'
+          import os, hmac, hashlib, time
+          parts = [os.environ.get("EVENT_ID") or "", os.environ.get("MANUAL") or ""]
+          if not any(parts):
+              parts = [os.environ.get(k, "") for k in ("MESSAGE", "LEAD", "LABEL", "CHANNEL", "TEST")] + [time.strftime("%Y-%m-%d", time.gmtime())]
+          k = hmac.new(os.environ["ENC_CACHE_KEY"].encode(), "\x1f".join(parts).encode(), hashlib.sha256).hexdigest()[:24]
+          open(os.environ["GITHUB_OUTPUT"], "a").write(f"id={k}\n")
+          PY
+      - name: Already posted?
+        id: seen
+        uses: actions/cache/restore@v4
+        with:
+          path: posted.marker
+          key: discord-posted-${{ steps.key.outputs.id }}
+          lookup-only: true
+      - name: Already posted, not sending again
+        if: ${{ steps.seen.outputs.cache-hit == 'true' }}
+        run: echo "this reminder was already posted, same id, so it is not sent twice"
       - name: Post to Discord (up to 5 tries)
+        if: ${{ steps.seen.outputs.cache-hit != 'true' }}
         run: |
           python3 - <<'PY'
           import os, json, time, urllib.request, urllib.error, urllib.parse
@@ -78,3 +108,12 @@ jobs:
           print("posted" if ok else "FAILED: " + err)
           raise SystemExit(0 if ok else 1)
           PY
+      - name: Remember it was posted
+        if: ${{ success() && steps.seen.outputs.cache-hit != 'true' }}
+        run: touch posted.marker
+      - name: Save the posted marker
+        if: ${{ success() && steps.seen.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: posted.marker
+          key: discord-posted-${{ steps.key.outputs.id }}
