@@ -107,7 +107,9 @@ def main() -> int:
             if slug in real_lists:
                 out["entry already on the real person"] += 1; continue
             ev = {k: v for k, v in (x.get("entry_values") or {}).items() if v}
-            res = c.req("POST", f"/lists/{slug}/entries", json={"data": {"parent_record_id": r, "parent_object": "people", "entry_values": ev}})
+            # PUT = "this person has an entry in this list" (matched on the parent record): a retry after a timeout updates the entry
+            # the first attempt made instead of adding a second one, as the old POST did
+            res = c.req("PUT", f"/lists/{slug}/entries", json={"data": {"parent_record_id": r, "parent_object": "people", "entry_values": ev}})
             if res.status_code >= 300:
                 out["FAILED copying a list entry"] += 1; return out
             out["entry copied"] += 1
