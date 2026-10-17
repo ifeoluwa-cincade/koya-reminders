@@ -85,7 +85,13 @@ jobs:
           set +e
           if [ "$DRY" = "true" ] || [ "$GITHUB_REF" != "refs/heads/main" ]; then python crm/scripts/sync_plusvibe.py; else python crm/scripts/sync_plusvibe.py --commit; fi
           rc=$?
-          if [ $rc -eq 75 ]; then echo "resume=1" >> "$GITHUB_OUTPUT"; fi
+          if [ $rc -eq 75 ]; then
+            # a planned stop, not an error: the run stays green and the step below starts the resume run
+            echo "resume=1" >> "$GITHUB_OUTPUT"
+            if [ -n "$SYNC_PV_STOP_AFTER_CAMPAIGNS" ]; then echo "::notice::TEST STOP (stop_after_campaigns=$SYNC_PV_STOP_AFTER_CAMPAIGNS): checkpoint saved, resume run follows"
+            else echo "::notice::PLANNED STOP at the ${SYNC_PV_TIME_BUDGET_MIN}-minute budget: checkpoint saved, resume run follows"; fi
+            exit 0
+          fi
           exit $rc
       - name: Encrypt the checkpoint again
         if: ${{ always() }}
@@ -104,9 +110,12 @@ jobs:
           path: data/caches/sync_plusvibe_checkpoint.json.enc
           key: sync-pv-ckpt-enc-${{ github.run_id }}
       # Ran out of time on purpose (exit 75, checkpoint saved): start the next run on main at once, which resumes. At most 3 in a row.
+      # The run is green when the hand-off works; it turns red only if the resume cannot be started (or 3 resumes were not enough).
       - name: Start the resume run
-        if: ${{ failure() && steps.sync.outputs.resume == '1' && github.ref == 'refs/heads/main' && env.ATTEMPT < 3 }}
+        if: ${{ !cancelled() && steps.sync.outputs.resume == '1' }}
         run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then echo "::error::stopped part-way off main: no resume run (the checkpoint lives on main)"; exit 1; fi
+          if [ "$ATTEMPT" -ge 3 ]; then echo "::error::still not finished after 3 resume runs: needs a look"; exit 1; fi
           gh workflow run sync_plusvibe.yml -R "$GITHUB_REPOSITORY" --ref main -f dry_run="${DRY:-false}" -f attempt=$((ATTEMPT + 1))
           echo "resume run started (attempt $((ATTEMPT + 1)))"
       - name: Remove the temporary files that held lead details
