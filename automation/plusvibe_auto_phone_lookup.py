@@ -255,6 +255,12 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
         replied = (lead.get("last_sent_at") or lead.get("modified_at") or "")[:10]
 
         phone, source = "", ""
+        if dry_run:
+            # Prospeo, AI Ark and SalesQL cost credits, and a dry run writes nothing to the sheet (this job's only memory),
+            # so every dry run used to pay for the same people again. A dry run now only says who would be looked up.
+            print(f"  [DRY RUN] lead -> would look up a phone (Prospeo, then AI Ark{' (has LinkedIn)' if linkedin else ' (no LinkedIn: skipped)'}, then SalesQL)")
+            print("  Would post one message to Discord")
+            continue
         p_phone, p_website = prospeo_lookup(linkedin=linkedin, full_name=first_name,
                                              company_name=company, company_website=website)
         if p_phone:

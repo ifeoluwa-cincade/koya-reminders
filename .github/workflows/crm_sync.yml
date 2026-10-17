@@ -73,15 +73,18 @@ jobs:
         run: pip install requests pyyaml gspread google-auth
       - name: Decide dry run or real run
         run: |
-          # a manual run with dry_run=true changes nothing; every automatic run (reply, hourly) is real
-          if [ "$DRY" = "true" ]; then echo "COMMIT=" >> "$GITHUB_ENV"; echo "DRY RUN: nothing will be written"; else echo "COMMIT=--commit" >> "$GITHUB_ENV"; echo "REAL RUN"; fi
+          # a manual run with dry_run=true changes nothing; every automatic run (reply, hourly) is real.
+          # Off main a run is always a dry run: the paid AI Ark memory lives on main only (GitHub caches are per branch).
+          if [ "$DRY" = "true" ] || [ "$GITHUB_REF" != "refs/heads/main" ]; then echo "COMMIT=" >> "$GITHUB_ENV"; echo "DRY RUN: nothing will be written"; else echo "COMMIT=--commit" >> "$GITHUB_ENV"; echo "REAL RUN"; fi
       - name: Positive replies become deals
         run: python crm/scripts/positive_replies_to_deals.py $COMMIT
       - name: Deals follow PlusVibe labels
         run: python crm/scripts/deals_follow_labels.py $COMMIT
       # The phone lookup memory holds phone numbers, so it is encrypted before GitHub stores it. A stranger can see the file but not read it.
+      # Restore and save are separate steps on purpose: the plain actions/cache only saves when the whole job succeeds,
+      # so a run that paid for lookups and then failed (or timed out) forgot them and paid again next time.
       - name: Restore the encrypted phone lookup memory
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: data/caches/aiark_phone_finder_cache.json.enc
           key: aiark-phone-enc-${{ github.run_id }}
@@ -89,7 +92,7 @@ jobs:
       - name: Decrypt it
         run: |
           if [ -f data/caches/aiark_phone_finder_cache.json.enc ]; then
-            openssl enc -d -aes-256-cbc -pbkdf2 -in data/caches/aiark_phone_finder_cache.json.enc -out data/caches/aiark_phone_finder_cache.json -pass env:ENC_CACHE_KEY || rm -f data/caches/aiark_phone_finder_cache.json
+            openssl enc -d -aes-256-cbc -pbkdf2 -in data/caches/aiark_phone_finder_cache.json.enc -out data/caches/aiark_phone_finder_cache.json -pass env:ENC_CACHE_KEY || { rm -f data/caches/aiark_phone_finder_cache.json; echo "::error::phone lookup memory could not be decrypted: not looking anything up (an empty memory would pay again and then be saved over the real one)"; exit 1; }
           fi
       - name: Interested people with a number go into the call queue
         run: python crm/scripts/positive_replies_to_call_queue.py $COMMIT
@@ -101,3 +104,9 @@ jobs:
             openssl enc -aes-256-cbc -pbkdf2 -salt -in data/caches/aiark_phone_finder_cache.json -out data/caches/aiark_phone_finder_cache.json.enc -pass env:ENC_CACHE_KEY
             rm -f data/caches/aiark_phone_finder_cache.json
           fi
+      - name: Save the phone lookup memory, even when a step failed (main only)
+        if: ${{ always() && github.ref == 'refs/heads/main' && hashFiles('data/caches/aiark_phone_finder_cache.json.enc') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: data/caches/aiark_phone_finder_cache.json.enc
+          key: aiark-phone-enc-${{ github.run_id }}
