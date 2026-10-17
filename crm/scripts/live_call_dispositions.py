@@ -39,20 +39,21 @@ sys.path.insert(0, str(ROOT / "crm" / "scripts"))
 import ct_client  # noqa: E402  (one CloudTalk pacer for every job)
 from ct_client import CTBusy  # noqa: E402
 from job_status import JobStatus  # noqa: E402  (progress for the app's Refresh button: counts only)
-from classify_calls import PROMPT  # noqa: E402  (the prompt with Ife's strict rules)
+from classify_calls import prompt_for  # noqa: E402  (the prompt with Ife's strict rules, plus the prospect's real name)
 sys.path.insert(0, str(ROOT / "pipeline"))
 from lite_claude import call_claude_lite  # noqa: E402  (no CLAUDE.md auto-load: ~65% cheaper per call)
 
 
-def classify(text: str) -> dict:
+def classify(text: str, name: str | None = None, company: str | None = None) -> dict:
     """Same verdicts as classify_calls.py, through the lightweight wrapper so hundreds of calls a day
-    do not each drag in the project's instruction files."""
+    do not each drag in the project's instruction files. name/company: the contact's real ones, so the
+    summary never spells the prospect the way the transcript misheard them."""
     words = len(text.split())
     if words < 3:
         return {"verdict": "NO_CONVERSATION", "summary": "Too little said to judge.", "objection": None}
     err = ""
     try:
-        res = call_claude_lite(PROMPT + text[:12000], model="sonnet", timeout_sec=int(os.environ.get("CALL_CLASSIFY_TIMEOUT") or 150))   # returns the parsed JSON
+        res = call_claude_lite(prompt_for(name, company) + text[:12000], model="sonnet", timeout_sec=int(os.environ.get("CALL_CLASSIFY_TIMEOUT") or 150))   # returns the parsed JSON
         if isinstance(res, dict) and res.get("verdict"):
             return res
         err = f"unexpected reply {str(res)[:80]}"
@@ -65,7 +66,7 @@ def classify(text: str) -> dict:
             r = requests.post("https://api.groq.com/openai/v1/chat/completions", timeout=120,
                               headers={"Authorization": f"Bearer {key}"},
                               json={"model": "openai/gpt-oss-120b", "temperature": 0,
-                                    "messages": [{"role": "user", "content": PROMPT + text[:9000]}]})
+                                    "messages": [{"role": "user", "content": prompt_for(name, company) + text[:9000]}]})
             if r.status_code == 429:
                 time.sleep(8)
                 continue
@@ -256,7 +257,7 @@ def transcribe(cid: str, H: dict, G: dict) -> tuple[str | None, str | None]:
     return g.text.strip(), None
 
 
-def decide(cdr: dict, cid: str, H: dict, G: dict) -> dict:
+def decide(cdr: dict, cid: str, H: dict, G: dict, contact: dict | None = None) -> dict:
     talk = int(cdr.get("talking_time") or 0)
     if talk == 0:
         return {"verdict": "NO_ANSWER", "summary": "Not answered (rang out, cancelled or busy).", "objection": None}
@@ -272,7 +273,8 @@ def decide(cdr: dict, cid: str, H: dict, G: dict) -> dict:
     v = rule_verdict(text)
     if v:
         return {**v, "text": text}
-    v = classify(text)
+    ctc = contact or {}
+    v = classify(text, ctc.get("name"), ctc.get("company"))
     v["text"] = text
     if v.get("verdict") == "UNKNOWN":
         v["retry"] = True
@@ -354,7 +356,7 @@ def main() -> int:
         if cid in agent:
             return cid, dict(agent[cid])
         try:
-            return cid, decide(cdr, cid, H, G)
+            return cid, decide(cdr, cid, H, G, row.get("Contact"))
         except CTBusy:
             stop["why"] = "cloudtalk"
             return cid, None

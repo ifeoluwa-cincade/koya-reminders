@@ -61,8 +61,27 @@ TRANSCRIPT:
 """
 
 
-def classify(text: str) -> dict:
-    p = subprocess.run(["claude", "-p", PROMPT + text[:12000]],
+def who_line(name: str | None, company: str | None) -> str:
+    """The prospect's real first name and company (from the contact record) for the prompt. Speech-to-text
+    mishears names ("Jada" for "Jader"), so the model is told to spell them exactly as given."""
+    fn = (str(name or "").strip().split() or [""])[0]
+    co = str(company or "").strip()
+    if not fn and not co:
+        return ""
+    who = " at ".join(x for x in (fn, co) if x)
+    names = " and ".join(f'"{x}"' for x in (fn, co) if x)
+    return (f"The prospect is {who} (from our contact record). The transcript is speech-to-text and often "
+            f"mishears names: whenever you mention the prospect or their company, write {names} exactly, "
+            f"never a spelling heard on the call.\n\n")
+
+
+def prompt_for(name: str | None = None, company: str | None = None) -> str:
+    """PROMPT with the prospect's real name and company just above the transcript."""
+    return PROMPT.replace("TRANSCRIPT:\n", who_line(name, company) + "TRANSCRIPT:\n")
+
+
+def classify(text: str, name: str | None = None, company: str | None = None) -> dict:
+    p = subprocess.run(["claude", "-p", prompt_for(name, company) + text[:12000]],
                        capture_output=True, text=True, timeout=240)
     out = (p.stdout or "").strip()
     i, j = out.find("{"), out.rfind("}")
@@ -89,7 +108,7 @@ def main() -> int:
         print("\nDRY RUN — nothing sent.")
         return 0
     for n, (cid, c) in enumerate(todo, 1):
-        v = classify(c["text"])
+        v = classify(c["text"], c.get("name"), c.get("company"))
         done[cid] = {**{k: c[k] for k in ("name", "company", "talk", "started", "emails")}, **v}
         OUT.write_text(json.dumps(done, indent=1))     # save every one
         print(f"   [{n}/{len(todo)}] {str(c['name'])[:18]:<18} {v.get('verdict','?'):<16} "

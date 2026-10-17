@@ -232,7 +232,7 @@ SCHEMA = {
 
 PROMPT = """You are helping a small sales team review one of its own COLD CALLS. Koya places full-time
 AI-automation developers inside agencies (an embedded developer for a monthly fee, far cheaper than a local hire).
-The caller ("us") is {agent}. The other person ("them") is the prospect{lead}.
+The caller ("us") is {agent}. The other person ("them") is the prospect{lead}.{names}
 
 Below is the call as numbered segments with their start time in seconds.{diar}
 
@@ -257,9 +257,22 @@ def first(n: str | None) -> str:
     return (str(n or "").strip().split() or [""])[0]
 
 
-def ai_pass(segs: list[dict], agent: str, lead: str, diarized: bool) -> dict:
+def lead_bits(lead: str, company: str = "") -> tuple[str, str]:
+    """The prospect's real first name and company for the prompt, and the rule to spell them exactly:
+    speech-to-text mishears names ("Jada" for "Jader"), the contact record does not."""
+    fn, co = first(lead), str(company or "").strip()
+    who = " at ".join(x for x in (fn, co) if x)
+    if not who:
+        return "", ""
+    names = " and ".join(f'"{x}"' for x in (fn, co) if x)
+    return f" ({who})", (f" Those names come from our contact record; the transcript may mishear them. Whenever you mention"
+                         f" the prospect or their company, write {names} exactly, never a spelling heard on the call.")
+
+
+def ai_pass(segs: list[dict], agent: str, lead: str, diarized: bool, company: str = "") -> dict:
     lines = "\n".join(f"[{i}] {s['s']:.1f}s" + (f" speaker{s['spk']}" if diarized else "") + f": {s['text']}" for i, s in enumerate(segs))
-    p = PROMPT.format(agent=first(agent) or "our caller", lead=f" ({first(lead)})" if first(lead) else "",
+    lb, names = lead_bits(lead, company)
+    p = PROMPT.format(agent=first(agent) or "our caller", lead=lb, names=names,
                       diar=" Speaker numbers come from the recording itself." if diarized else
                       " The recording is mono, so nobody marked who is speaking.",
                       spk_rule="Keep each speaker number on one side." if diarized else
@@ -315,7 +328,7 @@ def review(cid: str, row: dict, H: dict, verdict: str | None) -> tuple[str, str]
         return cid, "voicemail"
     ctc = row.get("Contact") or {}
     agent = (row.get("Agent") or {}).get("fullname") or ""
-    ai = ai_pass(segs, agent, ctc.get("name") or "", TRANSCRIBER == "deepgram")
+    ai = ai_pass(segs, agent, ctc.get("name") or "", TRANSCRIBER == "deepgram", ctc.get("company") or "")
     if not ai.get("is_conversation"):
         return cid, "not-a-conversation"
     if TRANSCRIBER == "deepgram":      # map each diarized speaker to the side most of its segments were given
