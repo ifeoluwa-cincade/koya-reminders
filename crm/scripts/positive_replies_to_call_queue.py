@@ -90,12 +90,21 @@ def sheet_phones() -> dict:
         print(f"(positive reply sheet not readable: {type(ex).__name__} — skipping that source)")
         return {}
     out = {}
+    li_col = next((k for k in (rows[0].keys() if rows else []) if "linkedin" in str(k).lower()), None)
     for r in rows:
         em = str(r.get("Email") or "").strip().lower()
         ph = str(r.get("Phone") or "").strip() or str(r.get("Phone 2") or "").strip()
         if em and ph:
             out[em] = ph
+        elif em and li_col and str(r.get(li_col) or "").strip():
+            SHEET_ASKED.add(em)        # the Discord job already asked Prospeo and AI Ark (by LinkedIn) and found no number
     return out
+
+
+SHEET_ASKED: set = set()
+# 2026-10-17: a positive reply the Discord job already looked up and found NO number for was asked again here (one paid AI Ark call
+# each). CALLQ_TRUST_SHEET_MISS=1 skips that second call; until it is switched on the run only COUNTS how many it would skip.
+TRUST_SHEET_MISS = os.environ.get("CALLQ_TRUST_SHEET_MISS") == "1"
 
 
 def ark_phone(key, linkedin="", domain="", name=""):
@@ -171,6 +180,7 @@ def main() -> int:
     ark_key = secret("AI_ARK_KEY_2")
     now = datetime.now(timezone.utc).isoformat()
     plan, nophone, looked = [], [], 0
+    sheet_miss_hits = 0
     from_sheet_map = sheet_phones()
     for rid in add:
         p = people[rid]; v = p["values"]
@@ -187,8 +197,13 @@ def main() -> int:
             dom = next((e.split("@", 1)[1] for e in emails(p) if "@" in e and e.split("@", 1)[1] not in PERSONAL), "")
             key = li or (f"{dom}|{name}" if dom and name else "")
             if key:
+                sheet_miss = bool(li) and any(e in SHEET_ASKED for e in emails(p))
+                if key not in cache and sheet_miss:
+                    sheet_miss_hits += 1
                 if key in cache:
                     phone = cache[key] or ""
+                elif sheet_miss and TRUST_SHEET_MISS:
+                    phone = ""                                 # already asked by the Discord job, nothing found: not paid again
                 elif a.commit:
                     got = ark_phone(ark_key, linkedin=li, domain=dom, name=name); looked += 1
                     time.sleep(0.25)
@@ -207,6 +222,9 @@ def main() -> int:
 
     print(f"open interested/later people: {len(add)}  with a number: {len(plan)}  AI Ark lookups this run: {looked}")
     print(f"no number: {len(nophone)}")
+    print(f"would ask AI Ark (dry run): {sum('(would ask AI Ark)' in x for x in nophone)}")
+    print(f"AI Ark asks for people the Discord job already looked up with no number: {sheet_miss_hits} "
+          f"({'skipped' if TRUST_SHEET_MISS else 'still asked; set CALLQ_TRUST_SHEET_MISS=1 to skip'})")
     print(f"to remove (ruled out since): {len(remove)}")
     if not a.commit:
         print("DRY RUN — pass --commit."); return 0
