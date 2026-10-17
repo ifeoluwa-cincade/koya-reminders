@@ -66,6 +66,23 @@ def first(ev: dict, key: str):
     return v[0].get("value") if v else None
 
 
+def contact_by_phone(phone: str, H: dict) -> str | None:
+    """The CloudTalk contact that already holds this number (last 10 digits), or None. Raises if CloudTalk cannot be read,
+    so a failed search is never taken as 'not there' (that is how a second contact gets made)."""
+    d10 = re.sub(r"\D", "", str(phone or ""))[-10:]
+    if len(d10) < 7:
+        return None
+    r = ct("GET", "/contacts/index.json", H, params={"keyword": d10, "limit": 10})
+    if r.status_code >= 300:
+        raise RuntimeError(f"CloudTalk contact search failed {r.status_code}")
+    for row in (r.json().get("responseData", {}) or {}).get("data") or []:
+        nums = row.get("ContactNumber") or []
+        nums = nums if isinstance(nums, list) else [nums]
+        if any(re.sub(r"\D", "", str(n.get("public_number") or ""))[-10:] == d10 for n in nums if isinstance(n, dict)):
+            return str((row.get("Contact", row)).get("id"))
+    return None
+
+
 def carriers(tid: int, H: dict) -> set[str]:
     """Who carries this tag right now. This, not a 200, is the truth."""
     out, page = set(), 1
@@ -127,9 +144,11 @@ def main() -> int:
             else:
                 orphans.append((e, ev))
 
-        # An entry with no CloudTalk contact cannot be dialled at all, so create one.
-        if orphans and a.commit:
-            made = 0
+        # An entry with no CloudTalk contact cannot be dialled at all, so it gets one. Until 2026-10-17 a new contact was created
+        # every time without looking first, and the entry never learned the id, so the same person was created again on every
+        # run (twins: rung twice). Now: look the number up first, reuse what is there, and write the id back to the entry.
+        if orphans:
+            n = {"no number": 0, "existing contact reused": 0, "created": 0, "would create": 0, "failed": 0}
             for e, ev in orphans:
                 rid = e["parent_record_id"]
                 p = c.req("GET", f"/objects/people/records/{rid}").json().get("data", {})
@@ -139,17 +158,34 @@ def main() -> int:
                     (x.get("original_phone_number") or x.get("phone_number")
                      for x in (p.get("values", {}).get("phone_numbers") or [])), None)
                 if not phone:
-                    continue
-                r = ct("POST", "/bulk/contacts.json", H, json=[{
-                    "action": "add_contact", "command_id": "1",
-                    "data": {"name": nm or (mails[0] if mails else str(phone)),
-                             "ContactEmail": ([{"email": mails[0]}] if mails else []),
-                             "ContactNumber": [{"public_number": phone}],
-                             "ContactsTag": [{"name": L["cloudtalk_tag"]}]}}])
-                if r.status_code < 300:
-                    made += 1
-            if made:
-                print(f"   created {made} CloudTalk contacts that did not exist")
+                    n["no number"] += 1; continue
+                try:
+                    cid = contact_by_phone(phone, H)
+                except Exception:
+                    n["failed"] += 1; continue              # cannot tell: create nothing
+                if cid:
+                    n["existing contact reused"] += 1
+                    if a.commit:
+                        ct("PUT", f"/contacts/addTags/{cid}.json", H, json={"tags": [L["cloudtalk_tag"]]})
+                elif not a.commit:
+                    n["would create"] += 1; continue
+                else:
+                    r = ct("POST", "/bulk/contacts.json", H, json=[{
+                        "action": "add_contact", "command_id": "1",
+                        "data": {"name": nm or (mails[0] if mails else str(phone)),
+                                 "ContactEmail": ([{"email": mails[0]}] if mails else []),
+                                 "ContactNumber": [{"public_number": phone}],
+                                 "ContactsTag": [{"name": L["cloudtalk_tag"]}]}}])
+                    res = ((r.json().get("responseData") or {}).get("data") or [{}])[0] if r.status_code < 300 else {}
+                    cid = str((res.get("data") or {}).get("id") or "") or None
+                    if not cid:
+                        n["failed"] += 1; continue
+                    n["created"] += 1
+                if a.commit:
+                    c.req("PATCH", f"/lists/{lid}/entries/{e['id']['entry_id']}",
+                          json={"data": {"entry_values": {"cloudtalk_contact_id": [{"value": str(cid)}]}}})
+                    want.add(str(cid))
+            print(f"   entries with no CloudTalk contact: {len(orphans)} -> {n}")
 
         have = carriers(tid, H)
         missing = want - have

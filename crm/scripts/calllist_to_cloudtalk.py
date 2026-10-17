@@ -264,6 +264,14 @@ def main() -> int:
         summary[L["slug"]] = (len(entries), len(want), dict(skip))
         print(f"{L['slug']}: {len(entries)} entries, {len(want)} ready, skipped {dict(skip)}, notes {dict(note)}")
 
+    # One number, one new contact per run: a person on two call lists (or two people sharing a number) used to get a contact created
+    # for each, i.e. twins that are rung twice. The first one is created; the next run finds it by number and adds the other tag.
+    seen_new, dup_new = set(), 0
+    for row in list(plan_create):
+        if row[2] in seen_new:
+            plan_create.remove(row); dup_new += 1
+        seen_new.add(row[2])
+    print(f"same number twice among the new contacts (created once, the other label follows next run): {dup_new}")
     print(f"to tag: {len(plan_add)} | to create in CloudTalk: {len(plan_create)} | to untag: {len(plan_remove)} | numbers to add to existing contacts: {len(plan_fill)}")
 
     # ---- GUARD (Ife 2026-10-13, after the 'This number can't be dialed' incident): a tagged contact with no phone number gets into the
