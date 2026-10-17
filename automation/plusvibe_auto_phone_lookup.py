@@ -43,6 +43,28 @@ ARK_URL = "https://api.ai-ark.com/api/developer-portal/v2/people/mobile-phone-fi
 PROSPEO_URL = "https://api.prospeo.io/enrich-person"
 SALESQL_URL = "https://api-public.salesql.com/v1/persons/enrich"
 
+# What was paid for, written BEFORE the sheet row (2026-10-17). The sheet is this job's main memory, but a run that died between
+# the lookups and the sheet write paid again next time. The GitHub job keeps this file encrypted between runs (main only).
+MEMORY = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "caches", "pv_phone_lookup_memory.json")
+MEMORY_DAYS = 30
+
+
+def load_memory() -> dict:
+    try:
+        mem = json.load(open(MEMORY))
+    except Exception:
+        return {}
+    cutoff = time.time() - MEMORY_DAYS * 86400
+    return {k: v for k, v in mem.items() if isinstance(v, dict) and v.get("at", 0) >= cutoff}
+
+
+def save_memory(mem: dict) -> None:
+    os.makedirs(os.path.dirname(MEMORY), exist_ok=True)
+    tmp = MEMORY + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(mem, f)
+    os.replace(tmp, MEMORY)
+
 
 def env(name: str) -> str:
     v = os.environ.get(name, "")
@@ -245,6 +267,8 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
             print(f"Capping this run to {limit} of {len(new_leads)} — the rest will be picked up on later runs.")
         new_leads = new_leads[:limit]
 
+    memory = load_memory()
+    reused = 0
     for lead in new_leads:
         first_name = lead.get("first_name", "")
         company = lead.get("company_name", "")
@@ -261,19 +285,29 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
             print(f"  [DRY RUN] lead -> would look up a phone (Prospeo, then AI Ark{' (has LinkedIn)' if linkedin else ' (no LinkedIn: skipped)'}, then SalesQL)")
             print("  Would post one message to Discord")
             continue
-        p_phone, p_website = prospeo_lookup(linkedin=linkedin, full_name=first_name,
-                                             company_name=company, company_website=website)
-        if p_phone:
-            phone, source = p_phone, "Prospeo (verified)"
-        if not website and p_website:
-            website = p_website
+        mkey = (email or linkedin).strip().lower()
+        if mkey and mkey in memory:
+            m = memory[mkey]                       # paid for by a run that stopped before the sheet row: reuse, never pay twice
+            phone, source, hint = m.get("phone", ""), m.get("source", ""), m.get("hint", "")
+            website = website or m.get("website", "")
+            reused += 1
+        else:
+            p_phone, p_website = prospeo_lookup(linkedin=linkedin, full_name=first_name,
+                                                 company_name=company, company_website=website)
+            if p_phone:
+                phone, source = p_phone, "Prospeo (verified)"
+            if not website and p_website:
+                website = p_website
 
-        if not phone:
-            a_phone = aiark_lookup(linkedin)
-            if a_phone:
-                phone, source = a_phone, "AI Ark"
+            if not phone:
+                a_phone = aiark_lookup(linkedin)
+                if a_phone:
+                    phone, source = a_phone, "AI Ark"
 
-        hint = "" if phone else salesql_hint(linkedin)
+            hint = "" if phone else salesql_hint(linkedin)
+            if mkey:
+                memory[mkey] = {"phone": phone, "source": source, "hint": hint, "website": website, "at": time.time()}
+                save_memory(memory)                # before the sheet write: a crash from here on costs nothing next run
 
         msg = f"**New positive reply** — {first_name} @ {company}\n{campaign}\n{email}"
         if phone:
@@ -318,6 +352,8 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
                 post_discord(msg)
                 print(f"  lead -> phone {'found' if phone else 'none'}")
         time.sleep(1)
+    if reused:
+        print(f"Reused {reused} earlier paid lookups from the lookup memory (no new credits spent on them)")
 
 
 if __name__ == "__main__":

@@ -18,12 +18,25 @@ on:
 
 permissions: {}
 
-concurrency:
-  group: plusvibe-phone-lookup
-  cancel-in-progress: false
-
 jobs:
+  # The hourly push lands on crm-trigger; the lookup runs on MAIN so its paid-lookup memory (a GitHub cache, per branch) is one memory.
+  handoff:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Start the lookup on main
+        run: gh workflow run plusvibe_phone_lookup.yml -R "$GITHUB_REPOSITORY" --ref main -f dry_run=false
+
   lookup:
+    if: ${{ github.event_name != 'push' }}
+    concurrency:
+      group: plusvibe-phone-lookup
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -35,6 +48,20 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: pip install gspread google-auth requests
+      # What was paid for is remembered before the sheet row is written. It holds phone numbers, so it is encrypted.
+      - name: Restore the encrypted lookup memory
+        uses: actions/cache/restore@v4
+        with:
+          path: data/caches/pv_phone_lookup_memory.json.enc
+          key: pv-phone-lookup-enc-${{ github.run_id }}
+          restore-keys: pv-phone-lookup-enc-
+      - name: Decrypt it
+        env:
+          ENC_CACHE_KEY: ${{ secrets.ENC_CACHE_KEY }}
+        run: |
+          if [ -f data/caches/pv_phone_lookup_memory.json.enc ]; then
+            openssl enc -d -aes-256-cbc -pbkdf2 -in data/caches/pv_phone_lookup_memory.json.enc -out data/caches/pv_phone_lookup_memory.json -pass env:ENC_CACHE_KEY || { rm -f data/caches/pv_phone_lookup_memory.json; echo "::error::lookup memory could not be decrypted: not looking anything up"; exit 1; }
+          fi
       - name: Run phone lookup
         env:
           PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}
@@ -46,4 +73,20 @@ jobs:
           CALLLIST_SHEET_ID: ${{ secrets.CALLLIST_SHEET_ID }}
           DRY: ${{ github.event.inputs.dry_run }}
         run: |
-          if [ "$DRY" = "true" ]; then python automation/plusvibe_auto_phone_lookup.py --dry-run; else python automation/plusvibe_auto_phone_lookup.py; fi
+          # off main a run is always a dry run: the lookup memory lives on main only
+          if [ "$DRY" = "true" ] || [ "$GITHUB_REF" != "refs/heads/main" ]; then python automation/plusvibe_auto_phone_lookup.py --dry-run; else python automation/plusvibe_auto_phone_lookup.py; fi
+      - name: Encrypt the lookup memory again
+        if: ${{ always() }}
+        env:
+          ENC_CACHE_KEY: ${{ secrets.ENC_CACHE_KEY }}
+        run: |
+          if [ -f data/caches/pv_phone_lookup_memory.json ]; then
+            openssl enc -aes-256-cbc -pbkdf2 -salt -in data/caches/pv_phone_lookup_memory.json -out data/caches/pv_phone_lookup_memory.json.enc -pass env:ENC_CACHE_KEY
+            rm -f data/caches/pv_phone_lookup_memory.json
+          fi
+      - name: Save the lookup memory, even when a step failed (main only)
+        if: ${{ always() && github.ref == 'refs/heads/main' && hashFiles('data/caches/pv_phone_lookup_memory.json.enc') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: data/caches/pv_phone_lookup_memory.json.enc
+          key: pv-phone-lookup-enc-${{ github.run_id }}
