@@ -207,6 +207,35 @@ def fetch_calls(H: dict, since: str) -> list[dict]:
         page += 1
 
 
+def fetch_call_rows(H: dict, ids: list[str]) -> list[dict]:
+    """Just these calls, one CloudTalk read each (/calls/index.json?call_id=, checked 17 Oct 2026), instead of listing days of calls.
+    Used when CloudTalk's own webhook told the team app a call ended (--call): seconds instead of a listing.
+    A call CloudTalk does not list yet is left out (and counted); the next run, or the hourly sweep, picks it up."""
+    out, missing = [], 0
+    for cid in ids:
+        try:
+            r = ct_get("/calls/index.json", H, params={"call_id": cid, "limit": 1, "page": 1})
+        except (CTBusy, requests.exceptions.RequestException) as ex:
+            sys.exit(f"CloudTalk call could not be read ({type(ex).__name__}); nothing changed, the next run tries again")
+        if r is None or r.status_code >= 300:
+            sys.exit(f"CloudTalk call read failed: {getattr(r, 'status_code', '?')}")
+        rows = [x for x in ((r.json().get("responseData", {}) or {}).get("data") or []) if str((x.get("Cdr") or {}).get("id")) == str(cid)]
+        out += rows[:1]
+        missing += 0 if rows else 1
+    if missing:
+        print(f"   {missing} of {len(ids)} calls are not in CloudTalk's call history yet; the next run picks them up", flush=True)
+    return out
+
+
+def call_ids(arg: str | None) -> list[str]:
+    """--call 123,456 -> ['123', '456'] (digits only, order kept, no repeats)."""
+    seen, out = set(), []
+    for x in re.split(r"[\s,]+", arg or ""):
+        if x.isdigit() and x not in seen:
+            seen.add(x); out.append(x)
+    return out
+
+
 def contact_bits(row: dict, H: dict) -> tuple[list[str], list[str]]:
     """Emails and numbers for the person on the call. The call row sometimes omits them."""
     ctc = row.get("Contact") or {}
@@ -289,6 +318,8 @@ def main() -> int:
                     help="at most this many calls get a transcript in one run; the rest wait for the next run (a backlog can never time a run out)")
     ap.add_argument("--time-budget", type=int, default=int(os.environ.get("CALL_TIME_BUDGET") or 720),
                     help="seconds: after this no new call is started, so the run always ends in time to save what it did")
+    ap.add_argument("--call", default=None, help="comma-separated CloudTalk call ids: only these calls, one read each, no listing "
+                    "(CloudTalk's webhook told the app they ended). Calls already done are still skipped by the memory.")
     ap.add_argument("--commit", action="store_true")
     a = ap.parse_args()
     t0 = time.time()
@@ -301,7 +332,10 @@ def main() -> int:
 
     WORK.mkdir(parents=True, exist_ok=True)
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
-    rows = fetch_calls(H, since)
+    only = call_ids(a.call)
+    rows = fetch_call_rows(H, only) if only else fetch_calls(H, since)
+    if only:
+        since = f"the webhook ({len(only)} asked)"
     byid = {str((r.get("Cdr") or {}).get("id")): r for r in rows}
     agent = {cid: av for cid, r in byid.items() for av in [tag_verdict(r) or agent_verdict(call_note(r))] if av}      # the caller's tag first, then the wording of the note
     todo = [cid for cid in byid if cid not in state or state[cid].get("retry")

@@ -128,7 +128,16 @@ def pending_cids(work: Path, flag: str):
         st = json.loads(f.read_text())
     except Exception:
         return None
-    return {cid for cid, r in st.items() if isinstance(r, dict) and r.get(flag) is False}
+    pend = {cid for cid, r in st.items() if isinstance(r, dict) and r.get(flag) is False}
+    # only the calls this run's input files hold can be applied (and then marked done). A short run (--call, one or two calls)
+    # must not mark an older pending call done that it never had the data for: that call waits for a run whose window holds it.
+    vf = Path(work) / "call_verdicts.json"
+    if vf.exists():
+        try:
+            pend &= set(json.loads(vf.read_text()).keys())
+        except Exception:
+            pass
+    return pend
 
 
 def mark_done(work: Path, flag: str, cids) -> int:

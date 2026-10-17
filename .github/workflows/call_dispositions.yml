@@ -4,7 +4,10 @@ name: Call dispositions
 #   1. live_call_dispositions.py  - no answer / voicemail by talk time, otherwise a transcript and a verdict
 #   2. apply_call_verdicts.py     - a note per call on the person, and their stage only where the call is the strongest signal; a "not interested" call also stops their PlusVibe emails
 #   3. calls_to_call_lists.py     - the dialler queue stops re-ringing people who already answered
-# Starts within minutes of a call (the CloudTalk note that lands in Attio fires a webhook -> relay -> call_note), runs every hour from the routine push as a safety net,
+# Starts within about a minute of a call: CloudTalk's own webhook (call.ended / call.recording_ready) reaches the team app's /hook/cloudtalk,
+# which saves it and starts this job through the relay (call_note). The job then reads WHICH calls ended (ct_hook_calls.py) and works on just
+# those (--call: one CloudTalk read per call, no listing). The CloudTalk note that lands in Attio still fires the same call_note as a backup;
+# a run with nothing left from the webhook then reads only today's calls. Runs every hour from the routine push as a safety net,
 # keeps its morning and evening timers, and can be started by hand. (Ife 2026-10-12: it used to run only at 08 and 20 UTC to save GitHub minutes; the public repo has no such limit.)
 # Calls already handled are remembered, so a run only works on new calls. A manual run defaults to a DRY RUN.
 # A run never tries to do everything at once (16 Oct 2026: a 66-call backlog timed run after run out, and a run that timed out
@@ -139,8 +142,22 @@ jobs:
           if [ -f data/working/live/review_skip.json.enc ]; then
             openssl enc -d -aes-256-cbc -pbkdf2 -in data/working/live/review_skip.json.enc -out data/working/live/review_skip.json -pass env:ENC_CACHE_KEY || rm -f data/working/live/review_skip.json
           fi
+      # CloudTalk's webhook (through the app): just the calls it reported. Counts only in the log.
+      - name: Which calls did CloudTalk just report?
+        if: ${{ github.event_name == 'repository_dispatch' }}
+        continue-on-error: true
+        run: |
+          python crm/scripts/ct_hook_calls.py >> "$GITHUB_ENV"
+          echo "SHORT_SINCE=$(python3 -c "import datetime as d; print(max(d.date(2026,10,11), (d.datetime.now(d.timezone.utc)-d.timedelta(hours=6)).date()))")" >> "$GITHUB_ENV"
       - name: Work out an outcome for every new call
-        run: python crm/scripts/live_call_dispositions.py --since "$SINCE" $COMMIT
+        run: |
+          if [ -n "${HOOK_CALLS:-}" ]; then
+            echo "the calls CloudTalk just reported"; python crm/scripts/live_call_dispositions.py --call "$HOOK_CALLS" $COMMIT
+          elif [ "${HOOK_RECENT:-0}" = "1" ] && [ -n "${SHORT_SINCE:-}" ]; then
+            echo "CloudTalk's webhook is working and has nothing left: today's calls only"; python crm/scripts/live_call_dispositions.py --since "$SHORT_SINCE" $COMMIT
+          else
+            python crm/scripts/live_call_dispositions.py --since "$SINCE" $COMMIT
+          fi
       - name: Put the last few real calls through the fast writers again (manual check)
         if: ${{ env.DRY != 'true' && github.event.inputs.recheck != '' && github.event.inputs.recheck != '0' }}
         run: |
@@ -168,7 +185,9 @@ jobs:
         continue-on-error: true
         run: |
           command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null)
-          python crm/scripts/call_review.py --since "$SINCE" --limit 12 --commit
+          if [ -n "${HOOK_CALLS:-}" ]; then python crm/scripts/call_review.py --call "$HOOK_CALLS" --limit 12 --commit
+          elif [ "${HOOK_RECENT:-0}" = "1" ] && [ -n "${SHORT_SINCE:-}" ]; then python crm/scripts/call_review.py --since "$SHORT_SINCE" --limit 12 --commit
+          else python crm/scripts/call_review.py --since "$SINCE" --limit 12 --commit; fi
       - name: Encrypt the memory again
         if: ${{ always() }}
         run: |

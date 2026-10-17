@@ -43,7 +43,7 @@ import requests
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "crm" / "scripts"))
-from live_call_dispositions import (env, ct_get, fetch_calls, contact_bits, groq_keys, rule_verdict,  # noqa: E402
+from live_call_dispositions import (env, ct_get, fetch_calls, fetch_call_rows, call_ids, contact_bits, groq_keys, rule_verdict,  # noqa: E402
                                     REAL_VERDICTS, WORK)
 import ct_client  # noqa: E402  (the same CloudTalk pacer as the disposition job)
 from ct_client import CTBusy  # noqa: E402
@@ -387,6 +387,7 @@ def main() -> int:
     ap.add_argument("--max-ok", type=int, default=0, help="stop once this many reviews are written (0 = no cap)")
     ap.add_argument("--time-budget", type=int, default=int(os.environ.get("REVIEW_TIME_BUDGET") or 0),
                     help="seconds: after this no new review is started (0 = no limit); the rest are done next run")
+    ap.add_argument("--call", default=None, help="comma-separated CloudTalk call ids: only these calls, one read each, no listing")
     ap.add_argument("--delete", metavar="CALL_ID", help="remove one call's audio, review, comments and clips (on request)")
     a = ap.parse_args()
     if a.delete:
@@ -403,7 +404,10 @@ def main() -> int:
 
     state_f = WORK / "live_state.json"              # the disposition job's verdicts, when it ran first in the same job
     state = json.loads(state_f.read_text()) if state_f.exists() else {}
-    rows = fetch_calls(H, since)
+    only = call_ids(a.call)
+    rows = fetch_call_rows(H, only) if only else fetch_calls(H, since)
+    if only:
+        since = f"the webhook ({len(only)} asked)"
     byid = {str((r.get("Cdr") or {}).get("id")): r for r in rows}
     have = done_ids()
     skip_f = WORK / "review_skip.json"              # calls already found to be a voicemail or screening: never transcribed twice
