@@ -14,8 +14,8 @@ def dig10(x) -> str:
     return d[-10:] if len(d) >= 10 else ""
 
 
-def _first(c, flt, want=None):
-    r = c.req("POST", "/objects/people/records/query", json={"filter": flt, "limit": 5})
+def _first(c, flt, want=None, limit: int = 5):
+    r = c.req("POST", "/objects/people/records/query", json={"filter": flt, "limit": limit})
     if r.status_code >= 300:
         return None
     rows = r.json().get("data", [])
@@ -35,9 +35,38 @@ def by_email(c, email: str):
 
 
 def by_phone10(c, d10: str):
+    """2026-10-17: Attio's $contains on the last TEN digits misses most stored numbers (tested on people we created from calls:
+    2 of 3 not found), so every targeted run printed '0 calls matched BY PHONE'. Ask with the exact NA E.164 number first, then
+    $contains on the last SEVEN digits (which Attio does match), keeping only people whose number really ends in the 10 digits."""
+    if not d10:
+        return None
     def ok(p):
         return any(dig10(ph.get("original_phone_number") or ph.get("phone_number")) == d10 for ph in (p["values"].get("phone_numbers") or []))
-    return _first(c, {"phone_numbers": {"$contains": d10}}, ok)
+    return _first(c, {"phone_numbers": "+1" + d10}, ok) or _first(c, {"phone_numbers": {"$contains": d10[-7:]}}, ok, limit=50)
+
+
+def by_fullname(c, name: str):
+    """The ONE person whose full name equals this name (case and spacing ignored), or None when there is none or more than one
+    real candidate. Used only for an outbound call whose CloudTalk contact has no email and whose number is on no Attio person:
+    the lead was dialled from a number found outside Attio (found 17 Oct 2026)."""
+    nm = " ".join(str(name or "").split())
+    if not nm or nm.lower().startswith("lead from") or len(nm.split()) < 2:
+        return None
+    r = c.req("POST", "/objects/people/records/query", json={"filter": {"name": {"full_name": {"$eq": nm}}}, "limit": 10})
+    if r.status_code >= 300:
+        return None
+    rows = [p for p in r.json().get("data", [])
+            if " ".join(((p["values"].get("name") or [{}])[0].get("full_name") or "").split()).lower() == nm.lower()]
+    real = [p for p in rows if not is_shell(p)]
+    if len(real) == 1:
+        return real[0]
+    return rows[0] if len(rows) == 1 else None
+
+
+def is_shell(p) -> bool:
+    """An EMPTY person the CloudTalk link made: no stage, company or email."""
+    v = p["values"]
+    return not ((v.get("relationship_stage") or [{}])[0].get("option")) and not v.get("company") and not v.get("email_addresses")
 
 
 _COMPANY = {}

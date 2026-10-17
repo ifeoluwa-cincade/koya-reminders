@@ -114,12 +114,25 @@ def main() -> int:
         print(f"   targeted: {len(scope)} new calls, {len(byem)} emails and {len(byph)} phones matched to people (no full read)")
 
     # --- bring in the outbound calls that produced a real conversation with someone we do not hold
-    made = matched_by_phone = 0
+    made = matched_by_phone = matched_by_name = 0
+    phone_back = {}                  # record id -> (person, dialled number): people we reached on a number Attio does not hold
+    import attio_fast as AF
+
+    def want_phone(p, cid, r):
+        # 2026-10-17: the number we dialled and had a real conversation on goes onto a person who has NO number,
+        # so the next call matches by phone. Never on WRONG_PERSON (that number reached someone else).
+        if p and r["verdict"] != "WRONG_PERSON" and numbers.get(cid) and not (p["values"].get("phone_numbers") or []):
+            raw = str(numbers[cid]).strip()
+            d = re.sub(r"\D", "", raw)
+            if len(d) >= 10:
+                phone_back.setdefault(p["id"]["record_id"], (p, raw if raw.startswith("+") else "+" + d))
+
     for cid, r in scope.items():
         if r["verdict"] == "NO_CONVERSATION" or direction.get(cid) != "outgoing":
             continue
         ems = [e for e in (r.get("emails") or [])]
         if any(e in byem for e in ems):
+            want_phone(next(byem[e] for e in ems if e in byem), cid, r)
             continue
         ph = byph.get(dig(numbers.get(cid)))
         if ph:                       # already in the CRM, just under a different key
@@ -131,6 +144,17 @@ def main() -> int:
         nm = (r.get("name") or "").strip()
         if not nm or nm.lower().startswith("lead from"):
             # no name at all — a number and a transcript is not enough to build a person on
+            continue
+        # 2026-10-17: the lead was dialled on a number found outside Attio (the positive-reply phone job) and the CloudTalk
+        # contact has no email, so neither key matched and the call was dropped (or became a duplicate person). The ONE
+        # person with exactly this full name is them: the note goes there and the number is added to them.
+        pn = AF.by_fullname(c, nm)
+        if pn:
+            key = f"cid:{cid}"
+            byem[key] = pn
+            r.setdefault("emails", []).append(key)
+            matched_by_name += 1
+            want_phone(pn, cid, r)
             continue
         first, _, last = nm.partition(" ")
         vals = {"name": [{"first_name": first, "last_name": last, "full_name": nm}],
@@ -162,6 +186,13 @@ def main() -> int:
             byem[f"cid:{cid}"] = np
             r.setdefault("emails", []).append(f"cid:{cid}")
     print(f"   {matched_by_phone} calls matched to an existing person BY PHONE")
+    print(f"   {matched_by_name} calls matched to an existing person BY FULL NAME (no email on the contact, number not in Attio)")
+    print(f"   {len(phone_back)} people reached on a number they do not hold in Attio: the number is added{'' if a.commit else ' (dry run)'}")
+    if a.commit:
+        for rid, (p, num) in phone_back.items():
+            rr = c.req("PATCH", f"/objects/people/records/{rid}", json={"data": {"values": {"phone_numbers": [{"original_phone_number": num}]}}})
+            if rr.status_code >= 300:
+                print(f"   PHONE WRITE FAIL: {rr.status_code}")
     print(f"   {made} people created from outbound calls that had a real conversation")
 
     # one person can have several calls — the LAST real conversation decides their state
@@ -193,7 +224,7 @@ def main() -> int:
         plan.append((p, calls, best, cur))
         stats[best["verdict"] if best else "NO_CONVERSATION only"] += 1
 
-    unmatched = sum(1 for r in v.values() if not any(e in byem for e in (r.get("emails") or [])))
+    unmatched = sum(1 for r in (v if pend is None else scope).values() if not any(e in byem for e in (r.get("emails") or [])))   # in a targeted run only the new calls were looked up
     print(f"{len(v)} calls -> {len(per)} people in the CRM  ({unmatched} calls have no matching person)")
     for k, n in stats.most_common():
         print(f"   {n:>4}  {k}")
