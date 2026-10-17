@@ -15,8 +15,6 @@ name: Supabase backup
 on:
   schedule:
     - cron: "30 2 * * *"
-  push:
-    branches: [wt-backup]     # TEMP: test runs from the work branch (saved to koya-backups-test)
   workflow_dispatch:
     inputs:
       test:
@@ -60,7 +58,7 @@ jobs:
         run: python crm/backup/test_supabase_backup.py
       - name: Pick the branch and today's file name
         run: |
-          if [ "${{ github.event.inputs.test }}" = "true" ] || [ "${{ github.event_name }}" = "push" ]; then echo "BRANCH=koya-backups-test" >> "$GITHUB_ENV"; else echo "BRANCH=koya-backups" >> "$GITHUB_ENV"; fi
+          if [ "${{ github.event.inputs.test }}" = "true" ]; then echo "BRANCH=koya-backups-test" >> "$GITHUB_ENV"; else echo "BRANCH=koya-backups" >> "$GITHUB_ENV"; fi
           echo "DAY=$(date -u +%Y-%m-%d)" >> "$GITHUB_ENV"
           mkdir -p "$BK"
 
@@ -96,7 +94,8 @@ jobs:
           rm -rf "$BK/check" && mkdir -p "$BK/check" && cd "$BK/check" && git init -q
           git fetch -q --depth 1 "git@github.com:${PRIVATE_STORE_REPO}.git" "$BRANCH"
           git show "FETCH_HEAD:backups/$DAY.json.gz.enc" > "$BK/drill.json.gz.enc"
-          cmp -s "$BK/drill.json.gz.enc" "$BK/$DAY.json.gz.enc" && echo "the saved file is byte-identical to the one just made"
+          cmp -s "$BK/drill.json.gz.enc" "$BK/$DAY.json.gz.enc" || { echo "::error::the saved file differs from the one just made"; exit 1; }
+          echo "the saved file is byte-identical to the one just made"
       - name: "Restore drill: throwaway Postgres and PostgREST"
         env:
           PGPASSWORD: drill-only
