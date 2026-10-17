@@ -150,12 +150,12 @@ def main() -> int:
         if not a.commit:
             made += 1
             continue
-        resp = c.req("POST", "/objects/people/records", json={"data": {"values": vals}})
-        if resp.status_code >= 300:
-            print(f"   FAIL create: {resp.status_code}")
+        # never twice: a retry after a timeout first looks the person up by the email (else the phone) just sent
+        st, np, _ = c.create_person(vals, email=ems[0] if ems else "", phone10=dig(numbers.get(cid))[-10:] if numbers.get(cid) else "")
+        if st >= 300 or not np:
+            print(f"   FAIL create: {st}")
             continue
         made += 1
-        np = resp.json()["data"]
         for e in ems:
             byem[e] = np
         if not ems:          # keyed by the call id so the note still finds its parent

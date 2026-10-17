@@ -176,6 +176,58 @@ class AttioClient:
                 return r.status_code, None, False     # a plain 4xx: the note was refused, not written
         return (last_status or 599), None, False
 
+    # ---- idempotent person creation ----
+    # Same problem as notes: a POST /objects/people/records that times out may have created the person, and a blind retry
+    # makes a second one (a twin, which the dialler then rings twice). Before each retry we look the person up by the key we
+    # just sent (email, else phone); found = the earlier attempt worked.
+
+    def _query_people(self, flt: dict) -> list:
+        r = self.req("POST", "/objects/people/records/query", json={"filter": flt, "limit": 10})
+        if r.status_code >= 300:
+            raise RuntimeError(f"Attio people query failed {r.status_code}")
+        return r.json().get("data", [])
+
+    def find_person(self, email: str = "", phone10: str = "") -> dict | None:
+        """The person with this email (else this phone, last 10 digits), or None. Raises when Attio cannot be read."""
+        import re as _re
+        if email:
+            rows = self._query_people({"email_addresses": email.strip().lower()})
+            return rows[0] if rows else None
+        if phone10:
+            dig = lambda x: (_re.sub(r"\D", "", str(x or "")))[-10:]
+            for p in self._query_people({"phone_numbers": {"$contains": phone10}}):
+                if any(dig(ph.get("original_phone_number") or ph.get("phone_number")) == phone10
+                       for ph in (p["values"].get("phone_numbers") or [])):
+                    return p
+        return None
+
+    def create_person(self, vals: dict, email: str = "", phone10: str = "", tries: int = 6):
+        """POST a new person at most once in effect. Returns (status_code, record_or_None, existed)."""
+        delay, last_status, maybe_written = 1.5, None, False
+        for i in range(tries):
+            if i:
+                time.sleep(delay); delay *= 1.7
+            if maybe_written:                          # the last attempt timed out or got a 5xx: it may have created the person
+                if not (email or phone10):
+                    break                              # nothing to look for: never risk a second copy
+                try:
+                    found = self.find_person(email, phone10)
+                except Exception:
+                    break                              # cannot tell: stop rather than risk a twin
+                if found:
+                    return 200, found, True
+            try:
+                r = self.req("POST", "/objects/people/records", tries=1, json={"data": {"values": vals}})
+            except requests.exceptions.RequestException:
+                last_status, maybe_written = None, True
+                continue
+            if r.status_code < 300:
+                return r.status_code, r.json().get("data"), False
+            last_status, maybe_written = r.status_code, r.status_code >= 500
+            if r.status_code != 429 and r.status_code < 500:
+                return r.status_code, None, False      # refused (e.g. the email is already taken): not written
+        return (last_status or 599), None, False
+
     def map(self, fn, items, label: str = ""):
         """Run fn over items across the pool, reporting progress."""
         out, done, total, t0 = [], 0, len(items), time.monotonic()

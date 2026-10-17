@@ -152,11 +152,11 @@ def create_for(c, owner, e, l, rid):
             _li = (l.get("linkedin_person_url") or "").strip()
             if _li.startswith("http") and _li.isascii():
                 vals["linkedin"] = [{"value": _li}]
-        r = c.req("POST", "/objects/people/records", json={"data": {"values": vals}})
-        if r.status_code >= 300:
-            print(f"   PERSON FAIL {r.status_code} {_why(r)}")
+        st, np, _ = c.create_person(vals, email=e)      # a retry after a timeout finds the person it made instead of failing on the taken email
+        if st >= 300 or not np:
+            print(f"   PERSON FAIL {st}")
             return None, False
-        rid = r.json()["data"]["id"]["record_id"]
+        rid = np["id"]["record_id"]
     title = f"{full or e} / {l.get('company_name') or ''}".strip(" /")
     r = c.req("PUT", "/objects/deals/records?matching_attribute=external_opportunity_id", json={"data": {"values": {
         "name": [{"value": title}],
