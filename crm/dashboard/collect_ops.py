@@ -30,6 +30,8 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "crm" / "scripts"))
 from attio_client import AttioClient, api_key  # noqa: E402
 import collect_metrics as CM  # noqa: E402
+sys.path.insert(0, str(ROOT / "crm" / "dashboard"))
+import lead_company as LC  # noqa: E402
 
 OUT = ROOT / "data/working/ops.json"
 SCHEMA = ROOT / "crm/schema/attio-schema.yaml"
@@ -122,7 +124,7 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
                                    "next": val(d, "next_action_at"), "missed": val(d, "missed_followup_at"), "created": d.get("created_at"),
                                    "channel": val(d, "source_channel"), "campaign": val(d, "source_campaign"),
                                    "reason": val(d, "lost_reason"), "close": closed_on(d),
-                                   "name": val(d, "name"), "placement": placement_of(d), "company_id": val(d, "associated_company")})
+                                   "name": val(d, "name"), "ext": val(d, "external_opportunity_id"), "placement": placement_of(d), "company_id": val(d, "associated_company")})
                 r["src"].add("email" if (val(d, "source_channel") or "").lower() == "cold email" else "deal")
 
     # call-list entries with a real result
@@ -204,10 +206,14 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
         nxt = next((parse(dl["next"]) for dl in r["deals"] if dl["next"]), None)
         due = nxt or ((last_touch + timedelta(days=DUE_DAYS[bucket])) if last_touch else None)
         missed = None if nxt else next((parse(dl["missed"]) for dl in r["deals"] if dl.get("missed")), None)      # a follow-up that came due and was not done: shown as overdue
-        # the company is the person's linked company record, else a deal's associated company; never parsed from a deal name
-        comp = comps.get(val(p, "company")) or next((comps.get(dl["company_id"]) for dl in r["deals"] if comps.get(dl.get("company_id"))), None) or {}
-        cname = val(comp, "name") if comp else None
+        # the company: lead_company.py's chain (person link, deal company, work email domain, PlusVibe, CloudTalk, then the deal
+        # name for non-placement deals only). The Attio parts are known here; fill_companies() below does the other reads.
+        co = lambda rec: {"name": val(rec, "name"), "domain": val(rec, "domains")} if rec else None
         email = val(p, "email_addresses")
+        cx = {"person": {"company": co(comps.get(val(p, "company"))), "email": email, "phone": val(p, "phone_numbers")},
+              "deals": [{"name": dl.get("name"), "ext": dl.get("ext"), "stage": dl["stage"], "company": co(comps.get(dl.get("company_id")))} for dl in r["deals"]]}
+        got_co = LC.pick(cx)
+        cname = got_co["company"] or None
         ctid = next((z["ctid"] for z in reversed(calls) if z["ctid"]), None)
         src = "Email + call" if {"call"} <= r["src"] and (r["src"] - {"call"}) else ("Call" if "call" in r["src"] else "Email")
         opps.append({
@@ -225,16 +231,100 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
             "summary": (last_call or {}).get("summary") or val(p, "last_reply_summary"),
             "call_at": (last_call or {}).get("at"), "attempts": (last_call or {}).get("attempts"),
             "campaign": next((dl["campaign"] for dl in r["deals"] if dl["campaign"]), None) or val(p, "current_campaign"),
+            "company_from": got_co["from"], "_cx": cx,
             "links": {"attio": p.get("web_url"), "deal": next((dl["url"] for dl in r["deals"] if dl["url"]), None),
-                      "website": ("https://" + val(comp, "domains")) if comp and val(comp, "domains") else None,
+                      "website": got_co["website"],
                       "linkedin": val(p, "linkedin"),
                       "cloudtalk": f"https://dashboard.cloudtalk.io/menu/contacts/details/{ctid}" if ctid else None},
             "thread": [],
             "lists": sorted({("call_" + re.sub(r"[^a-z0-9]+", "_", z["list"].lower()).strip("_"))[:50] for z in calls}),
         })
+    try:
+        fill_companies(c, opps)
+    except Exception as ex:                                     # never stops the build: the leads keep what Attio's records gave
+        print("  company reads failed:", type(ex).__name__)
+        for o in opps:
+            o.pop("_cx", None)
     link_cloudtalk(opps)
     print(f"  opportunities: {len(opps)}")
     return opps
+
+
+CO_CT_MAX = int(os.environ.get("CO_CT_MAX") or 10)     # CloudTalk company lookups per run (its 60 a minute is shared by everything)
+
+
+def fill_companies(c: AttioClient, opps: list[dict]) -> None:
+    """The reads of lead_company.py's chain that Attio's records alone could not answer, only for leads still without a company:
+    the Attio company with the person's work email domain, the PlusVibe lead's company_name, the CloudTalk contact's company.
+    Every read may fail on its own: the lead then keeps what the chain had (at worst the non-placement deal name, else empty)."""
+    todo = [o for o in opps if LC.needs_reads(o["_cx"])]
+    doms = sorted({LC.domain_of(o["_cx"]["person"].get("email")) for o in todo} - {None})
+    for i in range(0, len(doms), 50):
+        chunk = doms[i:i + 50]
+        try:
+            r = c.req("POST", "/objects/companies/records/query",
+                      json={"filter": {"$or": [{"domains": {"domain": {"$eq": d}}} for d in chunk]}, "limit": 500})
+            hits = r.json().get("data") or [] if r.status_code < 300 else []
+        except Exception:
+            hits = []
+        by = {}
+        for rec in hits:
+            for x in rec["values"].get("domains") or []:
+                by.setdefault(str(x.get("domain") or "").lower(), rec)
+        for o in todo:
+            d = LC.domain_of(o["_cx"]["person"].get("email"))
+            if d in by:
+                o["_cx"]["domain_company"] = {"name": val(by[d], "name"), "domain": d}
+    todo = [o for o in todo if LC.needs_reads(o["_cx"])]
+    key = os.environ.get("PLUS_VIBE_API_KEY") or CM.env().get("PLUS_VIBE_API_KEY")
+    if key:
+        for o in todo:
+            em = o["_cx"]["person"].get("email")
+            if not em:
+                continue
+            rows = _pv_get("/lead/get", {"x-api-key": key}, {"workspace_id": WS, "email": em}) or []
+            rows = rows if isinstance(rows, list) else (rows.get("data") or [])
+            ld = next(((x.get("lead_data") or x) for x in rows if str(((x.get("lead_data") or x) or {}).get("company_name") or "").strip()), None)
+            if ld:
+                o["_cx"]["plusvibe"] = {"company_name": ld.get("company_name"), "company_website": ld.get("company_website")}
+    todo = [o for o in todo if LC.needs_reads(o["_cx"])]
+    if todo:
+        try:
+            import verify_cloudtalk_tags as V
+            H = V.auth()
+        except Exception:
+            H = None
+        n = 0
+        for o in todo:
+            if H is None or n >= CO_CT_MAX:
+                break
+            ph, em = o["_cx"]["person"].get("phone"), o["_cx"]["person"].get("email")
+            kw = (re.sub(r"\D", "", str(ph))[-9:] if ph else None) or em
+            if not kw:
+                continue
+            n += 1
+            try:
+                r = V.ct("GET", "/contacts/index.json", H, params={"keyword": kw, "limit": 5})
+            except Exception:
+                break
+            if r.status_code == 429:
+                break                                          # CloudTalk is busy: the rest keep the deal name or wait for the next run
+            items = r.json().get("responseData", {}).get("data", []) if r.status_code < 300 else []
+            ctc = next((x.get("Contact") for x in items if str((x.get("Contact") or {}).get("company") or "").strip()), None)
+            if ctc:
+                o["_cx"]["cloudtalk"] = {"company": ctc.get("company")}
+    found = {}
+    for o in opps:
+        before = o.get("company_from")
+        got = LC.pick(o.pop("_cx"))                         # the chain's final answer (a deal-name stand-in gives way to PlusVibe / CloudTalk)
+        if got["company"]:
+            o["company"], o["company_from"] = got["company"], got["from"]
+            if got["from"] != before:
+                found[got["from"]] = found.get(got["from"], 0) + 1
+            if got["website"] and not o["links"].get("website"):
+                o["links"]["website"] = got["website"]
+    print(f"  companies: {sum(1 for o in opps if o.get('company'))} of {len(opps)} known; filled by the later steps: {found or 'none'}; "
+          f"still empty: {sum(1 for o in opps if not o.get('company'))}")
 
 
 LINK_CACHE = Path(os.environ.get("CT_LINK_CACHE") or ROOT / "data/caches/cloudtalk_link_cache.json")
