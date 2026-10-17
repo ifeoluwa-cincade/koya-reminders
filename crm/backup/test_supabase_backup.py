@@ -1,5 +1,5 @@
 """Offline checks for supabase_backup.py: the production guard and the hashes. Run: python crm/backup/test_supabase_backup.py"""
-import gzip, hashlib, json, os, sys, tempfile
+import contextlib, gzip, hashlib, io, json, os, sys, tempfile
 sys.path.insert(0, os.path.dirname(__file__))
 import supabase_backup as B
 
@@ -31,7 +31,10 @@ assert not refused("https://zyxwvutsrqponmlk.supabase.co")
 
 # restore refuses before reading the file or touching the network
 os.environ["SUPABASE_URL"] = PROD
-assert B.main(["restore", "/nonexistent.json.gz.enc", "--target-url", PROD, "--target-key-env", "X"]) == 1
+err = io.StringIO()
+with contextlib.redirect_stderr(err):
+    assert B.main(["restore", "/nonexistent.json.gz.enc", "--target-url", PROD, "--target-key-env", "X"]) == 1
+assert "REFUSED" in err.getvalue()
 
 rows = [{"path": "b/2", "coll": "b", "id": "2", "data": {"x": [1, 2], "a": "é"}},
         {"path": "a/1", "coll": "a", "id": "1", "data": {}},
