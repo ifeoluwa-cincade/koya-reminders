@@ -1,0 +1,164 @@
+name: Supabase backup
+
+# Nightly backup of the team app's Supabase data, then a restore drill that proves the backup can be brought back.
+#  1. Export with the service key (read only): every row of the docs table, the NAMES of app_secrets (never the values),
+#     the logins (id, email, app_metadata; never password hashes) and a manifest of Storage objects (names, sizes, dates).
+#     Storage file BYTES are not backed up (call audio is too big for a git store): lost audio cannot come back from here.
+#  2. gzip, encrypt with ENC_CACHE_KEY (same openssl recipe as the encrypted caches) and save as backups/YYYY-MM-DD.json.gz.enc
+#     on the "koya-backups" branch of the PRIVATE store repository. The branch is rewritten as one commit holding the last 30
+#     days, so old backups really go away.
+#  3. Restore drill: read the file back from the private repository, restore it into a throwaway Postgres (+ PostgREST, the
+#     same REST layer Supabase uses) inside this run, and check every row's content hash, the counts and an SQL cross-check.
+#     Production is never written to: the restore script refuses the production URL.
+# This repository is public: the log shows counts and sizes only. Any error turns the run red.
+# Restore by hand: see the header of crm/backup/supabase_backup.py.
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  push:
+    branches: [wt-backup]     # TEMP: test runs from the work branch (saved to koya-backups-test)
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "true = save to the koya-backups-test branch, not the real one"
+        default: "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: drill-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      PRIVATE_STORE_REPO: ${{ secrets.PRIVATE_STORE_REPO }}
+      ENC_CACHE_KEY: ${{ secrets.ENC_CACHE_KEY }}
+      PYTHONUNBUFFERED: "1"
+      BK: ${{ github.workspace }}/../bk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install requests
+      - name: Offline checks of the backup script
+        run: python crm/backup/test_supabase_backup.py
+      - name: Pick the branch and today's file name
+        run: |
+          if [ "${{ github.event.inputs.test }}" = "true" ] || [ "${{ github.event_name }}" = "push" ]; then echo "BRANCH=koya-backups-test" >> "$GITHUB_ENV"; else echo "BRANCH=koya-backups" >> "$GITHUB_ENV"; fi
+          echo "DAY=$(date -u +%Y-%m-%d)" >> "$GITHUB_ENV"
+          mkdir -p "$BK"
+
+      - name: Export from Supabase (read only)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python crm/backup/supabase_backup.py export --out "$BK/backup.json"
+      - name: Compress and encrypt
+        run: |
+          set -euo pipefail
+          [ -n "$ENC_CACHE_KEY" ] || { echo "::error::ENC_CACHE_KEY is empty"; exit 1; }
+          gzip -9 -n "$BK/backup.json"
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in "$BK/backup.json.gz" -out "$BK/$DAY.json.gz.enc" -pass env:ENC_CACHE_KEY
+          rm -f "$BK/backup.json.gz"
+          python crm/backup/supabase_backup.py digest "$BK/$DAY.json.gz.enc" > /dev/null   # it decrypts and its digest checks out
+          echo "encrypted backup: $(stat -c %s "$BK/$DAY.json.gz.enc") bytes"
+
+      - name: Set up the key for the private repository
+        env:
+          DEPLOY_KEY: ${{ secrets.DASHBOARD_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/store_key && chmod 600 ~/.ssh/store_key
+          ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
+          echo "GIT_SSH_COMMAND=ssh -i $HOME/.ssh/store_key -o IdentitiesOnly=yes" >> "$GITHUB_ENV"
+      - name: Save to the private repository (last 30 days kept)
+        run: |
+          set -euo pipefail
+          REMOTE="git@github.com:${PRIVATE_STORE_REPO}.git"
+          rm -rf "$BK/store" && mkdir -p "$BK/store" && cd "$BK/store" && git init -q -b "$BRANCH"
+          git config user.name "backup-bot"; git config user.email "backup-bot@users.noreply.github.com"
+          git remote add origin "$REMOTE"
+          LEASE=""
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            git fetch -q --depth 1 origin "$BRANCH"          # set -e: a failed fetch stops here, nothing is overwritten
+            OLD=$(git rev-parse FETCH_HEAD)
+            LEASE="--force-with-lease=refs/heads/$BRANCH:$OLD"
+            git checkout -q FETCH_HEAD -- . 2>/dev/null || true
+            before=$(ls backups 2>/dev/null | wc -l)
+          else
+            git ls-remote origin >/dev/null            # the repository must answer; only the branch is new
+            before=0
+          fi
+          mkdir -p backups
+          cp "$BK/$DAY.json.gz.enc" "backups/$DAY.json.gz.enc"
+          CUT=$(date -u -d "29 days ago" +%Y-%m-%d)
+          for f in backups/*.json.gz.enc; do d=$(basename "$f" .json.gz.enc); if [[ "$d" < "$CUT" ]]; then rm -f "$f"; fi; done
+          after=$(ls backups | wc -l)
+          printf 'Encrypted Supabase backups (openssl aes-256-cbc -pbkdf2, ENC_CACHE_KEY). Written by koya-reminders supabase_backup.yml.\nRestore: crm/backup/supabase_backup.py in koya-reminders.\n' > README.txt
+          git rm -rq --cached . 2>/dev/null || true
+          git add README.txt backups
+          # one commit holding only the kept files, so pruned backups leave the repository's history too
+          TREE=$(git write-tree)
+          C=$(git commit-tree "$TREE" -m "Supabase backup $DAY")
+          git push -q $LEASE origin "$C:refs/heads/$BRANCH"
+          echo "saved $DAY to branch $BRANCH: backups kept $after (had $before)"
+
+      - name: "Restore drill: read the backup back from the private repository"
+        run: |
+          set -euo pipefail
+          rm -rf "$BK/check" && mkdir -p "$BK/check" && cd "$BK/check" && git init -q
+          git fetch -q --depth 1 "git@github.com:${PRIVATE_STORE_REPO}.git" "$BRANCH"
+          git show "FETCH_HEAD:backups/$DAY.json.gz.enc" > "$BK/drill.json.gz.enc"
+          cmp -s "$BK/drill.json.gz.enc" "$BK/$DAY.json.gz.enc" && echo "the saved file is byte-identical to the one just made"
+      - name: "Restore drill: throwaway Postgres and PostgREST"
+        env:
+          PGPASSWORD: drill-only
+        run: |
+          set -euo pipefail
+          psql -q -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f crm/backup/docs_schema.sql
+          JWT_SECRET=$(openssl rand -hex 32); echo "::add-mask::$JWT_SECRET"
+          docker run -d --name drill-rest --network host \
+            -e PGRST_DB_URI=postgres://postgres:drill-only@localhost:5432/postgres -e PGRST_DB_SCHEMAS=public \
+            -e PGRST_DB_ANON_ROLE=anon -e PGRST_JWT_SECRET="$JWT_SECRET" -e PGRST_SERVER_PORT=3000 \
+            postgrest/postgrest:v12.2.3 >/dev/null
+          KEY=$(JWT_SECRET="$JWT_SECRET" python3 -c 'import base64,hmac,hashlib,json,os
+          b=lambda x: base64.urlsafe_b64encode(x).rstrip(b"=").decode()
+          s=b(json.dumps({"alg":"HS256","typ":"JWT"}).encode())+"."+b(json.dumps({"role":"service_role"}).encode())
+          print(s+"."+b(hmac.new(os.environ["JWT_SECRET"].encode(),s.encode(),hashlib.sha256).digest()))')
+          echo "::add-mask::$KEY"; echo "DRILL_KEY=$KEY" >> "$GITHUB_ENV"
+          for i in $(seq 1 30); do curl -fs -o /dev/null http://localhost:3000/ && break; sleep 1; done
+          curl -fs -o /dev/null http://localhost:3000/ && echo "throwaway database ready"
+      - name: "Restore drill: restore and verify every row"
+        env:
+          PROD_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}     # only so the script can refuse it as a target
+        run: python crm/backup/supabase_backup.py restore "$BK/drill.json.gz.enc" --target-url http://localhost:3000 --target-key-env DRILL_KEY --rest-prefix ""
+      - name: "Restore drill: SQL cross-check (independent of the REST layer)"
+        env:
+          PGPASSWORD: drill-only
+        run: |
+          set -euo pipefail
+          want=$(python crm/backup/supabase_backup.py digest "$BK/drill.json.gz.enc")
+          got=$(psql -h localhost -U postgres -d postgres -tA -c "select count(*) || ' ' || md5(string_agg(path, ',' order by path collate \"C\")) from public.docs")
+          wn=$(echo "$want" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["docs"], d["paths_md5"])')
+          if [ "$wn" = "$got" ]; then echo "SQL: row count and the md5 of every path match the backup (${got%% *} rows)"; else echo "::error::SQL cross-check differs (backup ${wn%% *} rows, database ${got%% *} rows)"; exit 1; fi
+      - name: Remove everything that held data
+        if: ${{ always() }}
+        run: |
+          docker rm -f drill-rest >/dev/null 2>&1 || true
+          rm -rf "$BK" ~/.ssh/store_key
