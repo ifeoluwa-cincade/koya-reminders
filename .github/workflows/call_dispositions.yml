@@ -28,6 +28,9 @@ on:
       recheck:
         description: "a number N: also put the last N real-conversation calls through the fast Attio writers again (their notes already exist, so nothing is duplicated; it proves the lookups)"
         default: "0"
+      since:
+        description: "optional YYYY-MM-DD: look back to this day instead of the usual 3 days (never before 2026-10-11). For catching up calls that fell out of the window."
+        default: ""
 
 permissions: {}
 
@@ -83,6 +86,7 @@ jobs:
       CT_WAIT_BUDGET: "240"                                           # seconds a run may wait for CloudTalk's shared limit before leaving the rest for later
       DRY: ${{ github.event.inputs.dry_run }}
       RECHECK: ${{ github.event.inputs.recheck }}
+      SINCE_IN: ${{ github.event.inputs.since }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -105,7 +109,7 @@ jobs:
           # a manual run with dry_run=true changes nothing; every automatic run is real
           if [ "$DRY" = "true" ]; then echo "COMMIT=" >> "$GITHUB_ENV"; echo "DRY=true" >> "$GITHUB_ENV"; echo "DRY RUN: nothing will be written"; else echo "COMMIT=--commit" >> "$GITHUB_ENV"; echo "DRY=false" >> "$GITHUB_ENV"; echo "REAL RUN"; fi
           # Look back 3 days, but never before 11 Oct 2026: calls up to then were handled by the old job, so they must not be redone.
-          echo "SINCE=$(python3 -c "import datetime as d; print(max(d.date(2026,10,11), d.date.today()-d.timedelta(days=3)).isoformat())")" >> "$GITHUB_ENV"
+          echo "SINCE=$(python3 -c "import datetime as d,os; s=(os.environ.get('SINCE_IN') or '').strip(); f=d.date(2026,10,11); print(max(f, d.date.fromisoformat(s)) if s else max(f, d.date.today()-d.timedelta(days=3)))")" >> "$GITHUB_ENV"
       # The memory of which calls are done holds what was said on calls, so it is encrypted before GitHub stores it.
       - name: Tell the app this run has started
         continue-on-error: true
