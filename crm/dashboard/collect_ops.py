@@ -32,6 +32,7 @@ from attio_client import AttioClient, api_key  # noqa: E402
 import collect_metrics as CM  # noqa: E402
 sys.path.insert(0, str(ROOT / "crm" / "dashboard"))
 import lead_company as LC  # noqa: E402
+import lead_bucket as LB  # noqa: E402
 
 OUT = ROOT / "data/working/ops.json"
 SCHEMA = ROOT / "crm/schema/attio-schema.yaml"
@@ -43,7 +44,7 @@ CALLS_FROM = "2026-10-11"   # the call job on the public repo starts here; older
 OPEN_STAGES = {"Interested", "Multi-touch", "Meeting Booked", "Later", "Profiles Sent", "Trial"}
 # A call is an opportunity only when something was agreed or asked for. "Not now" (a polite decline with no current need) is NOT one (Ife, 2026-10-12);
 # the caller's own note decides first, so "send email" / "follow up" on a call makes it SEND_FOLLOW_UP and it appears here.
-REAL_CALL = {"MEETING_BOOKED": "meeting", "SEND_FOLLOW_UP": "followup", "CALLBACK": "callback"}
+REAL_CALL = LB.REAL_CALL
 # days after the last touch before the lead is due again
 DUE_DAYS = {"meeting": 3, "followup": 2, "callback": 1, "later": 30, "chasing": 2, "lost": 0, "won": 0}
 BUCKET_LABEL = {"meeting": "Meeting booked", "followup": "Follow up", "chasing": "Multi-touch", "callback": "Callback", "later": "Not now", "lost": "Lost", "won": "Won"}
@@ -119,7 +120,7 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
             pid = a.get("target_record_id")
             if pid:
                 r = row(pid)
-                r["deals"].append({"stage": val(d, "stage"), "url": d.get("web_url"),
+                r["deals"].append({"stage": val(d, "stage"), "since": stage_since(d), "url": d.get("web_url"),
                                    "last": val(d, "last_activity_at"),
                                    "next": val(d, "next_action_at"), "missed": val(d, "missed_followup_at"), "created": d.get("created_at"),
                                    "channel": val(d, "source_channel"), "campaign": val(d, "source_campaign"),
@@ -185,18 +186,8 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
             continue
         calls = sorted(r["calls"], key=lambda z: z["at"] or "")
         last_call = calls[-1] if calls else None
-        bucket = None
         r["deals"].sort(key=lambda dl: str(dl["stage"] or "").startswith(("Lost", "Won")))      # an open deal wins over an old closed one
-        for dl in r["deals"]:
-            b = {"Meeting Booked": "meeting", "Interested": "followup", "Multi-touch": "chasing", "Later": "later",
-                 "Profiles Sent": "followup", "Trial": "followup", "Lost": "lost", "Won 🎉": "won"}.get(dl["stage"])
-            if b and (bucket is None or bucket in ("lost", "won")):
-                bucket = b
-        if last_call and bucket not in ("lost", "won"):
-            cb = REAL_CALL[last_call["outcome"]]
-            order = {"meeting": 0, "followup": 1, "chasing": 1.5, "callback": 2, "later": 3}
-            if bucket is None or order[cb] < order.get(bucket, 9):
-                bucket = cb
+        bucket = LB.pick(r["deals"], last_call)      # lead_bucket.py: the deal's stage, a call only when it came after the stage was set
         if bucket is None:
             continue
         # last touch = the most recent of: a deal activity, a call, the last reply
