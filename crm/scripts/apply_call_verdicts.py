@@ -128,12 +128,13 @@ def main() -> int:
                 phone_back.setdefault(p["id"]["record_id"], (p, raw if raw.startswith("+") else "+" + d))
 
     for cid, r in scope.items():
-        if r["verdict"] == "NO_CONVERSATION" or direction.get(cid) != "outgoing":
-            continue
         ems = [e for e in (r.get("emails") or [])]
         if any(e in byem for e in ems):
-            want_phone(next(byem[e] for e in ems if e in byem), cid, r)
+            if r["verdict"] != "NO_CONVERSATION" and direction.get(cid) == "outgoing":
+                want_phone(next(byem[e] for e in ems if e in byem), cid, r)
             continue
+        # 2026-10-17: the phone match runs for EVERY call. It used to sit behind the "outgoing real conversation" test below, so a
+        # NO_CONVERSATION or inbound call whose contact has no email never reached the person it belongs to, and got no note.
         ph = byph.get(dig(numbers.get(cid)))
         if ph:                       # already in the CRM, just under a different key
             key = f"cid:{cid}"
@@ -141,6 +142,8 @@ def main() -> int:
             r.setdefault("emails", []).append(key)
             matched_by_phone += 1
             continue
+        if r["verdict"] == "NO_CONVERSATION" or direction.get(cid) != "outgoing":
+            continue                 # naming or creating a person needs a real outbound conversation
         nm = (r.get("name") or "").strip()
         if not nm or nm.lower().startswith("lead from"):
             # no name at all — a number and a transcript is not enough to build a person on

@@ -41,6 +41,44 @@ def is_empty(p) -> bool:
     return not (v.get("relationship_stage") or v.get("email_addresses") or v.get("company") or v.get("linkedin"))
 
 
+CALL_SRC = "CloudTalk outbound call"
+# what apply_call_verdicts.py wrote onto a person it made from a call: moved onto the real person when the duplicate goes
+CALL_FIELDS = ("relationship_stage", "outreach_status", "nurture_status", "outreach_paused", "last_outreach_result",
+               "last_outreach_channel", "last_reply_summary", "due_status", "phone_status")
+PROTECTED = {"CUSTOMER", "LOST"}
+
+
+def is_call_dup(p) -> bool:
+    """2026-10-17: a person apply_call_verdicts.py CREATED from a call because its phone lookup missed the real person (Attio's
+    10-digit $contains search, fixed in attio_fast.by_phone10). Not empty (it has a stage), so the twin rule above never saw it.
+    Only merged with --call-dups: these carry the call's outcome, which moves to the real person."""
+    v = p.get("values") or {}
+    src = str((val(p, "legacy_source") or {}).get("value") or "")
+    return src == CALL_SRC and not (v.get("email_addresses") or v.get("company") or v.get("linkedin"))
+
+
+def opt(p, k):
+    x = val(p, k) or {}
+    o = x.get("option")
+    return (o or {}).get("title") if isinstance(o, dict) else x.get("value")
+
+
+def moves(dup, real) -> dict:
+    """The call fields the real person would take from the duplicate (only when they differ, never onto a customer, Lost or DNC)."""
+    if opt(real, "relationship_stage") in PROTECTED or opt(real, "dnc_status") == "DO_NOT_CONTACT":
+        return {}
+    if opt(dup, "last_outreach_channel") != "CALL":
+        return {}           # only the creation defaults (ENGAGED, PAUSED): no call outcome to carry, the real person keeps its own state
+    out = {}
+    for k in CALL_FIELDS:
+        dv = (dup.get("values") or {}).get(k) or []
+        if dv and opt(dup, k) != opt(real, k):
+            x = dv[0]
+            o = x.get("option")
+            out[k] = [{"option": o.get("title")}] if isinstance(o, dict) else [{"value": x.get("value")}]
+    return out
+
+
 def first(p) -> str:
     n = val(p, "name") or {}
     return str(n.get("first_name") or n.get("full_name") or "").strip().lower().split(" ")[0]
@@ -50,6 +88,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--commit", action="store_true")
     ap.add_argument("--days", type=int, default=0, help="only twins created in the last N days (0 = all)")
+    ap.add_argument("--call-dups", action="store_true", help="also merge people the call job created as duplicates (see is_call_dup); off in the daily job")
     a = ap.parse_args()
     c = AttioClient(workers=6)
     cut = (datetime.now(timezone.utc) - timedelta(days=a.days)).isoformat() if a.days else ""
@@ -64,16 +103,34 @@ def main() -> int:
     for t, ids in by.items():
         if len(ids) < 2:
             continue
-        empties = [i for i in ids if is_empty(allp[i]) and (not cut or allp[i]["created_at"] >= cut)]
-        reals = [i for i in ids if not is_empty(allp[i])]
+        dups = [i for i in ids if a.call_dups and is_call_dup(allp[i]) and (not cut or allp[i]["created_at"] >= cut)]
+        empties = [i for i in ids if is_empty(allp[i]) and (not cut or allp[i]["created_at"] >= cut)] + dups
+        reals = [i for i in ids if not is_empty(allp[i]) and i not in dups]
         for e in empties:
             m = [r for r in reals if first(allp[r]) and first(allp[r]) == first(allp[e])] or ([reals[0]] if len(reals) == 1 and (not first(allp[e]) or first(allp[reals[0]]).startswith(first(allp[e])[:3])) else [])
             if len(m) != 1:
-                skipped["no single matching real person"] += 1; continue
+                skipped["no single matching real person" + (" (call duplicate)" if e in dups else "")] += 1; continue
             plan.append((e, m[0]))
     plan = list({e: (e, r) for e, r in plan}.values())
-    print(f"{len(plan)} empty twin(s) to merge, skipped: {dict(skipped) or 'none'}")
+    ndup = sum(1 for e, _ in plan if is_call_dup(allp[e]))
+    print(f"{len(plan) - ndup} empty twin(s) and {ndup} call-made duplicate(s) to merge, skipped: {dict(skipped) or 'none'}")
+    if ndup:
+        f = collections.Counter(k for e, r in plan if is_call_dup(allp[e]) for k in moves(allp[e], allp[r]))
+        prot = sum(1 for e, r in plan if is_call_dup(allp[e]) and not moves(allp[e], allp[r]) and (opt(allp[r], "relationship_stage") in PROTECTED or opt(allp[r], "dnc_status") == "DO_NOT_CONTACT"))
+        print(f"   call fields that would move to the real person: {dict(f) or 'none'}; real person is customer/Lost/DNC (fields kept): {prot}")
     if not a.commit:
+        if ndup:
+            n = collections.Counter()
+            for e, r in plan:
+                if not is_call_dup(allp[e]):
+                    continue
+                have = {(x["title"], x["created_at"][:16]) for x in c.req("GET", "/notes", params={"parent_object": "people", "parent_record_id": r, "limit": 50}).json().get("data", [])}
+                for x in c.req("GET", "/notes", params={"parent_object": "people", "parent_record_id": e, "limit": 50}).json().get("data", []):
+                    n["note would be copied" if (x["title"], x["created_at"][:16]) not in have else "note already there"] += 1
+                n["list entries on the duplicate"] += len(c.req("GET", f"/objects/people/records/{e}/entries").json().get("data", []))
+                if c.req("POST", "/objects/deals/records/query", json={"filter": {"associated_people": {"target_object": "people", "target_record_id": e}}, "limit": 1}).json().get("data"):
+                    n["duplicate owns a deal (would be left alone)"] += 1
+            print(f"   call duplicates, what would move: {dict(n)}")
         print("DRY RUN, nothing changed. Pass --commit.")
         return 0
 
@@ -113,6 +170,13 @@ def main() -> int:
             if res.status_code >= 300:
                 out["FAILED copying a list entry"] += 1; return out
             out["entry copied"] += 1
+        if is_call_dup(allp[e]):
+            mv = moves(allp[e], allp[r])
+            if mv:
+                pr = c.req("PATCH", f"/objects/people/records/{r}", json={"data": {"values": mv}})
+                if pr.status_code >= 300:
+                    out["FAILED moving the call fields"] += 1; return out
+                out["call fields moved"] += 1
         d = c.req("DELETE", f"/objects/people/records/{e}")
         out["twin deleted" if d.status_code < 300 else "FAILED deleting the twin"] += 1
         return out
