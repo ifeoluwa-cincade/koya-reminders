@@ -25,18 +25,27 @@ permissions: {}
 # so on that push only this job first waits 10 minutes (Call dispositions runs at once, Call list labels at 4 minutes, the Dashboard build
 # is mostly done by 10). The wait is its own job with no concurrency group, so a real reply that arrives meanwhile is never held up by it.
 # The concurrency group sits on the real job: two CRM syncs still never overlap.
+# The push itself never syncs: after the wait it hands over to the same workflow on MAIN. A sync on the crm-trigger branch would restore
+# the aiark-phone-enc-* memory of THAT branch (GitHub caches are per branch) and look phones up a second time. On main there is one memory.
 jobs:
   stagger:
     if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 14
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Wait 10 minutes so the hourly jobs do not all call CloudTalk at once
         run: sleep 600
+      - name: Start the CRM sync on main
+        run: |
+          gh workflow run crm_sync.yml -R "$GITHUB_REPOSITORY" --ref main -f dry_run=false
+          echo "started the hourly sync on main"
 
   sync:
-    needs: stagger
-    if: ${{ !cancelled() && needs.stagger.result != 'failure' }}
+    if: ${{ github.event_name != 'push' }}
     concurrency:
       group: crm-sync
       cancel-in-progress: false

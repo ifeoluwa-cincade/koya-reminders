@@ -18,12 +18,34 @@ on:
 permissions:
   actions: read
 
-concurrency:
-  group: dashboard-build
-  cancel-in-progress: false
-
+# The concurrency group sits on the build job (not the whole workflow) so the cheap hand-over job below never waits behind a build.
 jobs:
+  # The hourly routine pushes to the crm-trigger branch. A build on that branch reads the caches of THAT branch first (GitHub scopes caches
+  # per branch and prefers the current branch's), so it could restore an old "call-state-enc-*" memory saved on crm-trigger and count calls
+  # from stale data. So the push only starts the same build on main (which reads and shares main's newest cache), like Call dispositions does.
+  # The build never SAVES a call-state cache (it restores read-only), so main stays the only writer and nothing is looked up twice.
+  handoff:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: write
+    concurrency:
+      group: dashboard-build-handoff
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Start the dashboard build on main
+        run: |
+          gh workflow run crm_dashboard.yml -R "$GITHUB_REPOSITORY" --ref main -f test=false
+          echo "started the hourly build on main"
+
   build:
+    if: ${{ github.event_name != 'push' }}
+    concurrency:
+      group: dashboard-build
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -88,11 +110,22 @@ jobs:
       - name: Pull PlusVibe numbers
         run: python crm/scripts/collect_metrics.py --days 40 --plusvibe-only
       - name: Restore the health-check history from the private repository
+        id: restore
         continue-on-error: true
         run: |
           rm -rf /tmp/store && mkdir /tmp/store && cd /tmp/store && git init -q
           git remote add origin "git@github.com:${PRIVATE_STORE_REPO}.git"
-          git fetch -q --depth 1 origin dashboard-build
+          # RESTORE_OK=1 only when the private repository answered. If it could not be read, the save step below is skipped: saving a build
+          # made without the history would force-push over check_history.json and cloudtalk_link_cache.json and wipe them.
+          if git fetch -q --depth 1 origin dashboard-build; then
+            echo "RESTORE_OK=1" >> "$GITHUB_ENV"
+          elif git ls-remote --exit-code --heads origin dashboard-build >/dev/null 2>&1; then
+            echo "the private repository has the branch but it could not be fetched"; exit 1
+          elif git ls-remote origin >/dev/null 2>&1; then
+            echo "private repository reachable, branch not created yet (first run)"; echo "RESTORE_OK=1" >> "$GITHUB_ENV"; exit 0
+          else
+            echo "the private repository could not be reached"; exit 1
+          fi
           mkdir -p "$GITHUB_WORKSPACE/data/working"
           git show FETCH_HEAD:check_history.json > "$GITHUB_WORKSPACE/data/working/check_history.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/check_history.json"
           git show FETCH_HEAD:ops_last_good.json > "$GITHUB_WORKSPACE/data/working/ops_last_good.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/ops_last_good.json"
@@ -103,8 +136,9 @@ jobs:
       - name: Build the page
         run: python crm/dashboard/build_cold_email.py
       - name: Upload the page to the team app (private storage, never this repository)
+        id: upload
         if: ${{ env.TEST != 'true' }}
-        continue-on-error: true
+        continue-on-error: true       # so the save to the private repository below still happens; the failure is raised at the end ("Fail the run if...")
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -114,6 +148,7 @@ jobs:
             -H "Content-Type: text/html" -H "x-upsert: true" --data-binary @data/working/koya_cold_email.html
           echo "page uploaded to the team app"
       - name: Save the built page in the private repository
+        if: ${{ env.RESTORE_OK == '1' }}
         run: |
           set -e
           rm -rf /tmp/out && mkdir /tmp/out
@@ -142,6 +177,12 @@ jobs:
           git commit -q -m "Dashboard build $(cat built_at.txt)"
           git push -q --force "git@github.com:${PRIVATE_STORE_REPO}.git" "$TARGET_BRANCH"
           echo "saved to branch $TARGET_BRANCH in the private repository"
+      - name: Fail the run if the history could not be restored or the upload failed
+        if: ${{ env.RESTORE_OK != '1' || steps.upload.outcome == 'failure' }}
+        run: |
+          [ "$RESTORE_OK" != "1" ] && echo "::error::History could not be restored from the private repository: the page was NOT saved there (nothing was overwritten)."
+          [ "${{ steps.upload.outcome }}" = "failure" ] && echo "::error::The page was NOT uploaded to the team app."
+          exit 1
       - name: Tell the team app how the build ended
         if: ${{ always() && env.TEST != 'true' }}
         continue-on-error: true
