@@ -111,6 +111,71 @@ class AttioClient:
             raise last
         return r        # the last answer (a 429 or a 5xx) after every retry
 
+    # ---- idempotent note creation ----
+    # A POST that times out (or answers 5xx) may still have created the note. Retrying it blindly made duplicate
+    # notes. So every note we create carries a stable last line "ref: <marker>", and before each retry we look
+    # for a note on the same record with that line. Found = the earlier attempt worked: stop, nothing is sent twice.
+
+    @staticmethod
+    def note_ref(marker: str) -> str:
+        return f"ref: {marker}"
+
+    def find_note_with_marker(self, parent_object: str, parent_record_id: str, marker: str) -> dict | None:
+        """The existing note on this record that carries this marker, or None. Raises if the notes cannot be read
+        (the caller must not guess 'not there' and post a second copy)."""
+        line, off = self.note_ref(marker), 0
+        while True:
+            r = self.req("GET", "/notes", params={"parent_object": parent_object, "parent_record_id": parent_record_id,
+                                                  "limit": 50, "offset": off})
+            if r.status_code >= 300:
+                raise RuntimeError(f"Attio notes read failed {r.status_code}")
+            data = r.json().get("data", [])
+            for n in data:
+                text = (n.get("content_plaintext") or "") + "\n" + (n.get("content_markdown") or "")
+                if any(l.strip() == line for l in text.splitlines()):
+                    return n
+            if len(data) < 50 or off >= 1000:
+                return None
+            off += 50
+
+    def create_note(self, data: dict, marker: str, tries: int = 6, check_first: bool = False):
+        """POST /notes at most once in effect. `data` is the note body (parent_object, parent_record_id, title,
+        format, content, ...); the marker line is appended to the content. Returns (status_code, note_or_None, existed).
+        check_first=True also looks before the first attempt (for callers with no duplicate check of their own)."""
+        data = dict(data)
+        line = self.note_ref(marker)
+        if line not in (data.get("content") or ""):
+            data["content"] = ((data.get("content") or "").rstrip() + "\n\n" + line).lstrip()
+        po, pid = data["parent_object"], data["parent_record_id"]
+        if check_first:
+            found = self.find_note_with_marker(po, pid, marker)
+            if found:
+                return 200, found, True
+        delay, last_status = 1.5, None
+        for i in range(tries):
+            if i:                                      # an earlier attempt failed in a way that may still have written: look first
+                time.sleep(delay); delay *= 1.7
+                try:
+                    found = self.find_note_with_marker(po, pid, marker)
+                except Exception:                     # cannot tell: stop rather than risk a second copy
+                    break
+                if found:
+                    return 200, found, True
+            try:
+                r = self.req("POST", "/notes", tries=1, json={"data": data})
+            except requests.exceptions.RequestException:
+                last_status = None
+                continue
+            if r.status_code < 300:
+                try:
+                    return r.status_code, r.json().get("data"), False
+                except ValueError:
+                    return r.status_code, None, False
+            last_status = r.status_code
+            if r.status_code != 429 and r.status_code < 500:
+                return r.status_code, None, False     # a plain 4xx: the note was refused, not written
+        return (last_status or 599), None, False
+
     def map(self, fn, items, label: str = ""):
         """Run fn over items across the pool, reporting progress."""
         out, done, total, t0 = [], 0, len(items), time.monotonic()

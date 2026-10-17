@@ -94,10 +94,11 @@ def main() -> int:
             if (n["title"], n["created_at"][:16]) in have:
                 out["note already on the real person"] += 1; continue
             body = {"parent_object": "people", "parent_record_id": r, "title": n["title"], "format": "markdown", "content": n.get("content_markdown") or n.get("content_plaintext") or "", "created_at": n["created_at"]}
-            res = c.req("POST", "/notes", json={"data": body})
-            if res.status_code >= 300:
-                body.pop("created_at"); res = c.req("POST", "/notes", json={"data": body})
-            if res.status_code >= 300:
+            mk = f"copy-{(n.get('id') or {}).get('note_id') or n['created_at']}"     # a retried copy never lands twice
+            st, _, _ = c.create_note(body, marker=mk, check_first=True)
+            if 400 <= st < 500 and st != 429:                                       # created_at refused: copy without it
+                body.pop("created_at"); st, _, _ = c.create_note(body, marker=mk)
+            if st >= 300:
                 out["FAILED copying a note"] += 1; return out
             out["note copied"] += 1
         real_lists = {x.get("list_api_slug") for x in entries(r)}

@@ -302,12 +302,14 @@ def main() -> int:
                 if nid and t_old.startswith(prefix) and t_old != title and t_old.startswith("Call · "):
                     c.req("DELETE", f"/notes/{nid}")
                     have.discard(t_old)
-            r = c.req("POST", "/notes", json={"data": {
+            # create_note never posts twice: a retry first looks for this call's ref line (a timed-out POST may have written)
+            st, _, _ = c.create_note({
                 "parent_object": "people", "parent_record_id": rid,
-                "title": title, "format": "plaintext", "content": head + "\n\n" + body}})
-            bump("w", int(r.status_code < 300))
-            fresh += r.status_code < 300
-            if r.status_code >= 300:
+                "title": title, "format": "plaintext", "content": head + "\n\n" + body},
+                marker=f"ct-call-{x['cid']}-{x['verdict']}")
+            bump("w", int(st < 300))
+            fresh += st < 300
+            if st >= 300:
                 failed.add(rid)
         if not best or cur in PROTECTED or not fresh:
             return

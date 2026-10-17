@@ -192,15 +192,16 @@ def main() -> int:
         r = c.req("PATCH", f"/objects/deals/records/{rid}", json={"data": {"values": vals}})
         if r.status_code >= 300:
             bad += 1; print(f"   MOVE FAIL {r.status_code} {_why(r)}"); continue
-        n = c.req("POST", "/notes", json={"data": {
+        st, _, _ = c.create_note({                       # a retry never posts the same note twice (looks for the ref line first)
             "parent_object": "deals", "parent_record_id": rid, "format": "plaintext",
             "title": f"Moved {frm} → {to} (automatic)",
             "content": (f"{date.today().isoformat()}: {email} is now labelled {label} in PlusVibe "
                         f"({camp}), so this deal moved from {frm} to {to}"
                         + (f" with lost reason {reason}" if reason else "")
-                        + ". Moved by crm/scripts/deals_follow_labels.py.")}})
-        if n.status_code >= 300:
-            bad += 1; print(f"   NOTE FAIL {n.status_code} {_why(n)}")
+                        + ". Moved by crm/scripts/deals_follow_labels.py.")},
+            marker=f"label-move-{date.today().isoformat()}-{label}-{to}".replace(" ", "_"))
+        if st >= 300:
+            bad += 1; print(f"   NOTE FAIL {st}")
     print(f"{len(plan) - bad} moved, {bad} problems")
     return 1 if bad else 0
 
