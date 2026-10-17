@@ -1412,17 +1412,20 @@
     var note=document.getElementById("liveNote"); if(note) note.textContent="Opening that lead from Attio…";
     MCP.callTool("Attio","get-records-by-ids",{object:"people",record_ids:[id]},{cache:false}).then(function(r){
       var pb=attioBlocks(txt(r))[id]; if(!pb){ if(note) note.textContent="That lead was not found in Attio."; return null; }
-      var dm=pb.match(/associated_deals[^\n]*\n\s+deals,[0-9a-f-]{36},([0-9a-f-]{36})/), did=dm?dm[1]:null;
-      var p2=did?MCP.callTool("Attio","get-records-by-ids",{object:"deals",record_ids:[did]},{cache:false}):Promise.resolve(null);
+      var dids=dealRefsOf(pb);
+      var p2=dids.length?MCP.callTool("Attio","get-records-by-ids",{object:"deals",record_ids:dids.slice(0,20)},{cache:false}):Promise.resolve(null);
       return p2.then(function(r2){
-        var db=r2?attioBlocks(txt(r2))[did]:null, dname=attioVal(db,"name")||"", stage=attioVal(db,"stage")||"", nx=attioVal(db,"next_action_at"), ms=nx?null:attioVal(db,"missed_followup_at");
+        var DB=r2?attioBlocks(txt(r2)):{}, all=dids.map(function(x){ return [x,DB[x]]; }).filter(function(x){ return x[1]; });
+        all.sort(function(a,b){ return (/^(Won|Lost)/.test(attioVal(a[1],"stage")||"")?1:0)-(/^(Won|Lost)/.test(attioVal(b[1],"stage")||"")?1:0); });      // an open deal wins over a closed one
+        var did=all.length?all[0][0]:null, db=all.length?all[0][1]:null, dname=attioVal(db,"name")||"", stage=attioVal(db,"stage")||"", nx=attioVal(db,"next_action_at"), ms=nx?null:attioVal(db,"missed_followup_at");
         var em=(pb.match(/email_addresses\[\d+\]:\s*(\S+)/)||[])[1]||null, li=attioVal(pb,"linkedin");
-        var bk=stageBucket(stage)||"followup", parts=dname.split("/");
-        var o={id:id,name:attioVal(pb,"name")||dname,company:parts.length>1?parts.slice(1).join("/").trim():null,email:em,phone:null,linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:stage,source:"Email",
+        var closed=/^(Won|Lost)/.test(stage), bk=closed?(/^Won/.test(stage)?"won":"lost"):(stageBucket(stage)||"followup"), coid=coRefOf(pb);
+        var pls=all.map(function(x){ var n=placementOf(x[1]); return n?{name:n,stage:attioVal(x[1],"stage"),deal:"https://app.attio.com/koya-talent/deals/record/"+x[0]}:null; }).filter(Boolean);
+        var o={id:id,name:attioVal(pb,"name")||dname,company:coid?null:coFromDealName(db),_coid:coid,placements:pls,closed_at:closed?(nextIso(attioVal(db,"close_date"))||nextIso(attioVal(db,"stage_since"))):null,reason:closed?attioVal(db,"lost_reason"):null,email:em,phone:null,linkedin:li,bucket:bk,status:closed?(bk==="won"?"Won":"Lost"):BUCKET_NAME[bk],stage:stage,source:"Email",
           last_touch:null,due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,missed:ms||null,summary:null,call_at:null,attempts:null,campaign:null,
           links:{attio:"https://app.attio.com/koya-talent/person/"+id,deal:did?"https://app.attio.com/koya-talent/deals/record/"+did:null,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[]};
-        OPPS.push(o); var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=oppNL().length; if(note) note.textContent="";
-        openPanel(id);
+        if (closed) CLOSED.push(o); else OPPS.push(o); var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=oppNL().length; if(note) note.textContent="";
+        openPanel(id); liveCompanies([o]);
       });
     }).catch(function(e){ if(note) note.textContent="Could not open that lead: "+errText(e); });
   }
@@ -1652,7 +1655,7 @@
     var tools=[[pv,L.plusvibe?"Open conversation":"PlusVibe","PlusVibe"],[li,liLabel,nolink?"Find on LinkedIn":"LinkedIn"],[L.website,"Website","Website"],[L.attio,"Attio","Attio"],[L.deal,"Deal","Deal"],[L.cloudtalk,"CloudTalk","CloudTalk"]];
     var html='<div class="phd"><div class="phead"><div class="pidw"><span class="pav">'+esc(pInit(o.name||o.email))+'</span><div class="pnm"><div class="ptitle">'+esc(o.name||o.email)+'</div><div class="psub">'+esc(o.company||"")+'</div></div></div><button class="pclose" id="pclose" type="button" aria-label="Close">✕</button></div>'+
       '<div class="pcont">'+(o.email?'<span>'+esc(o.email)+pCopy(o.email)+'</span>':'')+(o.phone?'<span>'+esc(o.phone)+pCopy(o.phone)+'</span>':'')+'</div>'+
-      '<div class="ptags pchips">'+(o.resolved?'<span class="tag closedtag">Closed</span>':'')+'<span class="tag '+o.bucket+'">'+esc(stLabel(o))+'</span><span class="pchip">Last touch <b>'+esc(relAgo(o.last_touch))+'</b></span><span class="pchip">Source <b>'+esc(o.source)+'</b></span>'+(o.campaign?'<span class="pchip">Campaign <b>'+esc(o.campaign)+'</b></span>':'')+'</div>'+
+      '<div class="ptags pchips">'+(o.resolved?'<span class="tag closedtag">Closed</span>':'')+'<span class="tag '+o.bucket+'">'+esc(stLabel(o))+'</span><span class="pchip">Last touch <b>'+esc(relAgo(o.last_touch))+'</b></span><span class="pchip">Source <b>'+esc(o.source)+'</b></span>'+(o.campaign?'<span class="pchip">Campaign <b>'+esc(o.campaign)+'</b></span>':'')+(plText(o)?'<span class="pchip pplace">'+esc(plText(o).split(": ")[0])+' <b>'+esc(plText(o).split(": ").slice(1).join(": "))+'</b></span>':'')+'</div>'+
       pBar(o,d)+
       '<div class="plinks ptools">'+tools.map(function(x){ return pTool(x[0],x[1],x[2]); }).join("")+'<span class="psp"></span>'+(ARTIFACT_URL?'<button type="button" class="pico" id="copyLeadLink" data-tip="Copy link to this lead" aria-label="Copy link to this lead">'+svgIcon("link")+'</button>':'')+'<button type="button" class="pico" data-chatlead="'+esc(o.id)+'" data-tip="Message the team about this lead" aria-label="Message the team about this lead"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 01-11.6 7.1L4 20l1-4.6A8 8 0 1121 12z"/></svg></button></div></div>'+
       pTabsHTML(o)+
@@ -1691,6 +1694,20 @@
   // Attio answers in readable "key: value" blocks, one block per record
   function attioBlocks(t){ var out={}; (t||"").split(/\n\s*-\s+record_id:\s*/).slice(1).forEach(function(b){ var id=(b.match(/^([0-9a-f-]{36})/)||[])[1]; if(id) out[id]=b; }); return out; }
   function attioVal(block,key){ var m=(block||"").match(new RegExp("\\n\\s+"+key+":\\s*(.+)")); if(!m) return null; return m[1].trim().replace(/^"|"$/g,""); }
+  // the company comes from the person's linked company record (Attio block "company[1]:\n    companies,<ws>,<id>"), never from a deal name
+  function coRefOf(pb){ var m=(pb||"").match(/\n\s+company\[\d+\]:\s*\n\s+companies,[0-9a-f-]{36},([0-9a-f-]{36})/); return m?m[1]:null; }
+  function dealRefsOf(pb){ var out=[], m=(pb||"").match(/\n\s+associated_deals\[\d+\]:((?:\s*\n\s+deals,[0-9a-f-]{36},[0-9a-f-]{36})+)/); if(m) m[1].replace(/deals,[0-9a-f-]{36},([0-9a-f-]{36})/g,function(_,id){ out.push(id); }); return out; }
+  // placement-tracker deals are "<client> / <developer placed>" (external id aat-...): the second half is a developer, not a company
+  function placementOf(db){ var ext=attioVal(db,"external_opportunity_id")||"", nm=attioVal(db,"name")||""; return (/^aat-/.test(ext)&&nm.indexOf(" / ")>0)?nm.split(" / ").slice(1).join(" / ").trim():null; }
+  // last resort only, for a deal this page named "<lead> / <company>"; never for a placement deal
+  function coFromDealName(db){ var nm=attioVal(db,"name")||""; if(!db||placementOf(db)||/^aat-/.test(attioVal(db,"external_opportunity_id")||"")) return null; var parts=nm.split(" / "); return parts.length===2?(parts[1].trim()||null):null; }
+  // fill o.company from the linked company records (one read for all), then redraw
+  function liveCompanies(list){ list=(list||[]).filter(function(o){ return o._coid; }); if(!list.length||!MCP) return Promise.resolve();
+    var ids=list.map(function(o){ return o._coid; }).filter(function(x,i,a){ return a.indexOf(x)===i; });
+    return MCP.callTool("Attio","get-records-by-ids",{object:"companies",record_ids:ids},{cache:false}).then(function(r){ var C=attioBlocks(txt(r));
+      list.forEach(function(o){ var cb=C[o._coid], nm=cb&&attioVal(cb,"name"), dom=cb&&attioVal(cb,"domains"); if(nm) o.company=cleanCo(nm); if(dom&&o.links&&!o.links.website) o.links.website="https://"+dom; });
+      if(tab==="opps") renderOpps(); if(openId&&list.some(function(o){ return o.id===openId; })) openPanel(openId,true); }).catch(function(){}); }
+  function plText(o){ var pl=(o.placements||[]).map(function(x){ return x.name; }).filter(Boolean); return pl.length?(pl.length+" placement"+(pl.length>1?"s":"")+": "+pl.join(", ")):""; }
   function fmtWhen(iso){ var t=new Date(iso).getTime(); if(isNaN(t)) return "—"; var d=new Date(t+3600000), p=function(x){ return (x<10?"0":"")+x; }; return DOW[d.getUTCDay()]+" "+d.getUTCDate()+" "+MON[d.getUTCMonth()]+", "+p(d.getUTCHours())+":"+p(d.getUTCMinutes())+" Lagos"; }
   function dealIdOf(o){ var u=(o.links&&o.links.deal)||""; var m=u.match(/([0-9a-f-]{36})\s*$/); return m?m[1]:null; }
   function pvJson(r){ var t=txt(r), i=t.search(/[\[{]/); if(i<0) return null; try{ return JSON.parse(t.slice(i)); }catch(e){ return null; } }
@@ -1731,8 +1748,8 @@
         var P=attioBlocks(txt(r2)), added=0;
         fresh.forEach(function(f){ var pb=P[f.pid]; if(!pb||oppById(f.pid)) return;
           var dname=attioVal(f.b,"name")||"", nx=attioVal(f.b,"next_action_at"), em=(pb.match(/email_addresses\[\d+\]:\s*(\S+)/)||[])[1]||null, li=attioVal(pb,"linkedin"), ch=attioVal(f.b,"source_channel")||"";
-          var bk=stageBucket(f.st)||"followup", parts=dname.split("/");
-          OPPS.push(tidyOpp({id:f.pid,name:attioVal(pb,"name")||dname,company:parts.length>1?parts.slice(1).join("/").trim():null,email:em,phone:((pb.match(/phone_numbers\[\d+\]:\s*(\S+)/)||[])[1]||null),linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:f.st,source:/call/i.test(ch)?"Call":"Email",
+          var bk=stageBucket(f.st)||"followup", coid=coRefOf(pb), pl=placementOf(f.b);
+          OPPS.push(tidyOpp({id:f.pid,name:attioVal(pb,"name")||dname,company:coid?null:coFromDealName(f.b),_coid:coid,placements:pl?[{name:pl,stage:f.st,deal:"https://app.attio.com/koya-talent/deals/record/"+f.did}]:[],email:em,phone:((pb.match(/phone_numbers\[\d+\]:\s*(\S+)/)||[])[1]||null),linkedin:li,bucket:bk,status:BUCKET_NAME[bk],stage:f.st,source:/call/i.test(ch)?"Call":"Email",
             last_touch:(function(){ var best=null; ["last_contacted_at","last_reply_at"].forEach(function(k){ var v=nextIso(attioVal(pb,k)); if(v&&(!best||v>best)) best=v; }); ["last_activity_at","created_at"].forEach(function(k){ var v=nextIso(attioVal(f.b,k)); if(v&&(!best||v>best)) best=v; }); var nowIso=new Date().toISOString(); return (!best||best<nowIso)?nowIso:best; })(),due:nx?((nx.match(/\d{4}-\d\d-\d\d/)||[""])[0]+"T09:00:00+00:00"):null,due_set:!!nx,summary:attioVal(pb,"last_reply_summary")||null,call_at:null,attempts:null,campaign:null,
             links:{attio:"https://app.attio.com/koya-talent/person/"+f.pid,deal:"https://app.attio.com/koya-talent/deals/record/"+f.did,linkedin:li,cloudtalk:null,plusvibe:null,plusvibe_campaign:null},thread:[],lists:[],live_new:true,live_at:Date.now()})); added++; });
         OPPS.filter(function(o){ return o.live_new && o.email && !o.sequence; }).forEach(function(o){                       // PlusVibe: where this lead is in the sequences, straight away
@@ -1744,6 +1761,7 @@
             if (tab==="opps") renderOpps(); if (openId===o.id) openPanel(o.id,true);
           }).catch(function(){});
         });
+        liveCompanies(OPPS.filter(function(o){ return o.live_new && o._coid && !o.company; }));
         if (added){ var c=document.getElementById("tabcnt-opps"); if(c) c.textContent=oppNL().length; if(tab==="opps") renderOpps(); setTimeout(function(){ if(tab==="opps") renderOpps(); },10500); var n=document.getElementById("liveNote"); if(n){ n.textContent=""; n.title=added+" new lead"+(added>1?"s":"")+" found live in Attio"; } }
       });
     }).catch(function(e){ LIVE_DISC_ERR=errText(e); var n1=document.getElementById("liveNote"); if(n1) n1.textContent="New leads could not be read live ("+LIVE_DISC_ERR+")"; });
@@ -1806,7 +1824,9 @@
         var did0=dealIdOf(o);
         if (!o.live_new && fullD && fullP && ((haveD && did0 && !D[did0]) || (haveP && !P[o.id]))){ if (o.id===openId){ o.resolved=true; return true; } gone++; return false; }      // deleted in Attio since the last hourly build (a lead whose window is open stays until the window closes)
         var db=D[dealIdOf(o)], pb=P[o.id], ds=attioVal(db,"stage"), ps=attioVal(pb,"relationship_stage");
-        if ((ds&&/^(Won|Lost)/.test(ds)) || ps==="LOST" || ps==="CUSTOMER"){ o.closedAs=(/^Won/.test(ds||"")||ps==="CUSTOMER")?"won":"lost"; o.reason=attioVal(db,"lost_reason")||o.reason||null; if (o.id===openId){ o.resolved=true; return true; } toClosed(o); gone++; return false; }
+        if ((ds&&/^(Won|Lost)/.test(ds)) || ps==="LOST" || ps==="CUSTOMER"){ o.closedAs=(/^Won/.test(ds||"")||ps==="CUSTOMER")?"won":"lost"; o.reason=attioVal(db,"lost_reason")||o.reason||null;
+          // the date it was closed = when the stage became Won / Lost; "now" only when this page saw it open a moment ago
+          o.closed_at=o.closed_at||nextIso(attioVal(db,"close_date"))||nextIso(attioVal(db,"stage_since"))||((ds&&o.stage&&!/^(Won|Lost)/.test(o.stage))?new Date().toISOString():null); if (o.id===openId){ o.resolved=true; return true; } toClosed(o); gone++; return false; }
         if (ds && ds!==o.stage){ o.stage=ds; var bk=stageBucket(ds); if(bk&&bk!==o.bucket){ o.bucket=bk; o.status=BUCKET_NAME[bk]; } changed++; }
         var nx=nextIso(attioVal(db,"next_action_at")); if (nx){ o.due=nx; o.due_set=true; o.missed=null; } else if (db){ if (o.due_set){ o.due_set=false; o.due=null; changed++; } var ms2=nextIso(attioVal(db,"missed_followup_at"))||null; if ((o.missed||null)!==ms2){ o.missed=ms2; changed++; } }
         o.li_conn=attioVal(pb,"linkedin_connection")||null;
@@ -2016,10 +2036,10 @@
     return '<h4>Open, ongoing or resolved</h4><div class="stagechips" id="rrev" role="group" aria-label="Open, ongoing or resolved">'+[["open","Open"],["ongoing","Ongoing"],["done","Resolved"]].map(function(x){ return '<button type="button" class="schip" data-rev="'+x[0]+'" aria-pressed="'+(revState(o.id)===x[0])+'"'+(db?'':' disabled')+'>'+x[1]+'</button>'; }).join("")+'</div><p class="tnote">Open: not looked at yet. Ongoing: being worked. Resolved: checked, notes written, follow-up set, nothing left to do.</p>';
   }
   function toClosed(o){
-    o.bucket=o.closedAs==="won"?"won":"lost"; o.status=o.bucket==="won"?"Won":"Lost"; o.stage=o.bucket==="won"?"Won 🎉":"Lost"; o.closed_at=o.closed_at||new Date().toISOString(); o.resolved=false;
+    o.bucket=o.closedAs==="won"?"won":"lost"; o.status=o.bucket==="won"?"Won":"Lost"; o.stage=o.bucket==="won"?"Won 🎉":"Lost"; o.closed_at=o.closed_at||null; o.resolved=false;
     if (!CLOSED.some(function(x){ return x.id===o.id; })) CLOSED.push(o);
-    if (db){ var slim={id:o.id,name:o.name,company:o.company,email:o.email,phone:o.phone,source:o.source,status:o.status,bucket:o.bucket,stage:o.stage,reason:o.reason||null,closed_at:o.closed_at,last_touch:o.last_touch,links:o.links||{},notes:[]};
-      try{ db.doc("closed/"+o.id).set({snap:JSON.stringify(slim),t:o.closed_at}).catch(function(){}); }catch(e){} }
+    if (db){ var slim={id:o.id,name:o.name,company:o.company,email:o.email,phone:o.phone,source:o.source,status:o.status,bucket:o.bucket,stage:o.stage,reason:o.reason||null,closed_at:o.closed_at,last_touch:o.last_touch,links:o.links||{},placements:o.placements||[],notes:[]};
+      try{ db.doc("closed/"+o.id).set({snap:JSON.stringify(slim),t:o.closed_at||new Date().toISOString()}).catch(function(){}); }catch(e){} }
   }
   var HIDDEN=[];                                                          // notes hidden on the dashboard (shared). Attio keeps them: its connector cannot delete a note
   function isHidden(o,n){ return HIDDEN.some(function(h){ return h.key===n.id || (h.pid===o.id && h.text===n.text); }); }

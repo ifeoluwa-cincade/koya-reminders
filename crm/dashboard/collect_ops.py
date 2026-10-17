@@ -70,6 +70,29 @@ def val(rec, slug):
             or x.get("value") or x.get("target_record_id") or x.get("domain"))
 
 
+def stage_since(d):
+    """When the deal's current stage was set (Attio keeps it as active_from on the stage value)."""
+    x = (d["values"].get("stage") or [{}])[0]
+    return x.get("active_from")
+
+
+def closed_on(d):
+    """Won / Lost date: the close_date when someone filled it, else the moment the stage became Won / Lost."""
+    if not str(val(d, "stage") or "").startswith(("Lost", "Won")):
+        return None
+    t = parse(val(d, "close_date") or stage_since(d))      # Attio gives nanoseconds; the page's Date() wants a plain ISO time
+    return t.isoformat() if t else None
+
+
+def placement_of(d):
+    """Placement-tracker deals are named '<client> / <developer placed>' (crm/scripts/load_placements.py, external id 'aat-...').
+    The second half is the DEVELOPER, not a company: returned here so the page can list the placements."""
+    ext, name = str(val(d, "external_opportunity_id") or ""), str(val(d, "name") or "")
+    if ext.startswith("aat-") and " / " in name:
+        return name.split(" / ", 1)[1].strip() or None
+    return None
+
+
 def vals(rec, slug):
     return rec["values"].get(slug) or []
 
@@ -78,8 +101,11 @@ def vals(rec, slug):
 def collect_opportunities(c: AttioClient) -> list[dict]:
     # open deals, plus deals closed (Won / Lost) after the 1 Oct bulk import: those are real decisions made since the dashboard started
     CLOSED_AFTER = "2026-10-02"
+    # "after the import" is judged by WHEN THE STAGE BECAME Won/Lost, not when the deal was created: placement deals were all
+    # created by the 1 Oct import, so one moved Trial -> Won on 8 Oct was left out of the build and only appeared when a page
+    # opened it live (Benjamin at Stratishield AI, 17 Oct 2026)
     deals = [d for d in c.query_all("deals") if val(d, "stage") in OPEN_STAGES
-             or (str(val(d, "stage") or "").startswith(("Lost", "Won")) and str(d.get("created_at") or "") >= CLOSED_AFTER)]
+             or (str(val(d, "stage") or "").startswith(("Lost", "Won")) and str(stage_since(d) or d.get("created_at") or "") >= CLOSED_AFTER)]
     print(f"  open deals: {sum(1 for d in deals if val(d, 'stage') in OPEN_STAGES)}, closed since the import: {sum(1 for d in deals if val(d, 'stage') not in OPEN_STAGES)}")
     people: dict[str, dict] = {}                     # person record id -> accumulating row
 
@@ -95,7 +121,8 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
                                    "last": val(d, "last_activity_at"),
                                    "next": val(d, "next_action_at"), "missed": val(d, "missed_followup_at"), "created": d.get("created_at"),
                                    "channel": val(d, "source_channel"), "campaign": val(d, "source_campaign"),
-                                   "reason": val(d, "lost_reason"), "close": val(d, "close_date")})
+                                   "reason": val(d, "lost_reason"), "close": closed_on(d),
+                                   "name": val(d, "name"), "placement": placement_of(d), "company_id": val(d, "associated_company")})
                 r["src"].add("email" if (val(d, "source_channel") or "").lower() == "cold email" else "deal")
 
     # call-list entries with a real result
@@ -134,7 +161,8 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
         return pid, (r.json().get("data") if r.status_code < 300 else None)
 
     got = dict(ThreadPoolExecutor(max_workers=6).map(fetch_person, list(people)))
-    comp_ids = {val(p, "company") for p in got.values() if p and val(p, "company")}
+    comp_ids = {val(p, "company") for p in got.values() if p and val(p, "company")} | {
+        dl["company_id"] for r in people.values() for dl in r["deals"] if dl.get("company_id")}
 
     def fetch_company(cid):
         r = c.req("GET", f"/objects/companies/records/{cid}")
@@ -150,7 +178,8 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
         stage = val(p, "relationship_stage")
         # a person marked lost / excluded or on the do-not-contact list is never an opportunity
         has_open = any(dl["stage"] in OPEN_STAGES for dl in r["deals"])      # a person marked LOST by an old auto-label still counts when a human has since opened a deal for them (Carsten Isert, 14 Oct 2026)
-        if val(p, "dnc_status") == "DO_NOT_CONTACT" or (stage in ("LOST", "CUSTOMER") and not has_open):
+        has_closed = any(str(dl["stage"] or "").startswith(("Lost", "Won")) for dl in r["deals"])      # a deal closed since the import is shown in the closed view with its real date
+        if val(p, "dnc_status") == "DO_NOT_CONTACT" or (stage in ("LOST", "CUSTOMER") and not has_open and not has_closed):
             continue
         calls = sorted(r["calls"], key=lambda z: z["at"] or "")
         last_call = calls[-1] if calls else None
@@ -175,7 +204,8 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
         nxt = next((parse(dl["next"]) for dl in r["deals"] if dl["next"]), None)
         due = nxt or ((last_touch + timedelta(days=DUE_DAYS[bucket])) if last_touch else None)
         missed = None if nxt else next((parse(dl["missed"]) for dl in r["deals"] if dl.get("missed")), None)      # a follow-up that came due and was not done: shown as overdue
-        comp = comps.get(val(p, "company")) or {}
+        # the company is the person's linked company record, else a deal's associated company; never parsed from a deal name
+        comp = comps.get(val(p, "company")) or next((comps.get(dl["company_id"]) for dl in r["deals"] if comps.get(dl.get("company_id"))), None) or {}
         cname = val(comp, "name") if comp else None
         email = val(p, "email_addresses")
         ctid = next((z["ctid"] for z in reversed(calls) if z["ctid"]), None)
@@ -186,7 +216,9 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
             "bucket": bucket, "status": BUCKET_LABEL[bucket],
             "stage": next((dl["stage"] for dl in r["deals"]), None), "source": src,
             "reason": next((dl["reason"] for dl in r["deals"] if dl.get("reason")), None),
-            "closed_at": next((dl["close"] for dl in r["deals"] if dl.get("close")), None),
+            "closed_at": max([dl["close"] for dl in r["deals"] if dl.get("close") and bucket in ("won", "lost")
+                              and str(dl["stage"] or "").lower().startswith(bucket)], default=None),
+            "placements": [{"name": dl["placement"], "stage": dl["stage"], "deal": dl["url"]} for dl in r["deals"] if dl.get("placement")],
             "last_touch": last_touch.isoformat() if last_touch else None,
             "due": due.isoformat() if due else None, "due_set": bool(nxt), "missed": missed.isoformat() if missed else None,
             "created": min([z for z in (dl["created"] for dl in r["deals"]) if z], default=None),
