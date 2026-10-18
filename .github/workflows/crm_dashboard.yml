@@ -132,6 +132,19 @@ jobs:
           git show FETCH_HEAD:ops_last_good.json > "$GITHUB_WORKSPACE/data/working/ops_last_good.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/ops_last_good.json"
           git show FETCH_HEAD:cloudtalk_link_cache.json > "$GITHUB_WORKSPACE/data/working/cloudtalk_link_cache.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/cloudtalk_link_cache.json"
           git show FETCH_HEAD:cloudtalk_first_calls.json > "$GITHUB_WORKSPACE/data/working/cloudtalk_first_calls.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/cloudtalk_first_calls.json"
+      # The Outreach plan (Cold email > Campaigns) is built once a day by outreach_plan.yml and kept on its own branch of the private store.
+      - name: Restore the Outreach plan from the private repository
+        continue-on-error: true
+        run: |
+          rm -rf /tmp/planstore && mkdir /tmp/planstore && cd /tmp/planstore && git init -q
+          git remote add origin "git@github.com:${PRIVATE_STORE_REPO}.git"
+          if git fetch -q --depth 1 origin outreach-plan; then
+            mkdir -p "$GITHUB_WORKSPACE/data/working"
+            git show FETCH_HEAD:outreach_plan.json > "$GITHUB_WORKSPACE/data/working/outreach_plan.json" && echo "outreach plan restored" || rm -f "$GITHUB_WORKSPACE/data/working/outreach_plan.json"
+          else
+            echo "no outreach plan yet (outreach_plan.yml has not run)"
+          fi
+          rm -rf /tmp/planstore
       - name: Collect opportunities and system checks
         continue-on-error: true
         run: python crm/dashboard/collect_ops.py

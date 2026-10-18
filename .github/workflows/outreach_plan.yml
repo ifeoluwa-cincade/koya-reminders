@@ -1,0 +1,83 @@
+name: Outreach plan
+
+# Once a day: build the Outreach plan (Cold email > Campaigns in the team app) with crm/dashboard/collect_outreach_plan.py.
+# Until 18 Oct 2026 nothing ran this script, so the page always said "The first plan is built overnight".
+# The plan is counts only (per week, month and campaign: no names, emails or phone numbers). It is kept in the PRIVATE store
+# repository on its own branch "outreach-plan", and the hourly Dashboard build reads it from there. Read-only towards PlusVibe and Attio.
+# The next hourly Dashboard build picks it up. Runs after the daily PlusVibe -> CRM sync (05:30 UTC), so Attio's "do not re-contact" states are fresh.
+on:
+  schedule:
+    - cron: "40 6 * * *"
+  push:
+    branches: [crm-trigger]      # the hourly routine push; only the 06 UTC hour counts (GitHub's own timer is unreliable)
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  handoff:
+    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.timestamp, 'T06:') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Start the daily plan on main
+        run: gh workflow run outreach_plan.yml -R "$GITHUB_REPOSITORY" --ref main
+
+  plan:
+    if: ${{ github.event_name != 'push' }}
+    concurrency:
+      group: outreach-plan
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}
+      ATTIO_KEY_VAR: ATTIO_API_KEY_2
+      ATTIO_API_KEY_2: ${{ secrets.ATTIO_API_KEY_2 }}
+      PRIVATE_STORE_REPO: ${{ secrets.PRIVATE_STORE_REPO }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install requests pyyaml
+      - name: Build the plan (counts only)
+        run: python crm/dashboard/collect_outreach_plan.py
+      - name: Check it is counts only
+        run: |
+          python3 - <<'PY'
+          import json, re
+          t = open("data/working/outreach_plan.json").read(); d = json.loads(t)
+          assert "generated_at" in d and "due_by_week" in d, "not a plan"
+          assert not re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", t), "an email address is in the plan"
+          print("plan ok:", d.get("eligible_total"), "eligible,", d.get("overdue_now"), "due now")
+          PY
+      - name: Save it in the private store (branch outreach-plan)
+        env:
+          DEPLOY_KEY: ${{ secrets.DASHBOARD_DEPLOY_KEY }}
+        run: |
+          set -e
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/store_key && chmod 600 ~/.ssh/store_key
+          ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/store_key -o IdentitiesOnly=yes"
+          rm -rf /tmp/plan && mkdir /tmp/plan && cp data/working/outreach_plan.json /tmp/plan/ && cd /tmp/plan
+          git init -q -b outreach-plan
+          git config user.name "dashboard-bot"
+          git config user.email "dashboard-bot@users.noreply.github.com"
+          git add . && git commit -q -m "Outreach plan $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push -q --force "git@github.com:${PRIVATE_STORE_REPO}.git" outreach-plan
+          echo "saved to branch outreach-plan in the private repository"
+      - name: Remove the working files
+        if: ${{ always() }}
+        run: rm -rf /tmp/plan data/working ~/.ssh/store_key
