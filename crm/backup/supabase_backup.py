@@ -10,6 +10,8 @@ What a backup holds (one JSON document, gzipped and encrypted by the workflow, k
   storage         a manifest per bucket: object name, size, updated_at. NOT the file bytes (call audio is too big
                   for a git store), so lost audio, voice notes and avatars cannot be brought back from this backup.
   digest          sha256 over every doc's path + content hash, used to prove a restore is exact
+  tables          every row of the Team chat v2 tables (chat_channels, chat_members, chat_messages, chat_reactions, chat_saves; added
+                  18 Oct 2026), with tables_digest. A project without them (older backups, a fresh project) simply has none.
 
     python crm/backup/supabase_backup.py export --out backup.json           # SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (read only)
     python crm/backup/supabase_backup.py restore BACKUP --target-url URL --target-key-env VAR [--rest-prefix /rest/v1]
@@ -22,8 +24,8 @@ variable is also set, it is tried second. The log says which key name worked, ne
 
 Restore refuses, before any network call, when the target is the PRODUCTION project. Production is read from
 PROD_SUPABASE_URL (or SUPABASE_URL); when neither is set it refuses too, because it cannot tell. The target must
-already have the docs table (koya-app/db/schema.sql). Only the docs table is restored; auth users and storage are
-reported as counts so a person can re-invite and re-upload.
+already have the docs table (koya-app/db/schema.sql). The docs table and the chat tables are restored (the target needs
+the chat tables too: crm/backup/chat_schema.sql); auth users and storage are reported as counts so a person can re-invite and re-upload.
 """
 from __future__ import annotations
 
@@ -88,6 +90,15 @@ def paths_md5(rows: list[dict]) -> str:
 # ---------------------------------------------------------------- reading a project
 
 DOC_COLS = "path,coll,id,data,version,updated_at,updated_by"
+# Team chat v2 (koya-app db/chat/2026-10-18_chat_v2.sql), in restore order (parents first), with each table's key.
+# chat_messages.search is a generated column: never read, never written.
+CHAT_TABLES = [
+    ("chat_channels", ["id"], "id,key,name,topic,section,kind,see,depts,post,sort,dm_key,archived_at,created_by,created_at"),
+    ("chat_members", ["channel_id", "user_id"], "channel_id,user_id,role,last_read_at,muted,joined_at"),
+    ("chat_messages", ["id"], "id,channel_id,thread_id,author_id,kind,body,mentions,here,everyone,pinned_at,pinned_by,reply_count,last_reply_at,created_at,edited_at,updated_at"),
+    ("chat_reactions", ["message_id", "user_id", "emoji"], "message_id,user_id,emoji,channel_id,created_at"),
+    ("chat_saves", ["user_id", "message_id"], "user_id,message_id,created_at"),
+]
 
 
 def read_docs(base: str, key: str) -> list[dict]:
@@ -114,6 +125,65 @@ def count_docs(base: str, key: str) -> int:
         return int(cr.split("/")[-1])
     except ValueError:
         raise Fail("count docs: no total in the answer")
+
+
+def table_exists(base: str, key: str, name: str) -> bool:
+    try:
+        r = requests.get(f"{base}/{name}", headers=_h(key), params={"select": "*", "limit": "0"}, timeout=TIMEOUT)
+    except requests.RequestException as e:
+        raise Fail(f"check {name}: no answer ({type(e).__name__})")
+    if r.status_code in (404, 400) and ("PGRST205" in r.text or "does not exist" in r.text or r.status_code == 404):
+        return False
+    if r.status_code >= 300:
+        raise Fail(f"check {name}: HTTP {r.status_code}")
+    return True
+
+
+def read_table(base: str, key: str, name: str, keys: list[str], cols: str) -> list[dict]:
+    """Every row of one table, ordered by its key, page by page (the API answers at most 1000 rows a request)."""
+    rows: list[dict] = []
+    off = 0
+    while True:
+        params = {"select": cols, "order": ",".join(k + ".asc" for k in keys), "limit": str(PAGE), "offset": str(off)}
+        page = _req("GET", f"{base}/{name}", f"read {name}", headers=_h(key), params=params).json()
+        if not isinstance(page, list):
+            raise Fail(f"read {name}: unexpected answer")
+        rows.extend(page)
+        if len(page) < PAGE:
+            return rows
+        off += len(page)
+
+
+def row_key(row: dict, keys: list[str]) -> str:
+    return "\t".join(str(row.get(k)) for k in keys)
+
+
+def _norm(v):
+    """Values as the API gives them back, made comparable (timestamps to UTC, so '+00:00' and 'Z' agree)."""
+    if isinstance(v, str) and len(v) >= 19 and v[4] == "-" and v[10] in "T " and v[13] == ":":
+        t = _ts(v)
+        return t.isoformat() if isinstance(t, datetime) else v
+    return v
+
+
+def table_digest(rows: list[dict], keys: list[str]) -> str:
+    h = hashlib.sha256()
+    for k, body in sorted((row_key(r, keys), json.dumps({c: _norm(v) for c, v in r.items()}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)) for r in rows):
+        h.update(f"{k}\t{hashlib.sha256(body.encode('utf-8')).hexdigest()}\n".encode("utf-8"))
+    return h.hexdigest()
+
+
+def tables_digest(tables: dict) -> str:
+    keys = {n: k for n, k, _ in CHAT_TABLES}
+    return hashlib.sha256("".join(f"{n}:{table_digest(tables[n], keys[n])};" for n in sorted(tables)).encode()).hexdigest()
+
+
+def read_chat_tables(base: str, key: str) -> dict:
+    out: dict = {}
+    for name, keys, cols in CHAT_TABLES:
+        if table_exists(base, key, name):
+            out[name] = read_table(base, key, name, keys, cols)
+    return out
 
 
 def read_secret_names(base: str, key: str) -> list[str]:
@@ -176,6 +246,7 @@ def cmd_export(a) -> None:
         raise Fail("the docs table came back empty: refusing to save an empty backup")
     if len({d["path"] for d in docs}) != len(docs):
         raise Fail("docs: the same path was read twice")
+    tables = read_chat_tables(base, key)
     names = read_secret_names(base, key)
     users = read_auth_users(url, key)
     storage = read_storage(url, key)
@@ -186,9 +257,12 @@ def cmd_export(a) -> None:
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "note": "storage holds a manifest only (names, sizes, updated_at); file bytes are NOT in this backup. app_secrets holds names only.",
         "counts": {"docs": len(docs), "docs_counted_before_read": expected, "app_secret_names": len(names), "auth_users": len(users),
-                   "storage_buckets": len(storage), "storage_objects": n_obj, "storage_bytes_not_backed_up": n_bytes},
+                   "storage_buckets": len(storage), "storage_objects": n_obj, "storage_bytes_not_backed_up": n_bytes,
+                   "tables": {n: len(r) for n, r in tables.items()}},
         "digest": docs_digest(docs),
         "docs": docs,
+        "tables": tables,
+        "tables_digest": tables_digest(tables),
         "app_secret_names": names,
         "auth_users": users,
         "storage": storage,
@@ -197,6 +271,7 @@ def cmd_export(a) -> None:
         json.dump(doc, f, ensure_ascii=False, separators=(",", ":"))
     c = doc["counts"]
     print(f"docs {c['docs']} (count before read {expected}), collections {len({d['coll'] for d in docs})}")
+    print("chat tables: " + (", ".join(f"{n} {len(r)}" for n, r in tables.items()) or "none in this project"))
     print(f"app_secrets names {c['app_secret_names']} (values not read)")
     print(f"auth users {c['auth_users']}")
     print(f"storage: {c['storage_buckets']} buckets, {n_obj} objects listed, {n_bytes / 1e6:.1f} MB of file bytes NOT backed up (manifest only)")
@@ -228,6 +303,9 @@ def load_backup(path: str) -> dict:
         raise Fail("not a Koya Supabase backup")
     if docs_digest(doc["docs"]) != doc["digest"]:
         raise Fail("the backup's own digest does not match its docs: damaged backup")
+    if "tables" in doc and tables_digest(doc["tables"]) != doc.get("tables_digest"):
+        raise Fail("the backup's own digest does not match its chat tables: damaged backup")
+    doc.setdefault("tables", {})
     return doc
 
 
@@ -267,9 +345,41 @@ def cmd_restore(a) -> None:
     for i in range(0, len(rows), 500):
         _req("POST", f"{base}/docs", "write docs", headers=hdr, params={"on_conflict": "path"}, data=json.dumps(rows[i:i + 500], ensure_ascii=False).encode("utf-8"))
     print(f"restored docs {len(rows)} (backup of {doc['created_at'][:10]})")
+    restore_tables(doc, base, key)
     print(f"not restored, by design: app_secrets values (names listed: {len(doc['app_secret_names'])}), "
           f"auth users {len(doc['auth_users'])} (re-invite), storage objects {sum(len(v) for v in doc['storage'].values())} (bytes not in backup)")
     verify(doc, base, key, a.sample)
+
+
+def restore_tables(doc: dict, base: str, key: str) -> None:
+    for name, keys, cols in CHAT_TABLES:
+        rows = doc["tables"].get(name)
+        if not rows:
+            continue
+        if not table_exists(base, key, name):
+            raise Fail(f"the target has no {name} table: create it first (crm/backup/chat_schema.sql)")
+        if name == "chat_messages":                       # thread roots before their replies
+            rows = sorted(rows, key=lambda r: (r.get("thread_id") is not None, r.get("created_at") or ""))
+        hdr = _h(key, {"Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal"})
+        for i in range(0, len(rows), 500):
+            _req("POST", f"{base}/{name}", f"write {name}", headers=hdr, params={"on_conflict": ",".join(keys)},
+                 data=json.dumps(rows[i:i + 500], ensure_ascii=False).encode("utf-8"))
+        print(f"restored {name} {len(rows)}")
+
+
+def verify_tables(doc: dict, base: str, key: str) -> None:
+    bad = []
+    for name, keys, cols in CHAT_TABLES:
+        src = doc["tables"].get(name)
+        if src is None:
+            continue
+        got = read_table(base, key, name, keys, cols) if table_exists(base, key, name) else []
+        same = table_digest(got, keys) == table_digest(src, keys)
+        print(f"verify: {name} source {len(src)}, target {len(got)}, content {'MATCHES' if same else 'DIFFERS'}")
+        if not same:
+            bad.append(name)
+    if bad:
+        raise Fail("chat tables do NOT match the backup: " + ", ".join(bad))
 
 
 def verify(doc: dict, base: str, key: str, sample: int) -> None:
@@ -295,6 +405,7 @@ def verify(doc: dict, base: str, key: str, sample: int) -> None:
     print(f"verify: sample {sample_ok}/{len(picked)} ids with matching content hash; full digest {'MATCHES' if digest_ok else 'DIFFERS'}")
     if missing or differ or meta_differ or not digest_ok or sample_ok != len(picked):
         raise Fail("restore does NOT match the backup")
+    verify_tables(doc, base, key)
 
 
 def _ts(v):
@@ -315,7 +426,8 @@ def cmd_verify(a) -> None:
 
 def cmd_digest(a) -> None:
     doc = load_backup(a.backup)
-    print(json.dumps({"docs": len(doc["docs"]), "paths_md5": paths_md5(doc["docs"]), "digest": doc["digest"], "created_at": doc["created_at"]}))
+    print(json.dumps({"docs": len(doc["docs"]), "paths_md5": paths_md5(doc["docs"]), "digest": doc["digest"], "created_at": doc["created_at"],
+                      "tables": {n: len(r) for n, r in doc["tables"].items()}}))
 
 
 def main(argv=None) -> int:

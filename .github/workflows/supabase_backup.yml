@@ -102,6 +102,7 @@ jobs:
         run: |
           set -euo pipefail
           psql -q -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f crm/backup/docs_schema.sql
+          psql -q -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f crm/backup/chat_schema.sql   # Team chat v2 tables (18 Oct 2026)
           JWT_SECRET=$(openssl rand -hex 32); echo "::add-mask::$JWT_SECRET"
           docker run -d --name drill-rest --network host \
             -e PGRST_DB_URI=postgres://postgres:drill-only@localhost:5432/postgres -e PGRST_DB_SCHEMAS=public \

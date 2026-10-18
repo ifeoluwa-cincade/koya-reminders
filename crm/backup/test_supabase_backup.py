@@ -80,3 +80,23 @@ with tempfile.TemporaryDirectory() as t:
     assert load(old, BACKUP_ENC_KEY="new-key") == "FAIL"
     assert load(new) == "FAIL"
 print("supabase_backup offline checks: all passed")
+
+# Team chat v2 tables (18 Oct 2026): digests ignore row order and timestamp spelling, and a damaged table is refused
+ch = [{"id": "c2", "key": "b", "created_at": "2026-10-18T08:00:00+00:00"}, {"id": "c1", "key": "a", "created_at": "2026-10-18T08:00:00.5Z"}]
+assert B.table_digest(ch, ["id"]) == B.table_digest(list(reversed(ch)), ["id"])
+assert B.table_digest(ch, ["id"]) == B.table_digest([{**ch[0], "created_at": "2026-10-18T08:00:00Z"}, {**ch[1], "created_at": "2026-10-18 08:00:00.5+00"}], ["id"])
+assert B.table_digest(ch, ["id"]) != B.table_digest([{**ch[0], "key": "x"}, ch[1]], ["id"])
+tabs = {"chat_channels": ch, "chat_reactions": [{"message_id": "m1", "user_id": "u", "emoji": "\U0001F44D", "channel_id": "c1"}]}
+doc2 = dict(doc, tables=tabs, tables_digest=B.tables_digest(tabs))
+with tempfile.TemporaryDirectory() as t:
+    p = os.path.join(t, "b.json.gz")
+    open(p, "wb").write(gzip.compress(json.dumps(doc2).encode()))
+    assert len(B.load_backup(p)["tables"]["chat_channels"]) == 2
+    open(p, "wb").write(gzip.compress(json.dumps(dict(doc2, tables={"chat_channels": ch[:1], "chat_reactions": tabs["chat_reactions"]})).encode()))
+    try:
+        B.load_backup(p); raise AssertionError("damaged chat tables accepted")
+    except B.Fail:
+        pass
+    open(p, "wb").write(gzip.compress(json.dumps(doc).encode()))        # an older backup without chat tables still loads
+    assert B.load_backup(p)["tables"] == {}
+print("chat tables: ok")
