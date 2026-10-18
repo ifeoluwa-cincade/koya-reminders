@@ -6,6 +6,9 @@ This repository is PUBLIC: this script prints counts only, never names, emails, 
 What a backup holds (one JSON document, gzipped and encrypted by the workflow, kept in the PRIVATE store repository):
   docs            every row of the `docs` table (path, coll, id, data, version, updated_at, updated_by)
   app_secrets     the NAMES only. Values are never read, so a restore cannot bring keys back: re-enter them by hand.
+                  One exception (18 Oct 2026), "escrow": the value of TODOS_ENC_KEY, the key koya-app's personal to-dos (docs coll
+                  "todo") are encrypted with. Without it those rows could never be read again, so it travels inside this encrypted
+                  file only (never printed). After a restore, put it back into the new project's app_secrets by hand.
   auth_users      id, email, app_metadata, created_at of every login (never password hashes)
   storage         a manifest per bucket: object name, size, updated_at. NOT the file bytes (call audio is too big
                   for a git store), so lost audio, voice notes and avatars cannot be brought back from this backup.
@@ -191,6 +194,21 @@ def read_secret_names(base: str, key: str) -> list[str]:
     return [r["name"] for r in rows]
 
 
+ESCROW = ("TODOS_ENC_KEY",)   # secret values kept inside the encrypted backup because docs rows cannot be read without them
+
+
+def read_escrow(base: str, key: str) -> dict:
+    rows = _req("GET", f"{base}/app_secrets", "read escrowed keys", headers=_h(key),
+                params={"select": "name,value", "name": "in.(" + ",".join(ESCROW) + ")"}).json()
+    return {r["name"]: r["value"] for r in rows if r.get("value")}
+
+
+def check_escrow(docs: list[dict], escrow: dict) -> None:
+    """The to-do rows sealed with TODOS_ENC_KEY (data.v == 2) are only worth backing up with that key."""
+    if any(d.get("coll") == "todo" and isinstance(d.get("data"), dict) and d["data"].get("v") == 2 for d in docs) and not escrow.get("TODOS_ENC_KEY"):
+        raise Fail("to-do rows are encrypted with TODOS_ENC_KEY but that key could not be read: the backup would not open them")
+
+
 def read_auth_users(url: str, key: str) -> list[dict]:
     out: list[dict] = []
     page = 1
@@ -248,6 +266,8 @@ def cmd_export(a) -> None:
         raise Fail("docs: the same path was read twice")
     tables = read_chat_tables(base, key)
     names = read_secret_names(base, key)
+    escrow = read_escrow(base, key)
+    check_escrow(docs, escrow)
     users = read_auth_users(url, key)
     storage = read_storage(url, key)
     n_obj = sum(len(v) for v in storage.values())
@@ -258,12 +278,13 @@ def cmd_export(a) -> None:
         "note": "storage holds a manifest only (names, sizes, updated_at); file bytes are NOT in this backup. app_secrets holds names only.",
         "counts": {"docs": len(docs), "docs_counted_before_read": expected, "app_secret_names": len(names), "auth_users": len(users),
                    "storage_buckets": len(storage), "storage_objects": n_obj, "storage_bytes_not_backed_up": n_bytes,
-                   "tables": {n: len(r) for n, r in tables.items()}},
+                   "tables": {n: len(r) for n, r in tables.items()}, "escrowed_keys": len(escrow)},
         "digest": docs_digest(docs),
         "docs": docs,
         "tables": tables,
         "tables_digest": tables_digest(tables),
         "app_secret_names": names,
+        "escrow": escrow,
         "auth_users": users,
         "storage": storage,
     }
@@ -272,7 +293,7 @@ def cmd_export(a) -> None:
     c = doc["counts"]
     print(f"docs {c['docs']} (count before read {expected}), collections {len({d['coll'] for d in docs})}")
     print("chat tables: " + (", ".join(f"{n} {len(r)}" for n, r in tables.items()) or "none in this project"))
-    print(f"app_secrets names {c['app_secret_names']} (values not read)")
+    print(f"app_secrets names {c['app_secret_names']} (values not read, except {c['escrowed_keys']} escrowed key(s) kept inside the encrypted file)")
     print(f"auth users {c['auth_users']}")
     print(f"storage: {c['storage_buckets']} buckets, {n_obj} objects listed, {n_bytes / 1e6:.1f} MB of file bytes NOT backed up (manifest only)")
 
@@ -346,6 +367,11 @@ def cmd_restore(a) -> None:
         _req("POST", f"{base}/docs", "write docs", headers=hdr, params={"on_conflict": "path"}, data=json.dumps(rows[i:i + 500], ensure_ascii=False).encode("utf-8"))
     print(f"restored docs {len(rows)} (backup of {doc['created_at'][:10]})")
     restore_tables(doc, base, key)
+    esc = doc.get("escrow") or {}
+    if esc:
+        print(f"escrowed keys in this backup: {len(esc)} ({', '.join(sorted(esc))}); put them into the new project's app_secrets by hand "
+              f"(read them from the decrypted file; never print them in a log)")
+    check_escrow(doc["docs"], esc)
     print(f"not restored, by design: app_secrets values (names listed: {len(doc['app_secret_names'])}), "
           f"auth users {len(doc['auth_users'])} (re-invite), storage objects {sum(len(v) for v in doc['storage'].values())} (bytes not in backup)")
     verify(doc, base, key, a.sample)

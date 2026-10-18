@@ -100,3 +100,16 @@ with tempfile.TemporaryDirectory() as t:
     open(p, "wb").write(gzip.compress(json.dumps(doc).encode()))        # an older backup without chat tables still loads
     assert B.load_backup(p)["tables"] == {}
 print("chat tables: ok")
+
+# escrow: to-do rows sealed with TODOS_ENC_KEY (v 2) need that key in the backup; old (v 1) or no to-do rows do not
+todo2 = [{"path": "todo/u", "coll": "todo", "id": "u", "data": {"v": 2, "e": "x"}}]
+B.check_escrow(rows, {})
+B.check_escrow([{"path": "todo/u", "coll": "todo", "id": "u", "data": {"v": 1, "e": "x"}}], {})
+B.check_escrow(todo2, {"TODOS_ENC_KEY": "k"})
+try:
+    B.check_escrow(todo2, {}); raise AssertionError("to-do rows without their key accepted")
+except B.Fail:
+    pass
+assert B.ESCROW == ("TODOS_ENC_KEY",)
+print("ok   escrow of the to-do key")
+
