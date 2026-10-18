@@ -65,6 +65,7 @@ jobs:
       TEST: ${{ github.event.inputs.test }}
       PYTHONUNBUFFERED: "1"
       CT_LINK_CACHE: data/working/cloudtalk_link_cache.json   # which leads are which CloudTalk contact: kept between runs in the private store
+      CT_FIRST_CALLS: data/working/cloudtalk_first_calls.json # the first outgoing call to each number (a lead's first touch): kept the same way
       CT_WAIT_BUDGET: "180"                                   # seconds this build may wait for CloudTalk's shared limit; then the rest waits for the next build
     steps:
       - uses: actions/checkout@v4
@@ -130,6 +131,7 @@ jobs:
           git show FETCH_HEAD:check_history.json > "$GITHUB_WORKSPACE/data/working/check_history.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/check_history.json"
           git show FETCH_HEAD:ops_last_good.json > "$GITHUB_WORKSPACE/data/working/ops_last_good.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/ops_last_good.json"
           git show FETCH_HEAD:cloudtalk_link_cache.json > "$GITHUB_WORKSPACE/data/working/cloudtalk_link_cache.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/cloudtalk_link_cache.json"
+          git show FETCH_HEAD:cloudtalk_first_calls.json > "$GITHUB_WORKSPACE/data/working/cloudtalk_first_calls.json" 2>/dev/null || rm -f "$GITHUB_WORKSPACE/data/working/cloudtalk_first_calls.json"
       - name: Collect opportunities and system checks
         continue-on-error: true
         run: python crm/dashboard/collect_ops.py
@@ -155,6 +157,7 @@ jobs:
           cp data/working/koya_cold_email.html /tmp/out/koya_cold_email.html
           [ -f data/working/check_history.json ] && cp data/working/check_history.json /tmp/out/check_history.json || true
           [ -f data/working/cloudtalk_link_cache.json ] && cp data/working/cloudtalk_link_cache.json /tmp/out/cloudtalk_link_cache.json || true
+          [ -f data/working/cloudtalk_first_calls.json ] && cp data/working/cloudtalk_first_calls.json /tmp/out/cloudtalk_first_calls.json || true
           # keep the last list that was read properly, so one bad hour never blanks the Opportunities tab
           python3 - <<'PY'
           import json, shutil, os

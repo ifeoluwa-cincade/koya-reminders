@@ -18,7 +18,7 @@ CHECKS  one per automation, each with a status: ok / warn / bad / info.
     ATTIO_KEY_VAR=ATTIO_API_KEY_2 python crm/dashboard/collect_ops.py
 """
 from __future__ import annotations
-import json, os, re, subprocess, sys, time
+import collections, json, os, re, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -33,6 +33,7 @@ import collect_metrics as CM  # noqa: E402
 sys.path.insert(0, str(ROOT / "crm" / "dashboard"))
 import lead_company as LC  # noqa: E402
 import lead_bucket as LB  # noqa: E402
+import lead_source as LS  # noqa: E402
 
 OUT = ROOT / "data/working/ops.json"
 SCHEMA = ROOT / "crm/schema/attio-schema.yaml"
@@ -132,6 +133,7 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
     spec = yaml.safe_load(SCHEMA.read_text())
     lists = {l["api_slug"]: l for l in c.req("GET", "/lists").json()["data"]}
     n_entries = 0
+    called: dict[str, list] = {}
     for L in spec["call_lists"]:
         slug = ("call_" + re.sub(r"[^a-z0-9]+", "_", L["name"].lower()).strip("_"))[:50]
         meta = lists.get(slug)
@@ -144,6 +146,8 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
                 ev = x.get("entry_values") or {}
                 g = lambda k: (ev.get(k) or [{}])[0]
                 out = (g("call_outcome").get("option") or {}).get("title")
+                if g("called_at").get("value"):                     # the earliest call time a call list knows, for the lead's first touch (lead_source.py)
+                    called.setdefault(x["parent_record_id"], []).append(g("called_at").get("value"))
                 if g("called_at").get("value") and x["parent_record_id"] in people:      # any call attempt on a person we already list is a touch, answered or not
                     people[x["parent_record_id"]].setdefault("touch_calls", []).append(g("called_at").get("value"))
                 if out in REAL_CALL:
@@ -206,12 +210,17 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
         got_co = LC.pick(cx)
         cname = got_co["company"] or None
         ctid = next((z["ctid"] for z in reversed(calls) if z["ctid"]), None)
-        src = "Email + call" if {"call"} <= r["src"] and (r["src"] - {"call"}) else ("Call" if "call" in r["src"] else "Email")
+        # Source = the channel of the first touch (lead_source.py): set by set_sources() once the PlusVibe sends and CloudTalk calls are read.
+        # Until then (and if those reads fail) the call lists' and deals' own times decide.
+        src_in = {"deals": [{"channel": dl.get("channel"), "created": dl.get("created")} for dl in r["deals"]],
+                  "calls": [z["at"] for z in calls if z.get("at")] + called.get(pid, [])}
+        src = LS.pick(None, min(src_in["calls"], key=lambda z: LS._t(z) or now(), default=None), src_in["deals"])
         opps.append({
             "id": pid, "name": val(p, "name") or email, "company": cname, "email": email,
             "phone": val(p, "phone_numbers"), "linkedin": val(p, "linkedin"), "li_conn": val(p, "linkedin_connection"),
             "bucket": bucket, "status": BUCKET_LABEL[bucket],
-            "stage": next((dl["stage"] for dl in r["deals"]), None), "source": src,
+            "stage": next((dl["stage"] for dl in r["deals"]), None), "source": src["source"], "also": src["also"],
+            "first_touch": {"ch": src["first"], "at": src["at"]} if src["first"] else None, "_src": src_in,
             "reason": next((dl["reason"] for dl in r["deals"] if dl.get("reason")), None),
             "closed_at": max([dl["close"] for dl in r["deals"] if dl.get("close") and bucket in ("won", "lost")
                               and str(dl["stage"] or "").lower().startswith(bucket)], default=None),
@@ -402,6 +411,91 @@ def link_cloudtalk(opps: list[dict]) -> None:
         pass
     print(f"  CloudTalk contact links: {found} linked, {from_cache} answered from memory, {looked} looked up now, "
           f"{deferred} left for the next run{' (CloudTalk busy)' if busy else ''}")
+
+
+FIRST_CALLS = Path(os.environ.get("CT_FIRST_CALLS") or ROOT / "data/caches/cloudtalk_first_calls.json")
+
+
+def first_calls() -> dict:
+    """The first OUTGOING CloudTalk call to every number, contact and email: {"through", "phone": {last 9 digits: iso}, "contact": {id: iso},
+    "email": {address: iso}}. KEPT BETWEEN RUNS (the workflow restores and saves the file in the private store, like the link cache):
+    a first call never changes, so each run reads only the calls since the last one (one or two pages); with no file, the whole
+    history (3,048 calls on 18 Oct 2026, four pages of 1,000). A run CloudTalk is too busy for keeps the old file and the call lists' times."""
+    try:
+        fc = json.loads(FIRST_CALLS.read_text())
+    except Exception:
+        fc = {}
+    for k in ("phone", "contact", "email"):
+        fc.setdefault(k, {})
+    try:
+        import ct_client
+        cl = ct_client.shared()
+    except Exception as ex:
+        print("  first calls skipped:", type(ex).__name__); return fc
+    since = parse(fc.get("through"))
+    params = {"limit": 1000}
+    if since:
+        params["date_from"] = (since - timedelta(days=1)).strftime("%Y-%m-%d")      # a day of overlap: a call is never missed at the edge
+    digits = lambda x: re.sub(r"\D", "", str(x or ""))
+    keep = lambda m, k, t: m.__setitem__(k, t) if k and (k not in m or t < m[k]) else None
+    page, newest, n = 1, since, 0
+    while True:
+        try:
+            r = cl.get("/calls/index.json", params=dict(params, page=page), timeout=60)
+        except Exception as ex:
+            print("  first calls: CloudTalk busy, kept what was known:", type(ex).__name__); return fc
+        if r.status_code != 200:
+            print(f"  first calls: CloudTalk answered {r.status_code}, kept what was known"); return fc
+        d = r.json().get("responseData") or {}
+        for x in d.get("data") or []:
+            cdr, con = x.get("Cdr") or {}, x.get("Contact") or {}
+            t = parse(cdr.get("started_at"))
+            if not t:
+                continue
+            newest = max(newest, t) if newest else t
+            if cdr.get("type") != "outgoing":
+                continue
+            n += 1
+            ti = t.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            p9 = digits(cdr.get("public_external"))[-9:]
+            keep(fc["phone"], p9 if len(p9) >= 7 else None, ti)
+            keep(fc["contact"], str(con.get("id") or "") or None, ti)
+            for em in con.get("contact_emails") or []:
+                keep(fc["email"], str(em or "").strip().lower() or None, ti)
+        if page >= int(d.get("pageCount") or 1) or not d.get("data"):
+            break
+        page += 1
+    if newest:
+        fc["through"] = newest.isoformat()
+    try:
+        FIRST_CALLS.parent.mkdir(parents=True, exist_ok=True); FIRST_CALLS.write_text(json.dumps(fc))
+    except Exception:
+        pass
+    print(f"  first calls: {n} outgoing calls read ({page} page{'s' if page > 1 else ''}), {len(fc['phone'])} numbers known")
+    return fc
+
+
+def first_email(o: dict):
+    """The first email a PlusVibe sequence sent the lead; when the sequence read gave nothing, the oldest email WE sent in the thread."""
+    sent = [m.get("t") for q in o.get("sequence") or [] for m in q.get("sent") or [] if m.get("t")]
+    if not sent:
+        sent = [m.get("t") for m in o.get("thread") or [] if m.get("t") and not m.get("from_lead")]
+    return min(sent, key=lambda z: parse(z) or now(), default=None)
+
+
+def set_sources(opps: list[dict], fc: dict) -> None:
+    """Source = the channel of the first touch (lead_source.py, the same rule as the page's look/leadkey.js sourceOf)."""
+    digits = lambda x: re.sub(r"\D", "", str(x or ""))
+    for o in opps:
+        si = o.pop("_src", None) or {}
+        p9 = digits(o.get("phone"))[-9:]
+        ctid = str(o["links"].get("cloudtalk") or "").rsplit("/", 1)[-1]
+        calls = list(si.get("calls") or [])
+        calls += [x for x in (fc.get("phone", {}).get(p9) if len(p9) >= 7 else None, fc.get("contact", {}).get(ctid) if ctid else None,
+                              fc.get("email", {}).get(str(o.get("email") or "").strip().lower())) if x]
+        g = LS.pick(first_email(o), min(calls, key=lambda z: parse(z) or now(), default=None), si.get("deals"))
+        o["source"], o["also"] = g["source"], g["also"]
+        o["first_touch"] = {"ch": g["first"], "at": g["at"]} if g["first"] else None
 
 
 def as_text(v) -> str:
@@ -822,6 +916,14 @@ def main() -> int:
                     o["thread_sent_only"] = bool(sent)
                 time.sleep(0.4)
         print(f"  threads read for {sum(1 for o in res['opps'] if o['thread'])} of {len(res['opps'])}")
+    print("first touch...")
+    try:
+        set_sources(res["opps"], first_calls())
+    except Exception as ex:                                   # never stops the build: the call lists' and deals' times stay
+        res["errors"].append(f"first touch: {type(ex).__name__}: {ex}")
+    for o in res["opps"]:
+        o.pop("_src", None)
+    print("  source by first touch: " + ", ".join(f"{k} {v}" for k, v in sorted(collections.Counter(o["source"] for o in res["opps"]).items())))
     print("notes...")
     try:
         fetch_notes(c, res["opps"])
