@@ -17,4 +17,6 @@ create table if not exists public.chat_reactions (
   channel_id uuid not null references public.chat_channels(id) on delete cascade, created_at timestamptz not null default now(), primary key (message_id, user_id, emoji));
 create table if not exists public.chat_saves (
   user_id uuid not null, message_id text not null references public.chat_messages(id) on delete cascade, created_at timestamptz not null default now(), primary key (user_id, message_id));
-grant all on public.chat_channels, public.chat_members, public.chat_messages, public.chat_reactions, public.chat_saves to service_role;
+create table if not exists public.chat_follows (
+  user_id uuid not null, thread_id text not null references public.chat_messages(id) on delete cascade, last_read_at timestamptz, created_at timestamptz not null default now(), primary key (user_id, thread_id));
+grant all on public.chat_channels, public.chat_members, public.chat_messages, public.chat_reactions, public.chat_saves, public.chat_follows to service_role;

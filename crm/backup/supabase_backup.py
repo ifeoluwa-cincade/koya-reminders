@@ -13,7 +13,7 @@ What a backup holds (one JSON document, gzipped and encrypted by the workflow, k
   storage         a manifest per bucket: object name, size, updated_at. NOT the file bytes (call audio is too big
                   for a git store), so lost audio, voice notes and avatars cannot be brought back from this backup.
   digest          sha256 over every doc's path + content hash, used to prove a restore is exact
-  tables          every row of the Team chat v2 tables (chat_channels, chat_members, chat_messages, chat_reactions, chat_saves; added
+  tables          every row of the Team chat v2 tables (chat_channels, chat_members, chat_messages, chat_reactions, chat_saves, chat_follows; added
                   18 Oct 2026), with tables_digest. A project without them (older backups, a fresh project) simply has none.
 
     python crm/backup/supabase_backup.py export --out backup.json           # SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (read only)
@@ -101,6 +101,7 @@ CHAT_TABLES = [
     ("chat_messages", ["id"], "id,channel_id,thread_id,author_id,kind,body,mentions,here,everyone,pinned_at,pinned_by,reply_count,last_reply_at,created_at,edited_at,updated_at"),
     ("chat_reactions", ["message_id", "user_id", "emoji"], "message_id,user_id,emoji,channel_id,created_at"),
     ("chat_saves", ["user_id", "message_id"], "user_id,message_id,created_at"),
+    ("chat_follows", ["user_id", "thread_id"], "user_id,thread_id,last_read_at,created_at"),   # Phase 2 threads (18 Oct 2026)
 ]
 
 
