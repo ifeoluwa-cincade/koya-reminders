@@ -81,11 +81,16 @@ jobs:
       PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}     # a not-interested call stops the lead's PlusVibe emails (apply_call_verdicts.py)
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}                       # Call review: the team app's database and its PRIVATE call-audio bucket
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      TRANSCRIBER: groq                                               # Call review transcripts; "deepgram" (diarized) needs DEEPGRAM_API_KEY and Ife's yes
+      # Call review transcripts: gemini = Gemini 3.5 Transcribe with real speaker turns (the 16 Oct 2026 accuracy winner; Ife chose
+      # its FREE tier with a 20 s floor). Until the GEMINI_API_KEY secret exists, or when Gemini fails on a call, groq (Whisper
+      # large-v3, speakers estimated) does it instead: a call is never skipped for want of a transcriber.
+      TRANSCRIBER: gemini
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      REVIEW_MIN_TALK: "20"                                           # seconds of talk; the CRM's verdict decides what is a real conversation
       PYTHONUNBUFFERED: "1"                                           # lines reach the log as they happen (they used to arrive in one lump at the end)
       CALL_MAX_TRANSCRIPTS: "20"                                      # per run; a backlog is worked through over several runs instead of timing one out
       CALL_TIME_BUDGET: "720"                                         # seconds of outcome work per run, then save and stop (the job limit is 25 min)
-      REVIEW_TIME_BUDGET: "300"                                       # seconds of call reviews per run
+      REVIEW_TIME_BUDGET: "420"                                       # seconds of call reviews per run (Gemini makes two passes a call)
       CT_WAIT_BUDGET: "240"                                           # seconds a run may wait for CloudTalk's shared limit before leaving the rest for later
       DRY: ${{ github.event.inputs.dry_run }}
       RECHECK: ${{ github.event.inputs.recheck }}
@@ -177,17 +182,20 @@ jobs:
       - name: Put the outcomes back on the call-list queue
         if: ${{ env.DRY != 'true' }}
         run: python crm/scripts/calls_to_call_lists.py --commit
-      # Call review (the team app's Call review page): real conversations of 45 s or more get their audio copied once into the
-      # private call-audio bucket, a transcript with times, and a short breakdown. Logs show counts only (public repo).
-      # It runs after the CRM writers and never stops them; a failure here only delays a review to the next run.
+      # Call review (the team app's Call review page): every real conversation the CRM decided (caller's tag > note > recording,
+      # 20 s+ of talk, not a voicemail or wrong number) gets its audio copied once into the private call-audio bucket, a transcript
+      # with times and a short breakdown; its outcome is the CRM's verdict. Real conversations still waiting are read from the call
+      # memory, so one that falls out of the 3-day window is still done. Failures are retried every run and, after 3, show on the
+      # app's Systems page (jobrun/callreview). Logs show counts only (public repo). It runs after the CRM writers and never stops them.
       - name: Make call reviews for real conversations
         if: ${{ env.DRY != 'true' }}
         continue-on-error: true
+        timeout-minutes: 12      # REVIEW_TIME_BUDGET stops new calls at 7 min; this only catches a stuck one (what it did is kept)
         run: |
           command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null)
-          if [ -n "${HOOK_CALLS:-}" ]; then python crm/scripts/call_review.py --call "$HOOK_CALLS" --limit 12 --commit
-          elif [ "${HOOK_RECENT:-0}" = "1" ] && [ -n "${SHORT_SINCE:-}" ]; then python crm/scripts/call_review.py --since "$SHORT_SINCE" --limit 12 --commit
-          else python crm/scripts/call_review.py --since "$SINCE" --limit 12 --commit; fi
+          if [ -n "${HOOK_CALLS:-}" ]; then python crm/scripts/call_review.py --call "$HOOK_CALLS" --limit 12 --workers 2 --commit
+          elif [ "${HOOK_RECENT:-0}" = "1" ] && [ -n "${SHORT_SINCE:-}" ]; then python crm/scripts/call_review.py --since "$SHORT_SINCE" --limit 12 --workers 2 --commit
+          else python crm/scripts/call_review.py --since "$SINCE" --limit 12 --workers 2 --commit; fi
       - name: Encrypt the memory again
         if: ${{ always() }}
         run: |
