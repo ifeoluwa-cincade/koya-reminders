@@ -224,6 +224,28 @@ def post_discord(text: str):
         print(f"  WARN: Discord post failed: {e}", file=sys.stderr)
 
 
+def attio_phone_first(email: str, phone: str) -> None:
+    """Koya HQ (19 Oct): the phone goes onto the Attio person the moment it is found, BEFORE the sheet row and the Discord post, so the
+    lead window (which re-reads the person every 3 s after a positive reply) shows it no later than Discord. Only when the person has no
+    phone yet; never fails the run (the CRM sync still writes it from the sheet as before)."""
+    key = os.environ.get("ATTIO_API_KEY_2", "")
+    if not (key and email and phone):
+        return
+    h = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    try:
+        r = requests.post("https://api.attio.com/v2/objects/people/records/query", headers=h, timeout=15,
+                          json={"filter": {"email_addresses": email.strip().lower()}, "limit": 2})
+        recs = (r.json() or {}).get("data") or [] if r.ok else []
+        if len(recs) != 1 or (recs[0].get("values") or {}).get("phone_numbers"):
+            return
+        rid = recs[0]["id"]["record_id"]
+        w = requests.patch(f"https://api.attio.com/v2/objects/people/records/{rid}", headers=h, timeout=15,
+                           json={"data": {"values": {"phone_numbers": [{"original_phone_number": phone}]}}})
+        print(f"  Attio phone written first: {w.status_code}")
+    except Exception as e:
+        print(f"  WARN: Attio phone not written first ({type(e).__name__}); the CRM sync writes it later", file=sys.stderr)
+
+
 REQUIRED_ENV_VARS = [
     "PLUS_VIBE_API_KEY", "PROSPEO_API_KEY", "AI_ARK_KEY_2", "SALES_QL_API_KEY",
     "GOOGLE_SERVICE_ACCOUNT_JSON", "DISCORD_WEBHOOK_URL",
@@ -308,6 +330,9 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
             if mkey:
                 memory[mkey] = {"phone": phone, "source": source, "hint": hint, "website": website, "at": time.time()}
                 save_memory(memory)                # before the sheet write: a crash from here on costs nothing next run
+
+        if phone and source != "SalesQL" and not dry_run:
+            attio_phone_first(email, phone)    # Koya HQ shows it before Discord does
 
         msg = f"**New positive reply** — {first_name} @ {company}\n{campaign}\n{email}"
         if phone:
