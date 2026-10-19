@@ -148,6 +148,12 @@ jobs:
       - name: Collect opportunities and system checks
         continue-on-error: true
         run: python crm/dashboard/collect_ops.py
+      # New leads added (Koya HQ Overview cards): leads added per day to each PlusVibe campaign and each Attio call list, counts only.
+      # The push scripts report each push to the app at once; this hourly count also catches leads added by hand.
+      - name: Count the new leads added per day
+        continue-on-error: true
+        timeout-minutes: 6
+        run: python crm/dashboard/collect_new_leads.py
       - name: Build the page
         run: python crm/dashboard/build_cold_email.py
       - name: Upload the page to the team app (private storage, never this repository)
