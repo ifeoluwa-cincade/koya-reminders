@@ -59,6 +59,17 @@ def _why(r):
         return ""
 
 
+def not_in_seq(r, is_sub) -> bool:
+    """PlusVibe 400 'Lead not found' on a SUBSEQUENCE: the lead is not (or no longer) in it (never added, or removed via HQ),
+    so the step is already satisfied. Only subsequences; on a main campaign it stays a real problem."""
+    if not is_sub or r.status_code != 400:
+        return False
+    try:
+        return "lead not found" in r.text.lower()
+    except Exception:
+        return False
+
+
 def stage_of(d) -> str:
     v = (d.get("values") or {}).get("stage") or []
     t = ((v[0].get("status") or {}).get("title") if v else "") or ""
@@ -114,6 +125,7 @@ def apply(stage: str, reason: str, email: str, hdr, camps, commit: bool, chosen:
         tag = None
     rows = CO.pv_sequence(email, hdr, camps)
     todo, bad = 0, 0
+    gone = set()                                             # subsequences the lead is not in: nothing to stop or tag, skip in the readback
     for x in rows:
         if not x.get("id") or not x.get("status"):      # no lead record in that campaign (mail history only): nothing to stop or tag
             continue
@@ -122,7 +134,11 @@ def apply(stage: str, reason: str, email: str, hdr, camps, commit: bool, chosen:
             if commit:
                 r = pv_post("/lead/update/status", {"workspace_id": WS, "campaign_id": x["id"], "email": email, "new_status": "COMPLETED"}, hdr)
                 ok = r.status_code < 300
-                print(f"   stop {'subsequence' if x['sub'] else 'main'} -> {r.status_code} {'' if ok else _why(r)}")
+                if not ok and not_in_seq(r, x["sub"]):
+                    ok = True; gone.add(x["id"])
+                    print("   stop subsequence -> lead not in it, already satisfied (note)")
+                else:
+                    print(f"   stop {'subsequence' if x['sub'] else 'main'} -> {r.status_code} {'' if ok else _why(r)}")
                 bad += 0 if ok else 1
             else:
                 print(f"   would stop {'subsequence' if x['sub'] else 'main'} (was {x['status']})")
@@ -131,7 +147,11 @@ def apply(stage: str, reason: str, email: str, hdr, camps, commit: bool, chosen:
             if commit:
                 r = pv_post("/lead/data/update", {"workspace_id": WS, "campaign_id": x["id"], "email": email, "variables": {"label": tag}}, hdr)
                 ok = r.status_code < 300 or (x["status"] == "SKIPPED" and r.status_code == 400)      # PlusVibe will not retag a skipped lead in a subsequence; the tag is lead-wide and the main sequence carries it
-                print(f"   tag {x['label'] or 'none'} -> {tag}: {r.status_code} {'' if ok else _why(r)}")
+                if not ok and not_in_seq(r, x["sub"]):
+                    ok = True; gone.add(x["id"])
+                    print("   tag on subsequence -> lead not in it, already satisfied (note)")
+                else:
+                    print(f"   tag {x['label'] or 'none'} -> {tag}: {r.status_code} {'' if ok else _why(r)}")
                 bad += 0 if ok else 1
             else:
                 print(f"   would tag {x['label'] or 'none'} -> {tag}")
@@ -139,7 +159,7 @@ def apply(stage: str, reason: str, email: str, hdr, camps, commit: bool, chosen:
         time.sleep(3)
         after = CO.pv_sequence(email, hdr, camps)
         for x in after:
-            if not x.get("status"):
+            if not x.get("status") or x.get("id") in gone:
                 continue
             if stop and x["status"] not in DONE:
                 bad += 1; print(f"   READBACK: a {'subsequence' if x['sub'] else 'main'} sequence is still {x['status']}")
