@@ -12,6 +12,7 @@ on:
       limit:   { description: "rows per shard, 0 = all (small number = test)", required: true, default: "0" }
       only:    { description: "comma list of shard numbers to run (blank = all)", required: false, default: "" }
       account: { description: "alternate | a (ifeoluwa) | b (eyitemi)", required: false, default: "alternate" }
+      mode:    { description: "full (3-step audit_v5) | lite (1 step, ~4-6x less Claude usage)", required: false, default: "full" }
 
 permissions:
   contents: write
@@ -69,9 +70,14 @@ jobs:
           python3 tools/cloud_audit.py unpack --batch "${{ inputs.batch }}" --shard ${{ matrix.shard }}
       - name: Audit (all output goes to an encrypted log)
         run: |
-          python3 tools/audit_v5.py --phase1-pipeline --input data/working/cloud_shard.csv \
-            --batch-id "cloud_${{ inputs.batch }}_${{ matrix.shard }}" --limit ${{ inputs.limit }} \
-            --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "audit exited non-zero"
+          if [ "${{ inputs.mode }}" = "lite" ]; then
+            python3 tools/audit_lite.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} \
+              --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "audit exited non-zero"
+          else
+            python3 tools/audit_v5.py --phase1-pipeline --input data/working/cloud_shard.csv \
+              --batch-id "cloud_${{ inputs.batch }}_${{ matrix.shard }}" --limit ${{ inputs.limit }} \
+              --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "audit exited non-zero"
+          fi
           echo "log lines: $(wc -l < run.log) | batch errors: $(grep -c 'batch err' run.log || true) | auth errors: $(grep -ci 'login\|unauthor\|invalid api key' run.log || true)"
       - name: Save results (encrypted), even if the audit failed
         if: always()
