@@ -10,6 +10,8 @@ on:
       shards:  { description: "number of shards (same as prep)", required: true, default: "4" }
       workers: { description: "parallel claude calls per shard", required: true, default: "6" }
       limit:   { description: "rows per shard, 0 = all (small number = test)", required: true, default: "0" }
+      only:    { description: "comma list of shard numbers to run (blank = all)", required: false, default: "" }
+      account: { description: "alternate | a (ifeoluwa) | b (eyitemi)", required: false, default: "alternate" }
 
 permissions:
   contents: write
@@ -21,7 +23,8 @@ jobs:
       idx: ${{ steps.m.outputs.idx }}
     steps:
       - id: m
-        run: echo "idx=$(python3 -c "import json;print(json.dumps(list(range(int('${{ inputs.shards }}')))))")" >> "$GITHUB_OUTPUT"
+        env: { N: "${{ inputs.shards }}", ONLY: "${{ inputs.only }}" }
+        run: echo "idx=$(python3 -c 'import json,os; o=[int(x) for x in os.environ["ONLY"].split(",") if x.strip()]; print(json.dumps(o or list(range(int(os.environ["N"])))))')" >> "$GITHUB_OUTPUT"
 
   audit:
     needs: plan
@@ -51,7 +54,10 @@ jobs:
           TOKEN_A: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           TOKEN_B: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
         run: |
-          if [ $(( ${{ matrix.shard }} % 2 )) -eq 0 ] || [ -z "$TOKEN_B" ]; then T="$TOKEN_A"; else T="$TOKEN_B"; fi
+          ACC="${{ inputs.account }}"
+          if [ "$ACC" = "a" ] || [ -z "$TOKEN_B" ]; then T="$TOKEN_A"
+          elif [ "$ACC" = "b" ]; then T="$TOKEN_B"
+          elif [ $(( ${{ matrix.shard }} % 2 )) -eq 0 ]; then T="$TOKEN_A"; else T="$TOKEN_B"; fi
           echo "::add-mask::$T"
           echo "CLAUDE_CODE_OAUTH_TOKEN=$T" >> "$GITHUB_ENV"
       - name: Install
