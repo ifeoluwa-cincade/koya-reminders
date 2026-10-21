@@ -1,0 +1,80 @@
+name: Cloud audit (manual only)
+
+# Runs tools/audit_v5.py on GitHub's machines instead of Ife's Mac (2026-10-21).
+# Inputs and outputs are encrypted with AUDIT_ENC_KEY; the log prints counts only.
+# Prepare a batch locally with: python3 tools/cloud_audit.py prep --batch <name> --input <csv> --shards <n>
+on:
+  workflow_dispatch:
+    inputs:
+      batch:   { description: "batch name used by cloud_audit.py prep", required: true }
+      shards:  { description: "number of shards (same as prep)", required: true, default: "4" }
+      workers: { description: "parallel claude calls per shard", required: true, default: "6" }
+      limit:   { description: "rows per shard, 0 = all (small number = test)", required: true, default: "0" }
+
+permissions:
+  contents: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      idx: ${{ steps.m.outputs.idx }}
+    steps:
+      - id: m
+        run: echo "idx=$(python3 -c "import json;print(json.dumps(list(range(int('${{ inputs.shards }}')))))")" >> "$GITHUB_OUTPUT"
+
+  audit:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.idx) }}
+    env:
+      AUDIT_ENC_KEY: ${{ secrets.AUDIT_ENC_KEY }}
+      AUDIT_USE_CLI: "1"
+      AUDIT_WORKERS: ${{ inputs.workers }}
+      AUDIT_FETCH_PARALLEL: "30"
+      AUDIT_SAVE_EVERY: "200"
+      AUDIT_SKIP_CRAWL4AI: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Pick the Claude account (even shards ifeoluwa, odd shards eyitemi)
+        env:
+          TOKEN_A: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          TOKEN_B: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
+        run: |
+          if [ $(( ${{ matrix.shard }} % 2 )) -eq 0 ] || [ -z "$TOKEN_B" ]; then T="$TOKEN_A"; else T="$TOKEN_B"; fi
+          echo "::add-mask::$T"
+          echo "CLAUDE_CODE_OAUTH_TOKEN=$T" >> "$GITHUB_ENV"
+      - name: Install
+        run: pip install -q httpx psutil python-dotenv && npm install -g -s @anthropic-ai/claude-code > /dev/null
+      - name: Get this shard's encrypted input
+        run: |
+          git fetch -q origin "cloud-audit-in/${{ inputs.batch }}"
+          git show "FETCH_HEAD:in.enc" > in.enc
+          python3 tools/cloud_audit.py unpack --batch "${{ inputs.batch }}" --shard ${{ matrix.shard }}
+      - name: Audit (all output goes to an encrypted log)
+        run: |
+          python3 tools/audit_v5.py --phase1-pipeline --input data/working/cloud_shard.csv \
+            --batch-id "cloud_${{ inputs.batch }}_${{ matrix.shard }}" --limit ${{ inputs.limit }} \
+            --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "audit exited non-zero"
+          echo "log lines: $(wc -l < run.log) | batch errors: $(grep -c 'batch err' run.log || true) | auth errors: $(grep -ci 'login\|unauthor\|invalid api key' run.log || true)"
+      - name: Save results (encrypted), even if the audit failed
+        if: always()
+        run: |
+          python3 tools/cloud_audit.py pack --batch "${{ inputs.batch }}" --shard ${{ matrix.shard }}
+          B="cloud-audit-out/${{ inputs.batch }}/${{ matrix.shard }}"
+          mkdir -p /tmp/out && cd /tmp/out && git init -q && git checkout -q --orphan "$B"
+          cp "$GITHUB_WORKSPACE/out.enc" . && git add out.enc
+          git -c user.name=cloud-audit -c user.email=cloud-audit@users.noreply.github.com commit -q -m "cloud audit $B"
+          git -c http.extraheader="$(git -C "$GITHUB_WORKSPACE" config --get http.https://github.com/.extraheader)" \
+            push -q -f "https://github.com/${{ github.repository }}.git" "$B:$B"
+          echo "pushed encrypted results"
