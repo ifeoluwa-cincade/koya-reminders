@@ -12,7 +12,7 @@ on:
       limit:   { description: "rows per shard, 0 = all (small number = test)", required: true, default: "0" }
       only:    { description: "comma list of shard numbers to run (blank = all)", required: false, default: "" }
       account: { description: "alternate | a (ifeoluwa) | b (eyitemi)", required: false, default: "alternate" }
-      mode:    { description: "full (3-step audit_v5) | lite (1 step, ~4-6x less Claude usage)", required: false, default: "full" }
+      mode:    { description: "full (3-step audit_v5) | lite (1 step) | phones (website phone numbers, no Claude)", required: false, default: "full" }
       founders: { description: "lite only: also read founders off the site text (yes/no)", required: false, default: "no" }
 
 permissions:
@@ -63,7 +63,7 @@ jobs:
           echo "::add-mask::$T"
           echo "CLAUDE_CODE_OAUTH_TOKEN=$T" >> "$GITHUB_ENV"
       - name: Install
-        run: pip install -q httpx psutil python-dotenv && npm install -g -s @anthropic-ai/claude-code > /dev/null
+        run: pip install -q httpx psutil python-dotenv phonenumbers && npm install -g -s @anthropic-ai/claude-code > /dev/null
       - name: Get this shard's encrypted input
         run: |
           git fetch -q origin "cloud-audit-in/${{ inputs.batch }}"
@@ -71,7 +71,10 @@ jobs:
           python3 tools/cloud_audit.py unpack --batch "${{ inputs.batch }}" --shard ${{ matrix.shard }}
       - name: Audit (all output goes to an encrypted log)
         run: |
-          if [ "${{ inputs.mode }}" = "lite" ]; then
+          if [ "${{ inputs.mode }}" = "phones" ]; then
+            python3 tools/cloud_phones.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} \
+              --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "phones exited non-zero"
+          elif [ "${{ inputs.mode }}" = "lite" ]; then
             F=""; [ "${{ inputs.founders }}" = "yes" ] && F="--founders"
             python3 tools/audit_lite.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} $F \
               --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "audit exited non-zero"
