@@ -33,7 +33,7 @@ jobs:
     timeout-minutes: 330
     strategy:
       fail-fast: false
-      max-parallel: 8
+      max-parallel: 20
       matrix:
         shard: ${{ fromJSON(needs.plan.outputs.idx) }}
     env:
