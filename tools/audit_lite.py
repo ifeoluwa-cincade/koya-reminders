@@ -35,6 +35,62 @@ SERVICE = re.compile(r"\bwe (build|help|design|implement|automate)|our clients|c
                      r"done[- ]for[- ]you|consult|for clients|custom (ai|automation|solution)", re.I)
 
 
+# --- optional founder step (Ife 2026-10-22): read the founder off the company's own pages, free apart from Claude.
+# Same prompt and the same strict checks as founder_waterfall.py route R2 (name must appear in the text, founder-type role).
+FOUNDER_PROMPT = """For each company below you get text from its own website. Name the ONE person who founded or runs it (founder, co-founder, CEO, owner, president, managing director).
+Rules: use ONLY what the text says. The person's full name (first and last) must appear in the text. If the text does not clearly name a founder/CEO/owner of THIS company, return null for name, title and quote.
+Do not use clients, case-study people, testimonials, advisors or team members who are not the founder/CEO/owner. quote = the exact words from the text that name them (max 200 chars).
+Return JSON {"items":[{"domain","name","title","quote"}]} with one item per company, same domains.
+
+"""
+FOUNDER_SCHEMA = {"type": "object", "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {
+    "domain": {"type": "string"}, "name": {"type": ["string", "null"]}, "title": {"type": ["string", "null"]}, "quote": {"type": ["string", "null"]}},
+    "required": ["domain", "name", "title", "quote"]}}}, "required": ["items"]}
+ROLE = re.compile(r"co-?founder|founder|\bceo\b|chief executive|\bowner\b|\bpresident\b|managing director|principal", re.I)
+
+
+def good_name(n):
+    n = (n or "").strip()
+    return bool(re.fullmatch(r"[^\W\d_][\w'’.\- ]+", n)) and 2 <= len(n.split()) <= 4 and len(n) <= 40
+
+
+def windows(text, n=1500):
+    hits = [m.start() for m in re.finditer(r"founder|co-founder|\bceo\b|chief executive|\bowner\b|meet |about us|our story|managing director", text or "", re.I)]
+    if not hits:
+        return (text or "")[:n]
+    out, last = [], -9999
+    for h in hits:
+        if h - last > 400:
+            out.append(text[max(0, h - 200):h + 300]); last = h
+        if sum(map(len, out)) >= n:
+            break
+    return " ... ".join(out)[:n + 600]
+
+
+def find_founders(targets):
+    """targets: [(domain, text)]. Returns {domain: {name, title, quote}} for confirmed founders only."""
+    from concurrent.futures import ThreadPoolExecutor
+    from pipeline.lite_claude import call_claude_lite
+    found, text = {}, dict(targets)
+    batches = [targets[i:i + 8] for i in range(0, len(targets), 8)]
+
+    def run(b):
+        body = "\n\n".join(f"### {d}\n{windows(t)}" for d, t in b)
+        try:
+            res = call_claude_lite(FOUNDER_PROMPT + body, json_schema=FOUNDER_SCHEMA, model="haiku", timeout_sec=240)
+        except Exception:
+            return
+        for it in (res or {}).get("items", []):
+            d, nm = (it.get("domain") or "").lower(), it.get("name")
+            tx = text.get(d, "").lower()
+            if nm and good_name(nm) and all(p.lower() in tx for p in nm.split()[:2]) \
+                    and ROLE.search((it.get("title") or "") + " " + (it.get("quote") or "")):
+                found[d] = {"name": nm.strip(), "title": it.get("title") or "Founder", "quote": (it.get("quote") or "")[:200]}
+    with ThreadPoolExecutor(int(os.environ.get("AUDIT_WORKERS", "4"))) as ex:
+        list(ex.map(run, batches))
+    return found
+
+
 def prefilter(text):
     saas = len(set(m.group(0).lower() for m in SAAS.finditer(text)))
     return saas >= 3 and not SERVICE.search(text)
@@ -45,6 +101,7 @@ def main():
     ap.add_argument("--input", required=True)
     ap.add_argument("--output", required=True)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--founders", action="store_true", help="also read the founder off the site text for agency/GTM keepers")
     a = ap.parse_args()
 
     leads = v5.read_deduped_csv(a.input)
@@ -82,13 +139,23 @@ def main():
         else:
             out[it["id"]].update({"route": "review", "bucket": "unknown", "reason": "lite call failed", "mode": "error"})
 
+    founders = {}
+    if a.founders:
+        keep = [(v5._norm_url(l.get("companyWebsite", "")), v5._text_from_entry(cache.get((l.get("companyWebsite") or "").strip())))
+                for i, l in enumerate(leads)
+                if out[str(i)].get("route") == "leads" and out[str(i)].get("bucket") in ("ai_agency", "ai_gtm_systems")]
+        keep = [(d.split("//")[-1].split("/")[0].removeprefix("www.").lower(), t) for d, t in keep if t]
+        founders = find_founders(keep)
+        print(f"  founders: {len(founders)} of {len(keep)} agency/GTM keepers named on their own site")
+
     cols = ["company_url", "name", "audit_route", "audit_classification", "audit_crm_type", "audit_confidence",
-            "audit_reason", "fetch_status", "audit_mode"]
+            "audit_reason", "fetch_status", "audit_mode", "founder_name", "founder_title", "founder_quote"]
     with open(a.output, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=cols); w.writeheader()
         for i, l in enumerate(leads):
             o = out[str(i)]
-            w.writerow({"company_url": l.get("companyWebsite", ""), "name": l.get("name", ""), "audit_route": o["route"],
+            fd = founders.get((l.get("companyWebsite") or "").split("//")[-1].split("/")[0].removeprefix("www.").lower(), {})
+            w.writerow({"founder_name": fd.get("name", ""), "founder_title": fd.get("title", ""), "founder_quote": fd.get("quote", ""),"company_url": l.get("companyWebsite", ""), "name": l.get("name", ""), "audit_route": o["route"],
                         "audit_classification": o["bucket"], "audit_crm_type": v5.AIA_CRM_TYPES.get(o["bucket"], ""),
                         "audit_confidence": o.get("confidence", ""), "audit_reason": o.get("reason", ""),
                         "fetch_status": o.get("fetch", ""), "audit_mode": o.get("mode", "")})
