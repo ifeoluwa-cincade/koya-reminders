@@ -85,13 +85,41 @@ def main():
         leads = leads[:a.limit]
     cache = asyncio.run(v5.stage1_fetch(leads))
 
+    # Client proof lives on case-study / portfolio / clients / testimonials pages, which the audit fetch skips.
+    # judge_agencies.py followed those nav links before scoring (via scrape_case_studies); do the same here,
+    # otherwise proof_of_clients comes back 0 for most agencies (2026-10-23: avg 2.4 vs 7.4 on older batches).
+    import re, httpx
+    PROOF_LINK = re.compile(r"""href=["']([^"'#]+)["'][^>]*>([^<]{0,80})<""", re.I)
+    PROOF_WORD = re.compile(r"case[- ]?stud|portfolio|our[- ]work|/work\b|clients|testimonial|success|results|projects", re.I)
+
+    def proof_pages(url):
+        try:
+            with httpx.Client(headers={"User-Agent": v5.UA}, timeout=20, follow_redirects=True) as c:
+                home = c.get(url)
+                links = []
+                for href, label in PROOF_LINK.findall(home.text):
+                    if PROOF_WORD.search(href) or PROOF_WORD.search(label):
+                        full = str(httpx.URL(str(home.url)).join(href))
+                        if full.split("//")[-1].split("/")[0] == str(home.url).split("//")[-1].split("/")[0] and full not in links:
+                            links.append(full)
+                out = []
+                for u in links[:3]:
+                    r = c.get(u)
+                    if r.status_code == 200:
+                        out.append(f"=== {u} ===\n" + re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", r.text))[:4000])
+                return "\n".join(out)
+        except Exception:
+            return ""
+
     def one(l):
         url = (l.get("companyWebsite") or "").strip()
         text = v5._text_from_entry(cache.get(url))
+        extra = proof_pages(url) if len(text) >= 200 else ""
+        text = (text[:8000] + "\n" + extra) if extra else text
         if len(text) < 200:
             return url, {"bucket": "no_website", "fit": 0, "proof_of_clients": 0, "reason": "site not readable"}
         try:
-            return url, call_claude_lite(PROMPT.format(text=text[:12000]), json_schema=SCHEMA, model="sonnet", timeout_sec=240)
+            return url, call_claude_lite(PROMPT.format(text=text[:16000]), json_schema=SCHEMA, model="sonnet", timeout_sec=240)
         except Exception as ex:
             return url, {"bucket": "", "reason": f"judge failed: {type(ex).__name__}"}
 
