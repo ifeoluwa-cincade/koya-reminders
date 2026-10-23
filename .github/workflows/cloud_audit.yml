@@ -71,7 +71,10 @@ jobs:
           python3 tools/cloud_audit.py unpack --batch "${{ inputs.batch }}" --shard ${{ matrix.shard }}
       - name: Audit (all output goes to an encrypted log)
         run: |
-          if [ "${{ inputs.mode }}" = "phones" ]; then
+          if [ "${{ inputs.mode }}" = "judge" ]; then
+            python3 tools/cloud_judge.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} \
+              --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "judge exited non-zero"
+          elif [ "${{ inputs.mode }}" = "phones" ]; then
             python3 tools/cloud_phones.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} \
               --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "phones exited non-zero"
           elif [ "${{ inputs.mode }}" = "lite" ]; then
