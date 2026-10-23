@@ -126,7 +126,9 @@ def read_countries(items):
 
 def verdict(site_cc, phone_ccs, tld_cc):
     """NA / EU / other when every signal agrees on in-or-out of NA+EU, mixed when they disagree, unknown with none."""
-    regs = [region(c) for c in [site_cc, tld_cc] + phone_ccs if c]
+    if site_cc:                       # the site's own address line wins: the phone regex also matches stray digits
+        return region(site_cc)
+    regs = [region(c) for c in [tld_cc] + phone_ccs if c]
     if not regs:
         return "unknown"
     inside = {r in ("NA", "EU") for r in regs}
