@@ -12,7 +12,7 @@ on:
       limit:   { description: "rows per shard, 0 = all (small number = test)", required: true, default: "0" }
       only:    { description: "comma list of shard numbers to run (blank = all)", required: false, default: "" }
       account: { description: "alternate | a (ifeoluwa) | b (eyitemi)", required: false, default: "alternate" }
-      mode:    { description: "full (3-step audit_v5) | lite (1 step) | phones (website phone numbers, no Claude)", required: false, default: "full" }
+      mode:    { description: "full (3-step audit_v5) | lite (1 step) | phones (website phone numbers, no Claude) | geo (NA/EU check: site address, phones, web address)", required: false, default: "full" }
       founders: { description: "lite only: also read founders off the site text (yes/no)", required: false, default: "no" }
 
 permissions:
@@ -83,6 +83,9 @@ jobs:
           elif [ "${{ inputs.mode }}" = "judge" ]; then
             python3 tools/cloud_judge.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} \
               --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "judge exited non-zero"
+          elif [ "${{ inputs.mode }}" = "geo" ]; then
+            python3 tools/cloud_geo.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} \
+              --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "geo exited non-zero"
           elif [ "${{ inputs.mode }}" = "phones" ]; then
             python3 tools/cloud_phones.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} \
               --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "phones exited non-zero"
