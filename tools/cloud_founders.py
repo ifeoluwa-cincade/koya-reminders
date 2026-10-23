@@ -31,7 +31,7 @@ def main():
     rows = list(csv.DictReader(open(a.input, encoding="utf-8")))
     if a.limit:
         rows = rows[:a.limit]
-    keys = [k for k in (os.environ.get("BLITZAPI_KEY_2"), os.environ.get("BLITZAPI_KEY")) if k]
+    keys = [k for k in (os.environ.get("BLITZAPI_KEY"), os.environ.get("BLITZAPI_KEY_2")) if k]   # key 1 first: key 2 was emptied 23 Oct
     cap, used = int(os.environ.get("BLITZ_DOMAIN_CAP", "200")), 0
     for r in rows:
         if r.get("linkedin") or not keys or used >= cap:
@@ -43,6 +43,8 @@ def main():
                                   json={"domain": r["domain"]}, timeout=60).json()
             except Exception:
                 time.sleep(2); continue
+            if (j.get("fair_usage") or {}).get("records_remaining") == 0 and not j.get("found"):
+                continue                     # this key is out of records: try the next one
             if j.get("found"):
                 used += 1
                 r["linkedin"] = j.get("company_linkedin_url") or ""

@@ -74,8 +74,8 @@ jobs:
           BLITZAPI_KEY: ${{ secrets.BLITZAPI_KEY }}
           BLITZAPI_KEY_2: ${{ secrets.BLITZAPI_KEY_2 }}
           EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
-          BLITZ_DOMAIN_CAP: "40"
-          BLITZ_PEOPLE_CAP: "30"
+          BLITZ_DOMAIN_CAP: "5"
+          BLITZ_PEOPLE_CAP: "4"
         run: |
           if [ "${{ inputs.mode }}" = "founders" ]; then
             python3 tools/cloud_founders.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} \
