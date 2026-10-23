@@ -63,7 +63,7 @@ jobs:
           echo "::add-mask::$T"
           echo "CLAUDE_CODE_OAUTH_TOKEN=$T" >> "$GITHUB_ENV"
       - name: Install
-        run: pip install -q httpx psutil python-dotenv phonenumbers && npm install -g -s @anthropic-ai/claude-code > /dev/null
+        run: pip install -q httpx psutil python-dotenv phonenumbers requests && npm install -g -s @anthropic-ai/claude-code > /dev/null
       - name: Get this shard's encrypted input
         run: |
           git fetch -q origin "cloud-audit-in/${{ inputs.batch }}"
