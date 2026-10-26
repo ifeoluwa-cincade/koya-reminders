@@ -32,6 +32,7 @@ import requests
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "crm" / "scripts"))
 from attio_client import AttioClient
+import reply_scope as RS
 
 PV = "https://api.plusvibe.ai/api/v1"
 WS = "6a6e634971ad0f0e174a5471"
@@ -70,7 +71,7 @@ def live_labels(H) -> dict[str, tuple[str, str, str]]:
     out = {}
     for c in pv_get("/campaign/list-all", {"workspace_id": WS}, H).json():
         name = c.get("name") or c.get("camp_name") or ""
-        if "ai agency" not in name.lower():
+        if not RS.in_scope(name):                  # AI agency + TAM re-outreach + nurture (2026-10-26)
             continue
         page = 1
         while True:
@@ -139,7 +140,7 @@ def _why(r):
 def main() -> int:
     ap = argparse.ArgumentParser(); ap.add_argument("--commit", action="store_true"); a = ap.parse_args()
     labels = live_labels({"x-api-key": secret("PLUS_VIBE_API_KEY")})
-    print(f"{len(labels)} replied leads with a live label in AI agency campaigns")
+    print(f"{len(labels)} replied leads with a live label in AI agency / TAM / nurture campaigns")
 
     c = AttioClient(workers=6)
     # only the deals this script owns need their people's emails: fetch those people one by one, in parallel, instead of reading all 16,000
@@ -187,6 +188,9 @@ def main() -> int:
     for d, frm, to, reason, label, camp, email in plan:
         rid = d["id"]["record_id"]
         vals = {"stage": [{"status": to}]}
+        fu = RS.follow_up_at(to)
+        if fu and not one(d, "next_action_at"):         # Later: a follow-up about 30 days out, unless a person already set one
+            vals["next_action_at"] = [{"value": fu}]
         if reason:
             vals["lost_reason"] = [{"option": reason}]
         r = c.req("PATCH", f"/objects/deals/records/{rid}", json={"data": {"values": vals}})

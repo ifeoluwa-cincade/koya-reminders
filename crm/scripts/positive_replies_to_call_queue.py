@@ -7,7 +7,8 @@ deals_follow_labels.py already turn a reply into an Interested / Later deal. Thi
 the same 20-minute GitHub job:
 
   open cold email deal (Interested or Later), not ruled out
-      -> phone: the Attio person's own number, else their call-list entry, else AI Ark (key 2)
+      -> phone: the Attio person's own number, else their call-list entry, else AI Ark (key 2), else a valid number in the
+         signature of their own reply (2026-10-26, Ramsey Sweis: AI Ark had nothing, his number was under his name)
       -> number written onto the Attio person
       -> entry on the Attio "AI Agency Positive Replies" list
       -> CloudTalk contact found BY PHONE (created only if none exists), id written onto the entry
@@ -33,10 +34,12 @@ import requests
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "crm" / "scripts"))
 from attio_client import AttioClient
-from deals_follow_labels import live_labels
+from deals_follow_labels import live_labels, pv_get
+import reply_scope as RS
 from verify_cloudtalk_tags import auth, carriers, ct, first
 
 LIST = "call_ai_agency_positive_replies"
+RS_WS = "6a6e634971ad0f0e174a5471"
 TAG = "Attio | Positive Replies"
 OPEN = {"Interested", "Multi-touch", "Later"}
 ARK_URL = "https://api.ai-ark.com/api/developer-portal/v2/people/mobile-phone-finder"
@@ -181,6 +184,8 @@ def main() -> int:
     now = datetime.now(timezone.utc).isoformat()
     plan, nophone, looked = [], [], 0
     sheet_miss_hits = 0
+    sig_looked = sig_found = 0
+    pv_h = {"x-api-key": secret("PLUS_VIBE_API_KEY")}
     from_sheet_map = sheet_phones()
     for rid in add:
         p = people[rid]; v = p["values"]
@@ -214,6 +219,24 @@ def main() -> int:
                     phone, from_ark = got or "", bool(got)
                 else:
                     nophone.append(f"{name} (would ask AI Ark)"); continue
+        from_sig = False
+        if not phone and pv_h:                         # the lookup found none: a valid number in their own reply's signature (free, a read)
+            for em in emails(p)[:2]:
+                ck, at_k = "sig|" + em, "sig_at|" + em
+                if cache.get(ck):
+                    phone = cache[ck]; break
+                last = cache.get(at_k) or ""
+                if last and (datetime.now(timezone.utc) - datetime.fromisoformat(last)).days < 3:
+                    continue                           # looked in the last 3 days, nothing: not read again every hour
+                got = RS.signature_phone(pv_get, pv_h, RS_WS, em)
+                cache[ck], cache[at_k] = got, now; sig_looked += 1
+                if a.commit:
+                    CACHE.parent.mkdir(parents=True, exist_ok=True)
+                    CACHE.write_text(json.dumps(cache, ensure_ascii=False, indent=2))
+                if got:
+                    phone, from_sig = got, True; break
+        if from_sig:
+            sig_found += 1
         phone = e164(phone)
         if phone:
             plan.append((rid, name, phone, from_ark or not on_person, first(ev, "cloudtalk_contact_id")))
@@ -222,6 +245,7 @@ def main() -> int:
 
     print(f"open interested/later people: {len(add)}  with a number: {len(plan)}  AI Ark lookups this run: {looked}")
     print(f"no number: {len(nophone)}")
+    print(f"numbers taken from a reply's signature: {sig_found} ({sig_looked} replies read)")
     print(f"would ask AI Ark (dry run): {sum('(would ask AI Ark)' in x for x in nophone)}")
     print(f"AI Ark asks for people the Discord job already looked up with no number: {sheet_miss_hits} "
           f"({'skipped' if TRUST_SHEET_MISS else 'still asked; set CALLQ_TRUST_SHEET_MISS=1 to skip'})")

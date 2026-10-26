@@ -70,7 +70,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install requests pyyaml gspread google-auth
+        run: pip install requests pyyaml gspread google-auth phonenumbers
       - name: Decide dry run or real run
         run: |
           # a manual run with dry_run=true changes nothing; every automatic run (reply, hourly) is real.
