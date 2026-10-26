@@ -74,6 +74,8 @@ jobs:
           BLITZAPI_KEY: ${{ secrets.BLITZAPI_KEY }}
           BLITZAPI_KEY_2: ${{ secrets.BLITZAPI_KEY_2 }}
           EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+          EXA_API_KEY_2: ${{ secrets.EXA_API_KEY_2 }}
+          CLOUD_RESCUE: "1"
           BLITZ_DOMAIN_CAP: "5"
           BLITZ_PEOPLE_CAP: "4"
         run: |

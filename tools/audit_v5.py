@@ -944,8 +944,63 @@ async def stage1_fetch(leads):
         await _run_rescues(cache, client, only=websites)
         save_cache(MULTIPAGE_CACHE, cache)
 
+    # Layer 3 — Jina Reader then Exa for whatever is still unreadable (Ife 2026-10-26). Measured on 143 cloud
+    # "unreadable" sites: Jina read 81, Exa 23 more, and the lite audit then found 26 agencies (the cloud alone found 5).
+    if os.environ.get("CLOUD_RESCUE") == "1":
+        _jina_exa_rescue(cache, websites)
+        save_cache(MULTIPAGE_CACHE, cache)
+
     _print_status_breakdown(cache, websites)
     return cache
+
+
+_RESCUE_BAD = ("Just a moment", "Attention Required", "Access denied", "Enable JavaScript and cookies",
+               "Verify you are human", "Warning: Target URL returned error")
+
+
+def _jina_exa_rescue(cache, websites):
+    import requests as _rq
+    from concurrent.futures import ThreadPoolExecutor
+    failed = [w for w in websites if _status_from_entry(cache.get(w)) in _FETCH_FAILED]
+    if not failed:
+        return
+
+    def jina(u):
+        for att in range(3):
+            try:
+                r = _rq.get("https://r.jina.ai/" + u, headers={"Accept": "text/plain"}, timeout=45)
+            except _rq.RequestException:
+                time.sleep(3 * (att + 1)); continue
+            if r.status_code in (429, 502, 503, 504):
+                time.sleep(5 * (att + 1)); continue
+            t = r.text if r.status_code == 200 else ""
+            return u, t if len(t) >= 300 and not any(m in t[:2000] for m in _RESCUE_BAD) else ""
+        return u, ""
+
+    got = 0
+    with ThreadPoolExecutor(8) as ex:
+        for u, t in ex.map(jina, failed):
+            if t:
+                cache[u] = {"status": "ok", "text": t[:9000], "rescued": "jina"}; got += 1
+    left = [w for w in failed if _status_from_entry(cache.get(w)) != "ok"]
+    key = os.environ.get("EXA_API_KEY_2") or os.environ.get("EXA_API_KEY") or ""
+    exa = 0
+    for i in range(0, len(left), 25) if key else []:
+        try:
+            r = _rq.post("https://api.exa.ai/contents", headers={"x-api-key": key, "Content-Type": "application/json"}, timeout=180,
+                         json={"urls": left[i:i + 25], "text": {"maxCharacters": 4000}, "subpages": 2, "subpageTarget": ["about", "services"]})
+        except _rq.RequestException:
+            continue
+        if r.status_code >= 400:
+            print(f"  rescue: exa HTTP {r.status_code}", flush=True); break
+        for x in r.json().get("results") or []:
+            t = x.get("text") or ""
+            for sp in x.get("subpages") or []:
+                t += "\n\n" + (sp.get("text") or "")[:3000]
+            u = x.get("id") or x.get("url")
+            if len(t) >= 300 and u in left:
+                cache[u] = {"status": "ok", "text": t[:9000], "rescued": "exa"}; exa += 1
+    print(f"  rescue: {len(failed)} unreadable -> jina {got}, exa {exa}, still unreadable {len(failed) - got - exa}", flush=True)
 
 
 # ----------------- Stage 2: Haiku 3-step chain -----------------
