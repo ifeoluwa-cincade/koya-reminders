@@ -8,20 +8,20 @@ call_lists:
   - A
   - B
 - name: AI Agencies | EU | A+B
-  cloudtalk_campaign_id: 361449
+  cloudtalk_campaign_id: 370764
   cloudtalk_tag: Attio | EU | A+B
   region: EU
   tiers:
   - A
   - B
 - name: AI Agencies | NA | C
-  cloudtalk_campaign_id: 362297
+  cloudtalk_campaign_id: 1853
   cloudtalk_tag: Attio | NA | C
   region: NA
   tiers:
   - C
 - name: AI Agencies | EU | C
-  cloudtalk_campaign_id: 362301
+  cloudtalk_campaign_id: 370765
   cloudtalk_tag: Attio | EU | C
   region: EU
   tiers:
