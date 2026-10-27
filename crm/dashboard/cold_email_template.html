@@ -648,6 +648,7 @@
   .oseen{font-size:12.5px; color:var(--ink-3); font-variant-numeric:tabular-nums;}
   .odue{font-size:12.5px; font-weight:600; font-variant-numeric:tabular-nums;}
   .odue.nodate{color:var(--ink-2); font-weight:500; border:1px dashed var(--line); border-radius:999px; padding:2px 9px; justify-self:start;}
+  .odue.nodate.rdone{color:#2e9d62; border-style:solid;}   /* resolved with no follow-up date (27 Oct 2026) */
   .odue.over{color:var(--down);} .odue.today{color:var(--amber);} .odue.soon{color:#4a3cc4;} .odue.later{color:var(--ink-3); font-weight:500;}
   @media (max-width:860px){
     .ogrid{grid-template-columns:minmax(0,1fr) auto; row-gap:6px;}
@@ -1354,7 +1355,7 @@
   function dueInfo(o){ if (o.bucket==="lost"||o.bucket==="won") return {n:null,label:(o.bucket==="won"?"Won":"Lost")+(o.closed_at?" "+fmtDate(o.closed_at):""),cls:"later"};
     if(!o.due_set && o.missed){ var mn=daysFromNow(o.missed); return {n:Math.min(mn==null?-1:mn,-1),label:"Overdue "+Math.max(1,mn==null?1:-mn)+"d",cls:"over"}; }       // a follow-up that came due and was not done: overdue, and the follow-up field is free for a new one
     var n=o.due_set?daysFromNow(o.due):null;          // no follow-up date unless one was set: the "30 days after last touch" guess is never shown as a due date
-    if(n==null) return {n:null,label:"Pending",cls:"later nodate"};
+    if(n==null) return (REV||{})[o.id]==="done"?{n:null,label:"Resolved",cls:"later nodate rdone"}:{n:null,label:"Not set",cls:"later nodate"};   // no follow-up date: "Not set", or "Resolved" once the lead is marked Resolved (was a misleading "Pending", Ife 27 Oct 2026)
     if(n<0) return {n:n,label:"Overdue "+(-n)+"d",cls:"over"};
     if(n===0) return {n:0,label:"Due today",cls:"today"};
     if(n===1) return {n:1,label:"Tomorrow",cls:"soon"};
@@ -1436,7 +1437,7 @@
   function T(v){ if(!v) return null; var n=new Date(v).getTime(); return isNaN(n)?null:n; }
   function TT(o){ var x=T(o.last_touch); if(x==null&&o.live_at) x=o.live_at; return x; }   // a lead found live with no usable touch date counts as just now, never as the oldest
   var BORDER={meeting:0,followup:1,chasing:2,callback:3,later:4};
-  // "Needs attention first": brand-new leads, then leads with no follow-up date (Pending), then overdue (the most overdue first), due today, and the rest by date
+  // "Needs attention first": brand-new leads, then leads with no follow-up date (Not set), then overdue (the most overdue first), due today, and the rest by date
   // the New tag goes away once the lead has been opened, or after a day; the next hourly build also drops it for good
   var NEWSEEN={}; try{ NEWSEEN=JSON.parse(localStorage.getItem("koya-new-seen")||"{}"); }catch(e){}
   function newSeen(id){ return !!(NEWSEEN&&NEWSEEN[id]); }
