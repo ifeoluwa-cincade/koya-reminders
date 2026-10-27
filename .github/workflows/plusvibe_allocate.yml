@@ -1,0 +1,47 @@
+name: PlusVibe inbox allocator
+
+# Copied from sales-nav-pipeline tools/allocator (source of truth there, with
+# tools/allocator/plusvibe_allocate.py and tools/allocator/allocator_config.json).
+# Every weekday at 12:10 UTC (08:10 New York in winter, 07:10 in summer), before the 9-5 NY sending window:
+# counts follow-ups due and untouched leads per active campaign and prints the proposed daily limits.
+# REPORT ONLY. It never sends a PATCH: --apply is not passed, and ALLOCATOR_LIVE is not set.
+# Going live later needs Ife's go: add `--apply` and `ALLOCATOR_LIVE: "1"` on purpose.
+on:
+  schedule:
+    - cron: "10 12 * * 1-5"
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: plusvibe-allocate
+  cancel-in-progress: false
+
+jobs:
+  allocate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install requests
+      - name: Allocate (report only)
+        run: python tools/allocator/plusvibe_allocate.py
+      # The report holds campaign ids and counts only (no lead emails), so it is safe as a run artifact.
+      - name: Keep the JSON report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: allocator-report
+          path: data/working/allocator/*.json
+          retention-days: 14
+      - name: Remove the temporary files
+        if: ${{ always() }}
+        run: rm -rf data

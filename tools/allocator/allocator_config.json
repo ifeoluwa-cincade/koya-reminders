@@ -1,0 +1,19 @@
+{
+  "_about": "Settings for tools/allocator/plusvibe_allocate.py. Edit here, not in the code. Campaigns are matched by id. Order of 'campaigns' = order new leads are handed out. new_leads=false means follow-ups only (winding down).",
+  "ceiling_fallback": 1260,
+  "per_mailbox_fallback": 15,
+  "send_window": {"tz": "America/New_York", "to": "17:00"},
+  "followup_statuses": ["CONTACTED", "RESCHEDULED"],
+  "floor_with_work": 20,
+  "floor_waiting": 10,
+  "priority_step": 0.1,
+  "skip_name_contains": ["| Cycle"],
+  "campaigns": [
+    {"id": "6ac425b8844af0790389ae2b", "label": "Main (Original Copy)", "new_leads": true, "max_new_per_day": null},
+    {"id": "6ac8c984c62790af63904ba3", "label": "TAM (Original Copy)", "new_leads": true, "max_new_per_day": null},
+    {"id": "6ac425cd948cec12d0cd37d7", "label": "Nurture", "new_leads": true, "max_new_per_day": null},
+    {"id": "6ac253f5a0a271f0f442d96d", "label": "Rejoice (winding down)", "new_leads": false, "max_new_per_day": null},
+    {"id": "6ac27fc5844af07903887edb", "label": "TAM old (winding down)", "new_leads": false, "max_new_per_day": null}
+  ],
+  "other_active_campaigns": "include_after_listed"
+}
