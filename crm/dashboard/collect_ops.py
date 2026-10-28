@@ -47,8 +47,8 @@ OPEN_STAGES = {"Interested", "Multi-touch", "Meeting Booked", "Later", "Profiles
 # the caller's own note decides first, so "send email" / "follow up" on a call makes it SEND_FOLLOW_UP and it appears here.
 REAL_CALL = LB.REAL_CALL
 # days after the last touch before the lead is due again
-DUE_DAYS = {"meeting": 3, "followup": 2, "callback": 1, "later": 30, "chasing": 2, "lost": 0, "won": 0}
-BUCKET_LABEL = {"meeting": "Meeting booked", "followup": "Follow up", "chasing": "Multi-touch", "callback": "Callback", "later": "Not now", "lost": "Lost", "won": "Won"}
+DUE_DAYS = {"meeting": 3, "aftercall": 2, "followup": 2, "callback": 1, "later": 30, "chasing": 2, "lost": 0, "won": 0}
+BUCKET_LABEL = {"meeting": "Meeting booked", "aftercall": "After the call", "followup": "Follow up", "chasing": "Multi-touch", "callback": "Callback", "later": "Not now", "lost": "Lost", "won": "Won"}
 
 
 def now() -> datetime:
@@ -218,7 +218,7 @@ def collect_opportunities(c: AttioClient) -> list[dict]:
         opps.append({
             "id": pid, "name": val(p, "name") or email, "company": cname, "email": email,
             "phone": val(p, "phone_numbers"), "linkedin": val(p, "linkedin"), "li_conn": val(p, "linkedin_connection"),
-            "bucket": bucket, "status": BUCKET_LABEL[bucket],
+            "bucket": bucket, "status": (bucket == "aftercall" and LB.STAGE_LABEL.get(next((dl["stage"] for dl in r["deals"]), None))) or BUCKET_LABEL[bucket],      # Profiles sent / Trial show their own word (29 Oct 2026)
             "stage": next((dl["stage"] for dl in r["deals"]), None), "source": src["source"], "also": src["also"],
             "first_touch": {"ch": src["first"], "at": src["at"]} if src["first"] else None, "_src": src_in,
             "reason": next((dl["reason"] for dl in r["deals"] if dl.get("reason")), None),
@@ -719,7 +719,7 @@ def cloudtalk_checks(spec: dict, opps: list[dict]) -> list[dict]:
     tags = {}
     for row in cl.get("/tags/index.json", params={"limit": 200}, timeout=60).json()["responseData"]["data"]:
         t = row.get("Tag", row); tags[t["name"]] = t["id"]
-    real_ct = {o["links"]["cloudtalk"].rsplit("/", 1)[-1] for o in opps if o["links"].get("cloudtalk") and o["bucket"] in ("meeting", "followup", "later")}
+    real_ct = {o["links"]["cloudtalk"].rsplit("/", 1)[-1] for o in opps if o["links"].get("cloudtalk") and o["bucket"] in ("meeting", "aftercall", "followup", "later")}
     tagged = set()
     for tg in ("Attio | NA | A+B", "Attio | NA | C", "Attio | EU | A+B", "Attio | EU | C"):
         if tg not in tags:

@@ -3,14 +3,20 @@ closedBy, and koya-app test/leadkey.test.js checks that STAGE_BUCKET below match
 
 Ife, 17 Oct 2026: the stage tabs changed three times after load, and some leads sat in Open although their deal was at Later. The
 newest decision wins: a deal's stage decides, and a call outcome only outranks it when the call came AFTER the stage was set (a deal
-moved to Later or Multi-touch after a "send follow-up" call is Later / Multi-touch, not Follow up)."""
+moved to Later or Multi-touch after a "send follow-up" call is Later / Multi-touch, not Follow up).
+
+Ife, 29 Oct 2026: Profiles Sent and Trial are their own bucket, "aftercall" (the Opportunities stage "After the call", after Meeting
+booked), not Interested: Greyson Jones (Krastor) showed as Interested after his profiles were sent. A follow-up call after the stage was
+set never pulls such a lead back to Interested (ORDER: only a newer booked meeting outranks it)."""
 from datetime import datetime, timezone
 
 STAGE_BUCKET = {"Meeting Booked": "meeting", "Interested": "followup", "Multi-touch": "chasing", "Later": "later",
-                "Profiles Sent": "followup", "Trial": "followup", "Lost": "lost", "Won 🎉": "won"}
+                "Profiles Sent": "aftercall", "Trial": "aftercall", "Lost": "lost", "Won 🎉": "won"}
 # A call is an opportunity only when something was agreed or asked for ("Not now" is not one, Ife 2026-10-12)
+# the word a lead in the aftercall bucket shows: its real stage (Ife 29 Oct 2026), never the bucket's name
+STAGE_LABEL = {"Profiles Sent": "Profiles sent", "Trial": "Trial"}
 REAL_CALL = {"MEETING_BOOKED": "meeting", "SEND_FOLLOW_UP": "followup", "CALLBACK": "callback"}
-ORDER = {"meeting": 0, "followup": 1, "chasing": 1.5, "callback": 2, "later": 3}
+ORDER = {"meeting": 0, "aftercall": 0.5, "followup": 1, "chasing": 1.5, "callback": 2, "later": 3}
 
 
 def bucket_of(stage):
