@@ -33,6 +33,9 @@ import gspread
 import requests
 from google.oauth2.service_account import Credentials
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "crm", "scripts"))
+import phone_pick as PP  # noqa: E402  (shared rule with positive_replies_to_call_queue.py)
+
 SHEET_ID = os.environ.get("CALLLIST_SHEET_ID", "")  # the call-list Google Sheet; set as a repository secret
 OUT_TAB = "Positive Reply Call List"
 WORKSPACE_ID = "6a6e634971ad0f0e174a5471"
@@ -224,26 +227,36 @@ def post_discord(text: str):
         print(f"  WARN: Discord post failed: {e}", file=sys.stderr)
 
 
-def attio_phone_first(email: str, phone: str) -> None:
+def attio_phone_first(email: str, phone: str, source: str = "") -> str:
     """Koya HQ (19 Oct): the phone goes onto the Attio person the moment it is found, BEFORE the sheet row and the Discord post, so the
-    lead window (which re-reads the person every 3 s after a positive reply) shows it no later than Discord. Only when the person has no
-    phone yet; never fails the run (the CRM sync still writes it from the sheet as before)."""
+    lead window (which re-reads the person every 3 s after a positive reply) shows it no later than Discord. Never fails the run (the
+    CRM sync still writes it from the sheet as before).
+    29 Oct 2026 (a positive-reply lead; Ife: "the number we got from the lookup should replace what we find ... keep more
+    numbers, with the source of each"): this VERIFIED number becomes the primary; every older number stays as an extra number,
+    known junk is dropped, and phone_sources records where each number came from (crm/scripts/phone_pick.py).
+    Returns why, for the log (no number printed)."""
     key = os.environ.get("ATTIO_API_KEY_2", "")
     if not (key and email and phone):
-        return
+        return ""
     h = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     try:
         r = requests.post("https://api.attio.com/v2/objects/people/records/query", headers=h, timeout=15,
                           json={"filter": {"email_addresses": email.strip().lower()}, "limit": 2})
         recs = (r.json() or {}).get("data") or [] if r.ok else []
-        if len(recs) != 1 or (recs[0].get("values") or {}).get("phone_numbers"):
-            return
+        if len(recs) != 1:
+            return ""
+        book, changed, why = PP.apply_lookup(recs[0].get("values") or {}, phone, source)
+        if not changed:
+            return why
         rid = recs[0]["id"]["record_id"]
-        w = requests.patch(f"https://api.attio.com/v2/objects/people/records/{rid}", headers=h, timeout=15,
-                           json={"data": {"values": {"phone_numbers": [{"original_phone_number": phone}]}}})
-        print(f"  Attio phone written first: {w.status_code}")
+        # PUT overwrites phone_numbers (a multiselect) in the order given, primary first; PATCH would only prepend
+        w = requests.put(f"https://api.attio.com/v2/objects/people/records/{rid}", headers=h, timeout=15,
+                         json={"data": {"values": PP.to_values(book)}})
+        print(f"  Attio phone written first: {w.status_code} ({why}; {len(book['phones'])} number(s) on the person)")
+        return why if w.ok else ""
     except Exception as e:
         print(f"  WARN: Attio phone not written first ({type(e).__name__}); the CRM sync writes it later", file=sys.stderr)
+        return ""
 
 
 REQUIRED_ENV_VARS = [
@@ -331,12 +344,15 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
                 memory[mkey] = {"phone": phone, "source": source, "hint": hint, "website": website, "at": time.time()}
                 save_memory(memory)                # before the sheet write: a crash from here on costs nothing next run
 
-        if phone and source != "SalesQL" and not dry_run:
-            attio_phone_first(email, phone)    # Koya HQ shows it before Discord does
+        why = ""
+        if phone and PP.verified_source(source) and not dry_run:
+            why = attio_phone_first(email, phone, source)    # Koya HQ shows it before Discord does
 
         msg = f"**New positive reply** — {first_name} @ {company}\n{campaign}\n{email}"
         if phone:
             msg += f"\n📞 {phone} ({source}) — added to Positive Reply Call List"
+            if "older number stays" in why:
+                msg += "\nNow the main number in Attio; the older number is kept as an extra."
         elif hint:
             msg += f"\n⚠️ No verified number. SalesQL has an unconfirmed candidate: {hint} — verify before calling."
         else:

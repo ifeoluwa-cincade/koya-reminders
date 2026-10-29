@@ -47,7 +47,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install gspread google-auth requests
+        run: pip install gspread google-auth requests phonenumbers
       # What was paid for is remembered before the sheet row is written. It holds phone numbers, so it is encrypted.
       - name: Restore the encrypted lookup memory
         uses: actions/cache/restore@v4

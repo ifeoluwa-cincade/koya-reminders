@@ -8,7 +8,11 @@ the same 20-minute GitHub job:
 
   open cold email deal (Interested or Later), not ruled out
       -> phone: the Attio person's own number, else their call-list entry, else AI Ark (key 2), else a valid number in the
-         signature of their own reply (2026-10-26, Ramsey Sweis: AI Ark had nothing, his number was under his name)
+         signature of their own reply (2026-10-26, Ramsey Sweis: AI Ark had nothing, his number was under his name).
+         29 Oct 2026 (a positive-reply lead; Ife: "the number we got from the lookup should replace what we find ...
+         keep more numbers, with the source of each"): the lookup's VERIFIED number (sheet, Prospeo verified or AI Ark)
+         becomes the primary the first time it is seen, older numbers stay as extra numbers, known junk is dropped, and
+         phone_sources on the person says where each number came from (phone_pick.py). Written with PUT, primary first.
       -> number written onto the Attio person
       -> entry on the Attio "AI Agency Positive Replies" list
       -> CloudTalk contact found BY PHONE (created only if none exists), id written onto the entry
@@ -36,6 +40,7 @@ sys.path.insert(0, str(ROOT / "crm" / "scripts"))
 from attio_client import AttioClient
 from deals_follow_labels import live_labels, pv_get
 import reply_scope as RS
+import phone_pick as PP
 from verify_cloudtalk_tags import auth, carriers, ct, first
 
 LIST = "call_ai_agency_positive_replies"
@@ -99,12 +104,16 @@ def sheet_phones() -> dict:
         ph = str(r.get("Phone") or "").strip() or str(r.get("Phone 2") or "").strip()
         if em and ph:
             out[em] = ph
+            main = str(r.get("Phone") or "").strip()
+            if main and PP.verified_source(r.get("Source")):
+                SHEET_VERIFIED[em] = (main, str(r.get("Source") or ""))   # the lookup's own verified number (by LinkedIn)
         elif em and li_col and str(r.get(li_col) or "").strip():
             SHEET_ASKED.add(em)        # the Discord job already asked Prospeo and AI Ark (by LinkedIn) and found no number
     return out
 
 
 SHEET_ASKED: set = set()
+SHEET_VERIFIED: dict = {}
 # 2026-10-17: a positive reply the Discord job already looked up and found NO number for was asked again here (one paid AI Ark call
 # each). CALLQ_TRUST_SHEET_MISS=1 skips that second call; until it is switched on the run only COUNTS how many it would skip.
 TRUST_SHEET_MISS = os.environ.get("CALLQ_TRUST_SHEET_MISS") == "1"
@@ -121,6 +130,19 @@ def ark_phone(key, linkedin="", domain="", name=""):
         return None
     nested = (body.get("data") or {}).get("data") or [] if body.get("status") == 200 else []
     return nested[0][0] if nested and nested[0] else ""
+
+
+def ct_contact_for(rows, mails) -> str | None:
+    """The CloudTalk contact (from a search by phone) that is THIS person: one of its emails is theirs. 29 Oct 2026: the first
+    hit was taken, so a lead's entry pointed at another person's contact (same junk number), who got the Positive Replies
+    tag. No email match -> None, and a contact is created for the person."""
+    mine = {str(m).strip().lower() for m in mails if m}
+    for x in rows or []:
+        ce = x.get("ContactEmail") or []
+        ce = ce if isinstance(ce, list) else [ce]
+        if mine & {str((e or {}).get("email") or "").strip().lower() for e in ce}:
+            return str((x.get("Contact") or x).get("id"))
+    return None
 
 
 def _why(r):
@@ -187,11 +209,25 @@ def main() -> int:
     sig_looked = sig_found = 0
     pv_h = {"x-api-key": secret("PLUS_VIBE_API_KEY")}
     from_sheet_map = sheet_phones()
+    replaced = []
+    books = {}                                     # rid -> phone book to write (PUT) on the person
+
     for rid in add:
         p = people[rid]; v = p["values"]
         name = ((v.get("name") or [{}])[0].get("full_name") or "").strip()
-        phone = next((x.get("original_phone_number") or x.get("phone_number") for x in v.get("phone_numbers") or []), "")
-        on_person = bool(phone)                    # already on the Attio person -> nothing to write back
+        book = PP.read_book(v)
+        gone = PP.drop_junk(book)
+        ver, ver_src = next((SHEET_VERIFIED[e] for e in emails(p) if e in SHEET_VERIFIED), ("", ""))
+        if ver:
+            book2, changed, why = PP.apply_lookup(v, ver, ver_src)
+            if changed:
+                book = book2
+                if "older number stays" in why:
+                    replaced.append(name or rid)
+        if gone or (ver and changed):
+            books[rid] = book
+        phone = book["primary"]
+        on_person = bool(phone) and rid not in books   # already right on the Attio person -> nothing to write back
         ev = (entry_of.get(rid) or {}).get("entry_values") or {}
         phone = phone or first(ev, "phone") or ""
         if not phone:
@@ -238,8 +274,16 @@ def main() -> int:
         if from_sig:
             sig_found += 1
         phone = e164(phone)
+        if phone and PP.is_junk(phone):
+            phone = ""
+        if phone and not PP.has(book, phone):     # found here (call-list entry, sheet, AI Ark, signature): onto the book
+            PP.add(book, phone, "aiark" if from_ark else "signature" if from_sig else "import", by="call queue")
+            books[rid] = book
         if phone:
-            plan.append((rid, name, phone, from_ark or not on_person, first(ev, "cloudtalk_contact_id")))
+            cid0 = first(ev, "cloudtalk_contact_id")
+            if cid0 and first(ev, "phone") and not PP.same(first(ev, "phone"), phone):
+                cid0 = None                        # the number changed: find (or make) the contact for the new number
+            plan.append((rid, name, phone, rid in books, cid0))
         else:
             nophone.append(name or rid)
 
@@ -250,6 +294,7 @@ def main() -> int:
     print(f"AI Ark asks for people the Discord job already looked up with no number: {sheet_miss_hits} "
           f"({'skipped' if TRUST_SHEET_MISS else 'still asked; set CALLQ_TRUST_SHEET_MISS=1 to skip'})")
     print(f"to remove (ruled out since): {len(remove)}")
+    print(f"older primary numbers moved to extra by the lookup's verified number: {len(replaced)}")
     if not a.commit:
         print("DRY RUN — pass --commit."); return 0
 
@@ -257,12 +302,12 @@ def main() -> int:
     bad = 0
     for rid, name, phone, write_person, cid in plan:
         if write_person:                       # the number came from the sheet / AI Ark / the queue entry, not the person
-            c.req("PATCH", f"/objects/people/records/{rid}",
-                  json={"data": {"values": {"phone_numbers": [{"original_phone_number": phone}]}}})
+            # PUT overwrites phone_numbers (multiselect): PATCH would only prepend and keep a replaced wrong number
+            c.req("PUT", f"/objects/people/records/{rid}", json={"data": {"values": PP.to_values(books[rid])}})
         if not cid:
             rows = (ct("GET", "/contacts/index.json", H, params={"keyword": phone, "limit": 5})
                     .json().get("responseData", {}) or {}).get("data") or []
-            cid = str((rows[0].get("Contact", rows[0])).get("id")) if rows else None
+            cid = ct_contact_for(rows, emails(people[rid]))
         if not cid:
             mails = emails(people[rid])
             r = ct("POST", "/bulk/contacts.json", H, json=[{"action": "add_contact", "command_id": "1", "data": {
