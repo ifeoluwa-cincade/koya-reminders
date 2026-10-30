@@ -70,13 +70,9 @@
  ],
  "template_dialer_campaign_id": 1853,
  "recall": {
-  "_readme": "call_recall.py: people the dialler used up (no answer / voicemail only) get a fresh recall campaign after resting. Ife 2026-10-30.",
+  "_readme": "call_recall.py: one 'Redial | <list>' campaign per call list (tag 'Attio | Redial | <list>'). People the dialler used up (no answer / voicemail only) go in after resting rest_days, a new round every round_every_days, max_rounds rounds. Ife 2026-10-30.",
   "rest_days": 14,
   "round_every_days": 14,
-  "max_rounds": 3,
-  "tags": {
-   "NA": "Attio | Recall | NA",
-   "EU": "Attio | Recall | EU"
-  }
+  "max_rounds": 3
  }
 }
