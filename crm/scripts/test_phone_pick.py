@@ -58,16 +58,16 @@ check("unverified prospeo below aiark", PP.ordered(b), ["+15145550111", "+151455
 
 # The incident (30 Oct 2026): AI Ark found the number for the call list, CloudTalk's Attio integration copied it onto the person
 # (an "app" write, no book), then the positive-reply lookup verified the SAME number with Prospeo. It used to record nothing.
-DAVID = "+35699000001"   # fake number
-b, ch, why = PP.apply_lookup(vals(ph(DAVID, "app", "2026-10-27T10:00:00Z")), DAVID, "Prospeo (verified)", at="2026-10-30T15:52:00Z")
+LEAD = "+35699000001"   # fake number
+b, ch, why = PP.apply_lookup(vals(ph(LEAD, "app", "2026-10-27T10:00:00Z")), LEAD, "Prospeo (verified)", at="2026-10-30T15:52:00Z")
 check("incident: changed, source added", (ch, "source added" in why), (True, True))
 check("incident: sources listed best first", [s["src"] for s in PP.sorted_sources(b["phones"][0])], ["prospeo", "integration"])
-check("incident: primary unchanged", b["primary"], DAVID)
+check("incident: primary unchanged", b["primary"], LEAD)
 check("incident: book best src is prospeo (v1 readers)", json.loads(PP.to_values(b)["phone_sources"])["phones"][0]["src"], "prospeo")
-PP.add(b, DAVID, "aiark", at="2026-10-27T09:00:00Z", by="call list")
+PP.add(b, LEAD, "aiark", at="2026-10-27T09:00:00Z", by="call list")
 check("incident: all three sources", [s["src"] for s in PP.sorted_sources(b["phones"][0])], ["prospeo", "aiark", "integration"])
 tv = PP.to_values(b)
-b2, ch2, why2 = PP.apply_lookup({"phone_numbers": [ph(DAVID)], "phone_sources": [{"value": tv["phone_sources"]}]}, DAVID, "Prospeo (verified)")
+b2, ch2, why2 = PP.apply_lookup({"phone_numbers": [ph(LEAD)], "phone_sources": [{"value": tv["phone_sources"]}]}, LEAD, "Prospeo (verified)")
 check("incident: second run writes nothing", (ch2, why2), (False, "already on the person with this source"))
 # once: a later run never re-promotes the lookup number over a primary someone chose
 chosen = {"v": 1, "primary": "+19795550177", "phones": [{"n": "+19795550177", "src": "signature"}, {"n": "+13375550164", "src": "aiark"}]}
