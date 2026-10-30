@@ -5,7 +5,7 @@ re-dials them. This job, per region (NA / EU):
   1. Clean-up (every run): anyone holding the recall tag whose call outcome is now FINISHED loses the tag (leaves the queue).
   2. A new round, at most once every ROUND_EVERY_DAYS: people exhausted in their main campaign (or in the last recall round)
      whose last call was REST_DAYS+ ago, who never got a finished outcome, and who have had fewer than MAX_ROUNDS rounds,
-     get the region's recall tag. The previous recall campaign is archived and a fresh one (same settings and callers as the
+     get the region's recall tag. The previous "Redial | <region>" campaign is archived and a fresh one of the same name (same settings and callers as the
      main campaigns) dials the tag, because an exhausted person can never be reset inside an existing campaign.
      Each recalled person's "Recall rounds" count on their Attio call-list entry goes up by one.
   3. Prints the pool per region (COUNTS ONLY, public repo) and posts it to Discord when a round starts.
@@ -64,13 +64,11 @@ def member_ids(H, cid):
 
 
 def when(v):
+    """ISO time from Attio or CloudTalk (with Z, an offset, or nanoseconds) as an aware UTC datetime; None if unreadable."""
     try:
-        return datetime.fromisoformat(v.replace("Z", "+00:00")[:26] + ("+00:00" if "+" not in v[10:] and "Z" in v else ""))
+        return datetime.fromisoformat(v[:19]).replace(tzinfo=timezone.utc)
     except Exception:
-        try:
-            return datetime.fromisoformat(v[:19]).replace(tzinfo=timezone.utc)
-        except Exception:
-            return None
+        return None
 
 
 def main() -> int:
@@ -122,12 +120,12 @@ def main() -> int:
     posts = []
     for region in ("NA", "EU"):
         tag = R["tags"][region]
-        prefix = f"Recall | {region} | "
+        name = f"Redial | {region}"      # one name per region, no date: the round's age comes from created_at (Ife 30 Oct)
         mains = [cc["id"] for L in SPEC["lists"] if L["region"] == region for cc in L.get("campaigns", []) if cc["kind"] == "dialer"]
-        recalls = sorted([x for x in camps if (x.get("name") or "").startswith(prefix) and x.get("status") in ("active", "inactive", "initializing")],
-                         key=lambda x: x["name"])
+        recalls = sorted([x for x in camps if (x.get("name") or "") == name and x.get("status") in ("active", "inactive", "initializing")],
+                         key=lambda x: x.get("created_at") or "")
         current = recalls[-1] if recalls else None
-        cur_age = (NOW.date() - datetime.strptime(current["name"][len(prefix):], "%Y-%m-%d").date()).days if current else None
+        cur_age = (NOW - when(current["created_at"])).days if current else None
 
         holders = member_ids(H, current["id"]) if current else set()
         finished_holders = {x for x in holders if (entry.get(x) or {}).get("outcome") in CL.FINISHED}
@@ -188,7 +186,7 @@ def main() -> int:
             print(f"  {region}: recall tag missing after tagging, campaign NOT created"); posts.append(f"{region}: recall round FAILED (tag missing)"); continue
         tpl = dialer(H, "GET", f"/dialer/campaigns/{template}").json()
         assoc = dialer(H, "GET", f"/dialer/campaigns/{template}/associations").json()
-        body = {"name": prefix + NOW.strftime("%Y-%m-%d"), **{k: tpl[k] for k in ("mode", "calling_policy", "queue_policy", "retry_policy", "schedule_policy", "ttl_policy", "waterfall_order", "agent_permissions") if k in tpl}}
+        body = {"name": name, **{k: tpl[k] for k in ("mode", "calling_policy", "queue_policy", "retry_policy", "schedule_policy", "ttl_policy", "waterfall_order", "agent_permissions") if k in tpl}}
         r = dialer(H, "POST", "/dialer/campaigns", json=body)
         if r.status_code >= 300:
             print(f"  {region}: recall campaign NOT created: HTTP {r.status_code}"); posts.append(f"{region}: recall round FAILED (campaign create HTTP {r.status_code})"); continue
@@ -196,10 +194,10 @@ def main() -> int:
         ra = dialer(H, "PUT", f"/dialer/campaigns/{new_id}/associations", json={"target_tag": [{"ref_id": int(tag_ids[tag]), "priority": 1}], "queue_group": [], "agent": assoc.get("agent", [])})
         rs = dialer(H, "PATCH", f"/dialer/campaigns/{new_id}", json={"status": "active"})
         print(f"  {region}: recall campaign {new_id} created, associations HTTP {ra.status_code}, activate HTTP {rs.status_code}")
-        posts.append(f"{region}: recall round started, {ok} people who never picked up get another go (campaign {new_id}). "
+        posts.append(f"{region}: Redial round started, {ok} people who never picked up get another go (campaign {new_id}). "
                      f"Still resting: {why.get(f'resting (< {REST_DAYS} days since last call)', 0)}, retired after {MAX_ROUNDS} rounds: {why.get('retired: max rounds reached', 0)}.")
     if posts and a.commit:
-        CL.alert("Call recall rounds\n" + "\n".join(posts))
+        CL.alert("Redial rounds\n" + "\n".join(posts))
     if not a.commit:
         print("DRY RUN: nothing written")
     return 0
