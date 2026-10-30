@@ -10,6 +10,7 @@ version 2). The most reliable source decides the primary; a primary a person cho
 Ranking, best first (the same list lives in koya-app `lib/phones.js` RANK; change both together):
 
 typed by a person > Prospeo (verified) > their email signature > ContactOut > AI Ark > SalesQL > Prospeo (unverified) >
-website > imported list > synced from CloudTalk / unknown.
+website > imported list > unknown (a number CloudTalk's Attio integration copied with no record of who found it;
+CloudTalk is not a provider and never a label, the placeholder goes once the real source is known).
 
 Details and the rules: `crm/scripts/phone_pick.py`.

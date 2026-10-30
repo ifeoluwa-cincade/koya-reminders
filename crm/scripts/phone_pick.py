@@ -19,7 +19,7 @@ Where it lives (both on the Attio person, so every job and Koya HQ read the same
                                  {"src": "integration", "at": "2026-10-27T09:11:39Z"}]}]}
     A version 1 entry {"n", "src", "at", "by", "url"} reads as a number with that one source. A number on the person with no
     entry in the book is described from who wrote it in Attio (a workspace member -> manual, an installed app such as
-    CloudTalk's Attio integration -> integration, shown "Synced from CloudTalk"; an API token -> import, shown "Imported list").
+    CloudTalk's Attio integration -> integration, shown "Unknown"; an API token -> import, shown "Imported list").
 
 Ranking (Ife, 30 Oct 2026; the SAME list is in koya-app lib/phones.js RANK, change both together). The most reliable source
 of a number is its rank; the best-ranked number is the primary, UNLESS a person chose the primary in Koya HQ ("Make primary"
@@ -30,9 +30,10 @@ lower one is an extra number with its own sources shown.
     signature          the lead's own email signature
     contactout, aiark, salesql, prospeo_unverified, website
     import             an imported list (an API-token write with no known origin)
-    integration        synced from CloudTalk, or unknown
+    integration        unknown: an installed app (CloudTalk's Attio integration) copied it and we have no record of who found it.
+                       CloudTalk is NOT a provider and is never a label; this placeholder is dropped as soon as a real source is added.
 Labels (Koya HQ, Ife 30 Oct): the provider name only, no extra words: "Prospeo", "AI Ark", "ContactOut", "SalesQL",
-"CloudTalk", "Website", "Signature", "Imported list", "Typed by <name>". The verified flag is used for ranking only.
+"Website", "Signature", "Imported list", "Typed by <name>", and "Unknown" for integration. The verified flag is used for ranking only.
     other
 Ties keep the current primary (nothing moves for no reason).
 
@@ -239,6 +240,10 @@ def add(book, n, src, at=None, by="", url="", verified=None) -> bool:
         book["phones"].append({"n": n, "sources": [s]}); changed = True
     elif not any(rank_key(o) == rank_key(s) for o in p["sources"]):
         p["sources"].append(s); changed = True
+    if s["src"] != "integration":   # CloudTalk is not a provider: "unknown" goes once a real source is known (Ife 30 Oct)
+        p = next(p for p in book["phones"] if same(p["n"], n))
+        if any(x["src"] == "integration" for x in p["sources"]):
+            p["sources"] = [x for x in p["sources"] if x["src"] != "integration"]; changed = True
     if not book["primary"]:
         book["primary"] = n; changed = True
     if changed:                    # nothing new: nothing moves (a v1 book's primary may have been picked by a person in HQ)
