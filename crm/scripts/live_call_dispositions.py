@@ -152,7 +152,7 @@ def tag_verdict(row: dict) -> dict | None:
         if re.search(r"meeting|booked", low): v = "MEETING_BOOKED"
         elif re.search(r"send.?follow", low) and v != "MEETING_BOOKED": v = "SEND_FOLLOW_UP"
         elif re.search(r"do not call|dnc", low) and v not in ("MEETING_BOOKED", "SEND_FOLLOW_UP"): v = "DO_NOT_CALL"
-        elif re.search(r"wrong person|bad data", low) and v not in ("MEETING_BOOKED", "SEND_FOLLOW_UP"): v = "WRONG_PERSON"
+        elif re.search(r"wrong person|bad data|not in service", low) and v not in ("MEETING_BOOKED", "SEND_FOLLOW_UP"): v = "WRONG_PERSON"
         elif re.fullmatch(r"not interested", low) and v is None: v = "NOT_INTERESTED"
     return {"verdict": v, "summary": "Caller's tag in CloudTalk: " + ", ".join(call_tags(row)), "objection": None, "judged_by": "agent"} if v else None
 

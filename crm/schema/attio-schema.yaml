@@ -26,6 +26,18 @@ call_lists:
   region: EU
   tiers:
   - C
+- name: AI Agencies | NA | D
+  cloudtalk_campaign_id: 2088
+  cloudtalk_tag: Attio | NA | D
+  region: NA
+  tiers:
+  - D
+- name: AI Agencies | EU | D
+  cloudtalk_campaign_id: 2089
+  cloudtalk_tag: Attio | EU | D
+  region: EU
+  tiers:
+  - D
 - name: AI Agency Positive Replies
   cloudtalk_campaign_id: 4898
   cloudtalk_tag: Attio | Positive Replies
