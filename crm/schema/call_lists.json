@@ -7,8 +7,8 @@
    "region": "NA",
    "campaigns": [
     {
-     "id": 361447,
-     "kind": "legacy"
+     "id": 4895,
+     "kind": "dialer"
     }
    ]
   },
@@ -18,12 +18,8 @@
    "region": "EU",
    "campaigns": [
     {
-     "id": 370764,
-     "kind": "legacy"
-    },
-    {
-     "id": 361449,
-     "kind": "legacy"
+     "id": 4896,
+     "kind": "dialer"
     }
    ]
   },
@@ -35,10 +31,6 @@
     {
      "id": 1853,
      "kind": "dialer"
-    },
-    {
-     "id": 362297,
-     "kind": "legacy"
     }
    ]
   },
@@ -48,12 +40,8 @@
    "region": "EU",
    "campaigns": [
     {
-     "id": 370765,
-     "kind": "legacy"
-    },
-    {
-     "id": 362301,
-     "kind": "legacy"
+     "id": 4897,
+     "kind": "dialer"
     }
    ]
   },
