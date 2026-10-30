@@ -1,0 +1,43 @@
+name: Call recall rounds
+
+# People the dialler used up (only no answer / voicemail) get a fresh recall campaign after 14 days' rest, max 3 rounds (Ife 2026-10-30).
+# Runs daily: every run takes finished people out of the recall queue; a new round starts at most once every 14 days per region.
+# workflow_dispatch defaults to a DRY RUN that changes nothing. The script prints COUNTS ONLY (public repo).
+on:
+  schedule:
+    - cron: "40 6 * * 1-5"      # 06:40 UTC weekdays, before calling starts and clear of the hourly jobs
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true = show counts, write nothing"
+        default: "true"
+
+permissions: {}
+
+jobs:
+  recall:
+    concurrency:
+      group: calllist-label        # never alongside the call-list labels job: both tag contacts and share CloudTalk's 60 a minute
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ATTIO_KEY_VAR: ATTIO_API_KEY_2
+      ATTIO_API_KEY_2: ${{ secrets.ATTIO_API_KEY_2 }}
+      CLOUD_TALK_API_KEY_ID: ${{ secrets.CLOUD_TALK_API_KEY_ID }}
+      CLOUD_TALK_API_KEY: ${{ secrets.CLOUD_TALK_API_KEY }}
+      TEST_WEBHOOK_URL: ${{ secrets.TEST_WEBHOOK_URL }}   # Captain Hook TEST channel for now
+      DRY: ${{ github.event.inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install requests phonenumbers
+      - name: Recall rounds
+        run: |
+          if [ "$DRY" = "true" ]; then FLAG=""; echo "DRY RUN: nothing will be written"; else FLAG="--commit"; echo "REAL RUN"; fi
+          python crm/scripts/call_recall.py $FLAG

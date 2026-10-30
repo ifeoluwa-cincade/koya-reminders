@@ -68,5 +68,15 @@
    ]
   }
  ],
- "template_dialer_campaign_id": 2088
+ "template_dialer_campaign_id": 1853,
+ "recall": {
+  "_readme": "call_recall.py: people the dialler used up (no answer / voicemail only) get a fresh recall campaign after resting. Ife 2026-10-30.",
+  "rest_days": 14,
+  "round_every_days": 14,
+  "max_rounds": 3,
+  "tags": {
+   "NA": "Attio | Recall | NA",
+   "EU": "Attio | Recall | EU"
+  }
+ }
 }
