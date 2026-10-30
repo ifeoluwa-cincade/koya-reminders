@@ -31,7 +31,8 @@ lower one is an extra number with its own sources shown.
     contactout, aiark, salesql, prospeo_unverified, website
     import             an imported list (an API-token write with no known origin)
     integration        unknown: an installed app (CloudTalk's Attio integration) copied it and we have no record of who found it.
-                       CloudTalk is NOT a provider and is never a label; this placeholder is dropped as soon as a real source is added.
+                       CloudTalk is NOT a provider and is never a label. integration and import are placeholders (PLACEHOLDERS):
+                       both are dropped from a number as soon as a real source is added.
 Labels (Koya HQ, Ife 30 Oct): the provider name only, no extra words: "Prospeo", "AI Ark", "ContactOut", "SalesQL",
 "Website", "Signature", "Imported list", "Typed by <name>", and "Unknown" for integration. The verified flag is used for ranking only.
     other
@@ -53,6 +54,8 @@ VERIFIED_SOURCES = ("prospeo (verified)", "ai ark")
 SOURCES = ("prospeo", "aiark", "website", "signature", "call", "manual", "integration", "import", "salesql", "contactout", "other")
 RANK = ("manual", "call", "prospeo", "signature", "contactout", "aiark", "salesql", "prospeo_unverified", "website",
         "import", "integration", "other")
+# Not a source, only "we do not know who found it": dropped from a number as soon as a real source is added (Ife 30 Oct 2026)
+PLACEHOLDERS = ("integration", "import")
 # Proved not to be anyone's number (29 Oct 2026): SVG path data read as numbers by the old website scrape, and one number the
 # old scrape cut short (the site publishes one more digit).
 JUNK = {"+15825539942", "+12284085608", "+24742475", "+498927788519"}
@@ -240,10 +243,10 @@ def add(book, n, src, at=None, by="", url="", verified=None) -> bool:
         book["phones"].append({"n": n, "sources": [s]}); changed = True
     elif not any(rank_key(o) == rank_key(s) for o in p["sources"]):
         p["sources"].append(s); changed = True
-    if s["src"] != "integration":   # CloudTalk is not a provider: "unknown" goes once a real source is known (Ife 30 Oct)
+    if s["src"] not in PLACEHOLDERS:   # CloudTalk is not a provider: "Unknown" / "Imported list" go once a real source is known
         p = next(p for p in book["phones"] if same(p["n"], n))
-        if any(x["src"] == "integration" for x in p["sources"]):
-            p["sources"] = [x for x in p["sources"] if x["src"] != "integration"]; changed = True
+        if any(x["src"] in PLACEHOLDERS for x in p["sources"]):
+            p["sources"] = [x for x in p["sources"] if x["src"] not in PLACEHOLDERS]; changed = True
     if not book["primary"]:
         book["primary"] = n; changed = True
     if changed:                    # nothing new: nothing moves (a v1 book's primary may have been picked by a person in HQ)

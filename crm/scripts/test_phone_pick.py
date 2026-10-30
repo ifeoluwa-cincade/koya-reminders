@@ -34,6 +34,9 @@ check("lead: source recorded", (b["phones"][0]["sources"][0]["src"], b["phones"]
 # Ife 30 Oct: reliability decides the primary. The lookup's verified number beats an imported / synced one ...
 b, ch, why = PP.apply_lookup(vals(ph("+17135550142", "api-token")), "+18325550199", "Prospeo (verified)")
 check("prospeo beats an imported list", PP.ordered(b), ["+18325550199", "+17135550142"])
+b2 = PP.read_book(vals(ph("+17135550142", "api-token")))
+PP.add(b2, "+17135550142", "contactout")
+check("imported-list placeholder dropped once a provider is known", [s["src"] for s in b2["phones"][0]["sources"]], ["contactout"])
 check("why says older stays", "older number stays" in why, True)
 # ... but a number typed by a person outranks every provider, and stays primary; the lookup's number is kept as an extra
 b, ch, why = PP.apply_lookup(vals(ph("+17135550142", "workspace-member")), "+18325550199", "Prospeo (verified)")
