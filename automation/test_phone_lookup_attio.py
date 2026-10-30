@@ -42,9 +42,10 @@ app = lambda n, t="app": [{"original_phone_number": n, "created_by_actor": {"typ
 # 29 Oct 2026: a lead's junk scrape number is dropped; Prospeo's is written with PUT (overwrite), never PATCH (prepend)
 check("junk dropped, prospeo primary", run(app("+15825539942")), [(["+16135550123"], [("+16135550123", "prospeo")])])
 check("no phone: written", run([]), [(["+16135550123"], [("+16135550123", "prospeo")])])
-check("same number: nothing written", run(app("+1 613-555-0123")), [])
-check("typed by a person: kept as extra", run(app("+14155552671", "workspace-member")),
-      [(["+16135550123", "+14155552671"], [("+16135550123", "prospeo"), ("+14155552671", "manual")])])
+# 30 Oct 2026: the same number synced by CloudTalk gets the lookup's source added (Koya HQ then shows Prospeo first)
+check("same number: source added", run(app("+1 613-555-0123")), [(["+16135550123"], [("+16135550123", "prospeo")])])
+check("typed by a person: stays primary, lookup number extra", run(app("+14155552671", "workspace-member")),
+      [(["+14155552671", "+16135550123"], [("+14155552671", "manual"), ("+16135550123", "prospeo")])])
 check("already in the book (someone chose another primary): nothing written",
       run(app("+14155552671") + app("+16135550123"), book={"primary": "+14155552671", "phones": [{"n": "+16135550123", "src": "prospeo"}]}), [])
 

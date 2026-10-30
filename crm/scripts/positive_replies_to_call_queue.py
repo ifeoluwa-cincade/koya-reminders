@@ -276,9 +276,10 @@ def main() -> int:
         phone = e164(phone)
         if phone and PP.is_junk(phone):
             phone = ""
-        if phone and not PP.has(book, phone):     # found here (call-list entry, sheet, AI Ark, signature): onto the book
-            PP.add(book, phone, "aiark" if from_ark else "signature" if from_sig else "import", by="call queue")
-            books[rid] = book
+        # found here (call-list entry, sheet, AI Ark, signature): onto the book, or one more source on the same number (30 Oct 2026)
+        if phone and (from_ark or from_sig or not PP.has(book, phone)):
+            if PP.add(book, phone, "aiark" if from_ark else "signature" if from_sig else "import", by="call queue"):
+                books[rid] = book
         if phone:
             cid0 = first(ev, "cloudtalk_contact_id")
             if cid0 and first(ev, "phone") and not PP.same(first(ev, "phone"), phone):
