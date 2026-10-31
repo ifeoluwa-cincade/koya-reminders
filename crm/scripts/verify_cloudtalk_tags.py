@@ -27,7 +27,9 @@ from attio_client import AttioClient
 import ct_client  # noqa: E402  (one CloudTalk pacer for every job)
 
 CT = "https://my.cloudtalk.io/api"
-DONE_OUTCOMES = {"NOT_INTERESTED", "DO_NOT_CALL", "WRONG_PERSON", "MEETING_BOOKED"}
+# Must match FINISHED in calllist_to_cloudtalk.py: on 30-31 Oct this set lacked SEND_FOLLOW_UP and NOT_NOW, so this daily
+# check put back the tags the call-list job had just removed (56 finished people back in the dialler queues).
+DONE_OUTCOMES = {"MEETING_BOOKED", "NOT_INTERESTED", "DO_NOT_CALL", "WRONG_PERSON", "SEND_FOLLOW_UP", "NOT_NOW"}
 SCHEMA = ROOT / "crm/schema/attio-schema.yaml"
 
 
@@ -137,6 +139,8 @@ def main() -> int:
             # A resolved lead (marked lost / won / booked from the dashboard, or by a call result) is never dialled again.
             oc = ((ev.get("call_outcome") or [{}])[0].get("option") or {}).get("title")
             if oc in DONE_OUTCOMES:
+                continue
+            if (ev.get("main_done") or [{}])[0].get("value"):      # tries used up: only the list's Redial rings them now
                 continue
             cid = first(ev, "cloudtalk_contact_id")
             if cid:
