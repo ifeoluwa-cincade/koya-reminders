@@ -42,6 +42,8 @@ phone numbers or audio links.
     python crm/scripts/call_review.py --since 2026-10-09 --limit 15 --commit   # do it
     python crm/scripts/call_review.py --delete <call id> --commit              # remove one call on request
     python crm/scripts/call_review.py --fix-agents --commit                     # set the caller on docs already written
+    python crm/scripts/call_review.py --extras --limit 20 --workers 2 --commit  # objections + warm on reviews already written
+                                                                                #   (from stored turns, no audio; --redo to do them again)
 
 Backfill of the whole history (run locally, slowly: CloudTalk allows 60 requests a minute for the whole company
 and the hourly jobs share it):
@@ -451,9 +453,27 @@ SCHEMA = {
         "went_well": {"type": "array", "items": {"type": "object", "properties": {"t": {"type": "number"}, "title": {"type": "string"}, "text": {"type": "string"}}, "required": ["t", "title", "text"]}},
         "work_on": {"type": "array", "items": {"type": "object", "properties": {"t": {"type": "number"}, "title": {"type": "string"}, "text": {"type": "string"}}, "required": ["t", "title", "text"]}},
         "moments": {"type": "array", "items": {"type": "object", "properties": {"t": {"type": "number"}, "text": {"type": "string"}}, "required": ["t", "text"]}},
+        "objections": {"type": "array", "items": None},     # OBJ_ITEM, set below
+        "warm_opening": {"type": "boolean"},
     },
-    "required": ["is_conversation", "outcome", "speakers", "headline", "summary", "objection", "reason_at", "went_well", "work_on", "moments"],
+    "required": ["is_conversation", "outcome", "speakers", "headline", "summary", "objection", "reason_at", "went_well", "work_on", "moments",
+                 "objections", "warm_opening"],
 }
+# Every question or objection the prospect raised, with how the caller answered (Ife, 3 Nov 2026: SDR training, the Objections view in the app).
+# The old single "objection" string stays for the older pages.
+TOPICS = ["pricing", "time_zone", "quality", "contract", "trial", "how_it_works", "timing", "no_need", "has_team", "trust", "other"]
+OBJ_ITEM = {"type": "object", "properties": {
+    "q": {"type": "string"}, "q_t": {"type": "number"}, "answer": {"type": "string"}, "a_t": {"type": ["number", "null"]},
+    "topic": {"type": "string", "enum": TOPICS}, "old_offer": {"type": "boolean"}},
+    "required": ["q", "q_t", "answer", "a_t", "topic", "old_offer"]}
+SCHEMA["properties"]["objections"]["items"] = OBJ_ITEM
+# The backfill (--extras) asks only for these two, from the turns already stored (no new transcript)
+EXTRAS_SCHEMA = {"type": "object", "properties": {"objections": SCHEMA["properties"]["objections"], "warm_opening": {"type": "boolean"}},
+                 "required": ["objections", "warm_opening"]}
+# Koya's offer today (project facts, Nov 2026). An answer that prices anything else, or a different trial, is flagged "Old offer, check".
+OFFER_NOW = "about $1,500 a month per developer, with a 30-day trial"
+OBJ_RULES = """- warm_opening: true if, near the start, the call refers to the prospect having replied to our email (for example "you replied to my email", "got your email", "following up on your reply"). False otherwise.
+- objections: EVERY question or objection the prospect raised, in the order they came up (an empty list if none). Each {q: the prospect's question or objection, short, in plain words (max 15 words); q_t: start second of the segment where they raise it; answer: how the caller answered or handled it, short (max 25 words), only from what was actually said (a light touch counts too, e.g. "Agreed and said they would cover it on the booked call" or "Just acknowledged it and moved on"), or "" only if the caller said nothing to it; a_t: start second of the caller's answer, or null; topic: one of """ + ", ".join(TOPICS) + """ (pricing = cost or rates, time_zone = hours or overlap, quality = skills or experience of the developers, contract = length or notice, trial = trying first, how_it_works = how the service works, timing = not now or busy, no_need = no work for a developer, has_team = already has people, trust = proof or references); old_offer: true if the caller's answer states a price other than """ + OFFER_NOW + """, a trial of another length, or an offer Koya no longer sells}."""
 
 PROMPT = """You are helping a small sales team review one of its own COLD CALLS. Koya places full-time
 AI-automation developers inside agencies (an embedded developer for a monthly fee, far cheaper than a local hire).
@@ -472,7 +492,8 @@ Return JSON:
 - went_well: 2 or 3 specific things the caller did well, each {{t: second it happens, title: 3-6 words, text: one short sentence quoting or pointing at what was said}}.
 - work_on: 1 or 2 specific things to do better next time, same shape. Concrete, never vague ("improve discovery" is not allowed).
 - moments: up to 3 key moments in the call (a pain stated, an objection, a next step), each {{t, text}} in a few words.
-Every t must be the start second of a real segment. Plain English, no em dashes, no emoji, no scores.
+{obj_rules}
+Every t (and q_t, a_t) must be the start second of a real segment. Plain English, no em dashes, no emoji, no scores.
 
 SEGMENTS:
 {segs}"""
@@ -502,7 +523,7 @@ def ai_pass(segs: list[dict], agent: str, lead: str, diarized: bool, company: st
                       " The recording is mono, so nobody marked who is speaking.",
                       spk_rule="Keep each speaker number on one side." if diarized else
                       "Work it out from the words: the caller introduces Koya, asks the questions about their agency and pitches; the prospect answers about their own business. A greeting like 'Hello?' at the very start is usually them picking up.",
-                      segs=lines[:30000])
+                      obj_rules=OBJ_RULES, segs=lines[:30000])
     out = call_claude_lite(p, json_schema=SCHEMA, model="sonnet", timeout_sec=300, max_retries=1)
     sp = list(out.get("speakers") or [])
     if len(sp) != len(segs):                      # never trust a misaligned list: pad with the last label
@@ -536,6 +557,213 @@ def stats_of(turns: list[dict], reason_at) -> dict:
     return {"ratio": [round(100 * us / tot), 100 - round(100 * us / tot)], "questions": len(qs),
             "open": sum(1 for q in qs if OPEN_Q.search(q)), "mono": {"len": round(mono[0]), "at": round(mono[1], 1)},
             "reason": None if reason_at is None else {"at": round(float(reason_at), 1), "after": round(max(0.0, float(reason_at) - pick), 1)}}
+
+
+# ---------------------------------------------------------------- objections and warm calls (code, after the AI pass)
+_MONEY = re.compile(r"(?:\$|usd\s*|us\$)\s*(\d[\d,]*(?:\.\d+)?)\s*(k\b)?|(\d[\d,]*(?:\.\d+)?)\s*(k\s*)?(?:dollars|bucks|usd)\b", re.I)
+_TRIAL = re.compile(r"(\d+|one|two|three|four|six|seven|fourteen|thirty|sixty|ninety)[\s-]*(day|week|month)s?[\s-]+(?:free\s+)?trial|trial\s+(?:of|for)\s+(\d+|one|two|three|four|six|seven|fourteen|thirty|sixty|ninety)[\s-]*(day|week|month)s?", re.I)
+_RETIRED = re.compile(r"\b(retired|no longer (?:offer|do|sell)|used to (?:offer|charge|sell)|old (?:price|pricing|offer)|pass[\s-]?through)\b", re.I)
+_NUM = {"one": 1, "two": 2, "three": 3, "four": 4, "six": 6, "seven": 7, "fourteen": 14, "thirty": 30, "sixty": 60, "ninety": 90}
+
+
+def offer_flag(text: str) -> bool:
+    """True when an answer prices something other than about $1,500 a month (1,200 to 1,800 counts as that), names a trial
+    that is not 30 days (or one month), or speaks of an offer that was retired. Code, so the flag never depends on the model alone."""
+    t = str(text or "")
+    for m in _MONEY.finditer(t):
+        raw = (m.group(1) or m.group(3) or "0").replace(",", "")
+        try:
+            v = float(raw) * (1000 if (m.group(2) or m.group(4)) else 1)
+        except ValueError:
+            continue
+        if v and not 1200 <= v <= 1800:
+            return True
+    for m in _TRIAL.finditer(t):
+        n, unit = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+        n = _NUM.get(n.lower(), None) if not n.isdigit() else int(n)
+        days = (n or 0) * {"day": 1, "week": 7, "month": 30}[unit.lower()]
+        if days and days != 30:
+            return True
+    return bool(_RETIRED.search(t))
+
+
+def _at(x, starts: list[float]):
+    """A time the model gave, snapped to the nearest real turn start (or None)."""
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return None
+    if not starts:
+        return round(v, 1)
+    return round(min(starts, key=lambda s: abs(s - v)), 1)
+
+
+def norm_objections(items, turns: list[dict]) -> list[dict]:
+    starts = [float(t["s"]) for t in turns or []]
+    out = []
+    for o in items or []:
+        q = re.sub(r"\s+", " ", str((o or {}).get("q") or "")).strip()
+        if not q:
+            continue
+        ans = re.sub(r"\s+", " ", str(o.get("answer") or "")).strip()
+        topic = o.get("topic") if o.get("topic") in TOPICS else "other"
+        qt = _at(o.get("q_t"), starts)
+        out.append({"q": q[:160], "q_t": qt if qt is not None else 0, "answer": ans[:240], "a_t": _at(o.get("a_t"), starts) if ans else None,
+                    "topic": topic, "old": bool(o.get("old_offer")) or offer_flag(ans)})
+    return out[:12]
+
+
+# "you replied to my email", "he just replied to the email", "got your email", "following up on your reply" (Ife, 3 Nov 2026)
+WARM_RX = re.compile(r"\b(?:you|he|she|they)\s+(?:just\s+|recently\s+)?(?:replied|responded|wrote back|got back to (?:me|us))\b"
+                     r"|\b(?:your|his|her|their)\s+(?:reply|response)\b"
+                     r"|\bgot your (?:email|e-mail|message|reply|note)\b"
+                     r"|\bi\s+(?:replied|responded)\s+to\s+(?:your|the|an)\s+(?:email|e-mail|message)\b"
+                     r"|\breplied to (?:my|our|the|an) (?:email|e-mail|message)\b"
+                     r"|\bfollowing up on (?:your|the|our) (?:reply|email|e-mail|response|message)\b", re.I)
+WARM_WITHIN = 120      # seconds from the start of the recording: the opening (a screener can take the first minute)
+
+
+def opening_warm(turns: list[dict], within: float = WARM_WITHIN) -> bool:
+    return bool(WARM_RX.search(" ".join(t["text"] for t in turns or [] if float(t.get("s") or 0) < within)))
+
+
+def opt_env(k: str) -> str:
+    """Like env() but optional: "" when the key is not set (the reply check is skipped, nothing fails)."""
+    if os.environ.get(k):
+        return os.environ[k]
+    f = ROOT / ".env"
+    if f.exists():
+        for line in f.read_text().splitlines():
+            if line.startswith(k + "="):
+                return line.split("=", 1)[1].strip()
+    return ""
+
+
+PV = "https://api.plusvibe.ai/api/v1"
+PV_WS = "6a6e634971ad0f0e174a5471"
+
+
+def replied_before(emails: list[str], at: str | None) -> tuple[bool | None, str | None]:
+    """Did the lead reply to one of our emails before the call? PlusVibe's received emails for the lead (READ ONLY).
+    (None, None) when there is no PlusVibe key or PlusVibe did not answer: unknown, never a guess."""
+    key = opt_env("PLUS_VIBE_API_KEY")
+    if not key or not emails or not at:
+        return None, None
+    from reply_scope import parse_ts
+    call_at, first, asked = parse_ts(at), None, False
+    for e in [x for x in emails if x][:3]:
+        r = None
+        for d in (2, 4, 8, 16):
+            try:
+                r = requests.get(PV + "/unibox/emails", headers={"x-api-key": key}, timeout=60,
+                                 params={"workspace_id": PV_WS, "lead": e, "email_type": "received", "preview_only": "true"})
+            except requests.exceptions.RequestException:
+                r = None
+            if r is not None and r.status_code != 429:
+                break
+            time.sleep(d)
+        if r is None or r.status_code != 200:
+            continue
+        asked = True
+        for x in (r.json() or {}).get("data") or []:
+            ts = parse_ts(x.get("timestamp_created"))
+            frm = str(x.get("from_address_email") or x.get("lead") or "").lower()
+            if ts and call_at and ts < call_at and (not frm or frm == e.lower()) and (first is None or ts < first):
+                first = ts
+    if not asked:
+        return None, None
+    return (first is not None), (first.isoformat(timespec="seconds") if first else None)
+
+
+def warm_of(turns: list[dict], ai_flag, emails: list[str], at: str | None) -> dict:
+    """A warm call: the lead had replied to our email before the call (PlusVibe), or the opening says so."""
+    op = opening_warm(turns) or bool(ai_flag)
+    rep, rep_at = replied_before(emails, at)
+    by = [k for k, v in (("reply", rep), ("opening", op)) if v]
+    return {"yes": bool(by), "by": by, "reply": rep, "replyAt": rep_at, "opening": op}
+
+
+EXTRAS_PROMPT = """You are helping a small sales team learn from one of its own COLD CALLS. Koya places full-time AI-automation
+developers inside agencies (an embedded developer for a monthly fee). The caller ("us") is {agent}. The other person ("them")
+is the prospect{lead}.{names}
+
+Below is the call as numbered turns with their start time in seconds and who spoke.
+
+Return JSON:
+{obj_rules}
+Every q_t and a_t must be the start second of a real turn. Plain English, no em dashes, no emoji.
+
+TURNS:
+{turns}"""
+
+
+def extras_pass(turns: list[dict], agent: str, lead: str, company: str = "") -> dict:
+    lines = "\n".join(f"[{i}] {float(t['s']):.1f}s {t['who']}: {t['text']}" for i, t in enumerate(turns))
+    lb, names = lead_bits(lead, company)
+    p = EXTRAS_PROMPT.format(agent=first(agent) or "our caller", lead=lb, names=names, obj_rules=OBJ_RULES, turns=lines[:30000])
+    return call_claude_lite(p, json_schema=EXTRAS_SCHEMA, model="sonnet", timeout_sec=300, max_retries=1)
+
+
+def run_extras(a) -> int:
+    """Backfill: objections + warm on reviews already written, from their stored turns (no audio, no new transcript, no CloudTalk).
+    Writes only the callreview docs (breakdown.objections, warm). Counts only in the log."""
+    url, _ = sb()
+    r = requests.get(f"{url}/rest/v1/docs?coll=eq.callreview&select=id,at:data->>at,agent:data->>agent,has:data->breakdown->objections&limit=5000",
+                     headers=sb_h(), timeout=60)
+    if r.status_code >= 300:
+        sys.exit(f"could not read reviews ({r.status_code})")
+    rows = r.json()
+    picked = {x.strip() for x in (a.only or "").split(",") if x.strip()}
+    since = a.since or "2000-01-01"
+    want = [x for x in rows if (not picked or x["id"] in picked) and (x.get("at") or "")[:10] >= since
+            and (a.redo or not isinstance(x.get("has"), list))]
+    want.sort(key=lambda x: x.get("at") or "", reverse=True)
+    todo = want[: a.limit]
+    print(f"{len(rows)} reviews | {len(want)} without objections yet{' (incl. redo)' if a.redo else ''} | doing {len(todo)}", flush=True)
+    if not a.commit:
+        print("DRY RUN - nothing asked or written.")
+        return 0
+    counts, lock, last = {}, threading.Lock(), [0.0]
+
+    def one(x):
+        cid = x["id"]
+        try:
+            with lock:                                    # small batches: one model call every PACE seconds at most
+                wait = last[0] + a.pace - time.time()
+                if wait > 0:
+                    time.sleep(wait)
+                last[0] = time.time()
+            g = requests.get(f"{url}/rest/v1/docs?path=eq.callreview/{cid}&select=data", headers=sb_h(), timeout=30)
+            if g.status_code >= 300 or not g.json():
+                return "error read"
+            d = g.json()[0]["data"]
+            turns = d.get("turns") or []
+            if not turns:
+                return "no-turns"
+            L = d.get("lead") or {}
+            out = extras_pass(turns, d.get("agent") or "", L.get("name") or "", L.get("company") or "")
+            obj = norm_objections(out.get("objections"), turns)
+            warm = warm_of(turns, out.get("warm_opening"), L.get("emails") or [], d.get("at"))
+            g = requests.get(f"{url}/rest/v1/docs?path=eq.callreview/{cid}&select=data", headers=sb_h(), timeout=30)   # newest copy: never undo a change made meanwhile
+            d = g.json()[0]["data"]
+            d.setdefault("breakdown", {})["objections"] = obj
+            d["warm"] = warm
+            d.setdefault("made", {})["extras"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            put_doc("callreview", cid, d)
+            return "ok"
+        except RuntimeError as ex:
+            return f"error {str(ex)[:40]}"
+        except Exception as ex:
+            return f"error {type(ex).__name__}"
+
+    t0 = time.time()
+    with ThreadPoolExecutor(max_workers=max(1, a.workers)) as ex:
+        for i, res in enumerate(ex.map(one, todo), 1):
+            counts[res] = counts.get(res, 0) + 1
+            if i % 10 == 0 or i == len(todo):
+                print(f"   [{i}/{len(todo)}] " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())) + f"  ({round(time.time() - t0)}s)", flush=True)
+    print("result: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())), flush=True)
+    return 0
 
 
 # ---------------------------------------------------------------- one call
@@ -657,7 +885,9 @@ def review(cid: str, row: dict, H: dict, verdict: str | None, audio_done: bool =
         "peaks": peaks(a),
         "turns": turns,
         "speakers": {"method": "diarized" if diarized else "estimated"},
-        "breakdown": {k: ai.get(k) for k in ("headline", "summary", "objection", "went_well", "work_on", "moments")},
+        "breakdown": {**{k: ai.get(k) for k in ("headline", "summary", "objection", "went_well", "work_on", "moments")},
+                      "objections": norm_objections(ai.get("objections"), turns)},
+        "warm": warm_of(turns, ai.get("warm_opening"), emails, cdr.get("started_at")),
         "stats": stats_of(turns, ai.get("reason_at")),
         "made": {"at": datetime.now(timezone.utc).isoformat(), "by": engine, "ai": "claude-sonnet"},
     }
@@ -720,10 +950,15 @@ def main() -> int:
     ap.add_argument("--fix-agents", action="store_true", help="set the caller on review docs already written")
     ap.add_argument("--download-only", action="store_true", help="only fetch the recordings to disk (slowly), nothing else")
     ap.add_argument("--audio-per-hour", type=int, default=0, help="cap on Groq audio seconds an hour (backfill: 4500; free tier is 7200 shared)")
+    ap.add_argument("--extras", action="store_true", help="backfill objections + warm on reviews already written, from their stored turns")
+    ap.add_argument("--ai-pace", type=float, default=6.0, help="--extras: seconds between model calls")
     a = ap.parse_args()
     if a.delete:
         delete_call(a.delete, a.commit)
         return 0
+    if a.extras:
+        a.pace = a.ai_pace
+        return run_extras(a)
     if TRANSCRIBER not in TRANSCRIBERS:
         sys.exit(f"TRANSCRIBER must be one of {sorted(TRANSCRIBERS)}")
     PACE[0], QUIET_TOP[0], AUDIO_PER_HOUR[0] = a.pace, a.quiet_top_of_hour, a.audio_per_hour
