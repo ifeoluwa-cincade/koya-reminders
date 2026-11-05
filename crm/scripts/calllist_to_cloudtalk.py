@@ -104,8 +104,8 @@ def read_ok(r, what: str):
 
 
 DIALER = "https://api.cloudtalk.io/v1"
-# Call outcomes after which a person is never cold-dialled again: done, refused, wrong number, or now owned by a deal / later timer.
-FINISHED = {"MEETING_BOOKED", "NOT_INTERESTED", "DO_NOT_CALL", "WRONG_PERSON", "SEND_FOLLOW_UP", "NOT_NOW"}
+import no_cold_call as NCC  # noqa: E402  (the one "never cold-call" rule, shared with the checker, Redial and seeding)
+FINISHED = NCC.FINISHED
 
 
 def campaign_statuses(H):
@@ -215,6 +215,7 @@ def main() -> int:
     lists = {l["api_slug"]: l for l in c.req("GET", "/lists").json()["data"]}
     allp = {p["id"]["record_id"]: p for p in c.query_all("people")}
     print(f"Attio people read: {len(allp):,}")
+    with_deal = NCC.deal_people(c)
 
     plan_add, plan_create, plan_remove, summary = [], [], [], {}
     plan_fill, filled = [], set()
@@ -240,9 +241,10 @@ def main() -> int:
             ev = e.get("entry_values") or {}
             # Finished people leave the dialler (Ife 30 Oct, legacy -> AI Dialer move: new campaigns start with no call history).
             # Not wanted = untagged below, and the AI Dialer drops an untagged contact from its queue within ~5 minutes.
-            outcome = ((ev.get("call_outcome") or [{}])[0].get("option") or {}).get("title")
-            if outcome in FINISHED:
-                skip[f"finished: {outcome}"] += 1; continue
+            # Ife 5 Nov: also anyone Lost, do-not-contact, already talking to us or with a deal (no_cold_call.py).
+            why = NCC.reason(ev, p, with_deal)
+            if why:
+                skip[why] += 1; continue
             cands =[(ev.get("phone") or [{}])[0].get("value") or ""] + [x.get("original_phone_number") or x.get("phone_number") or "" for x in (p["values"].get("phone_numbers") or [])]
             e164, nreg = next(((x, y) for x, y in (number_region(z) for z in cands) if x), (None, None))
             if not e164:

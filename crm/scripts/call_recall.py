@@ -3,7 +3,7 @@
 The AI Dialer tries a person max_attempts times (4, two days apart) and then marks them "exhausted" for good; nothing ever
 re-dials them. This job, per call list:
   One Redial campaign per call list ("Redial | NA | A+B" dials tag "Attio | Redial | NA | A+B"), so callers see where people came from.
-  1. Clean-up (every run): anyone in a Redial whose call outcome is now FINISHED loses the tag (leaves the queue).
+  1. Clean-up (every run): anyone in a Redial the shared no_cold_call rule now blocks loses the tag (leaves the queue).
   2. A new round per list, at most once every ROUND_EVERY_DAYS: people exhausted in the list's main campaign (or in its last Redial)
      whose last call was REST_DAYS+ ago, who never got a real outcome, and who have had fewer than MAX_ROUNDS rounds,
      get the list's Redial tag. The previous Redial campaign is archived and a fresh one with the same name (the list's own
@@ -24,6 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from attio_client import AttioClient  # noqa: E402
 import calllist_to_cloudtalk as CL  # noqa: E402  (auth, shared CloudTalk pacer, FINISHED, alert)
+import no_cold_call as NCC  # noqa: E402  (the one "never cold-call" rule)
 
 SPEC = json.loads(CL.SPEC.read_text())
 R = SPEC["recall"]
@@ -95,6 +96,8 @@ def main() -> int:
     a = ap.parse_args()
     H = CL.auth()
     c = AttioClient(workers=8)
+    allp = {p["id"]["record_id"]: p for p in c.query_all("people")}
+    with_deal = NCC.deal_people(c)
 
     # Attio: every call-list entry, per list, by its CloudTalk contact id
     entry = {}                      # (list slug, contact id) -> entry facts
@@ -112,7 +115,8 @@ def main() -> int:
                     "entry_id": e["id"]["entry_id"],
                     "outcome": ((v.get("call_outcome") or [{}])[0].get("option") or {}).get("title"),
                     "last": when(last) if last else None,
-                    "rounds": int((v.get("recall_rounds") or [{}])[0].get("value") or 0)}
+                    "rounds": int((v.get("recall_rounds") or [{}])[0].get("value") or 0),
+                    "blocked": NCC.reason(v, allp.get(e["parent_record_id"]), with_deal)}
             off += 500
             if len(rows) < 500:
                 break
@@ -147,7 +151,8 @@ def main() -> int:
 
         holders = member_ids(H, current["id"]) if current else set()
         cur_used = exhausted_ids(H, current["id"]) if current else set()
-        finished_holders = {x for x in holders if (entry.get((L["slug"], x)) or {}).get("outcome") in CL.FINISHED}
+        # anyone the shared rule now blocks (finished call, Lost, do-not-contact, talking to us, a deal) leaves Redial
+        finished_holders = {x for x in holders if (entry.get((L["slug"], x)) or {}).get("blocked")}
 
         used_up = set(cur_used)
         for cid in mains:
@@ -158,6 +163,8 @@ def main() -> int:
             e = entry.get((L["slug"], x))
             if not e:
                 why["not on this call list any more"] += 1; continue
+            if e["blocked"]:
+                why[f"never cold-call: {e['blocked']}"] += 1; continue
             if e["outcome"] not in NOT_REACHED:
                 why[f"had a real outcome ({e['outcome']})"] += 1; continue
             if x in holders and x not in cur_used:

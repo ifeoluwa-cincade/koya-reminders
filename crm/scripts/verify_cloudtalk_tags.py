@@ -27,9 +27,8 @@ from attio_client import AttioClient
 import ct_client  # noqa: E402  (one CloudTalk pacer for every job)
 
 CT = "https://my.cloudtalk.io/api"
-# Must match FINISHED in calllist_to_cloudtalk.py: on 30-31 Oct this set lacked SEND_FOLLOW_UP and NOT_NOW, so this daily
-# check put back the tags the call-list job had just removed (56 finished people back in the dialler queues).
-DONE_OUTCOMES = {"MEETING_BOOKED", "NOT_INTERESTED", "DO_NOT_CALL", "WRONG_PERSON", "SEND_FOLLOW_UP", "NOT_NOW"}
+import no_cold_call as NCC  # noqa: E402  (the one "never cold-call" rule: 30-31 Oct this file's own copy drifted and re-tagged finished people)
+DONE_OUTCOMES = NCC.FINISHED
 SCHEMA = ROOT / "crm/schema/attio-schema.yaml"
 
 
@@ -116,6 +115,8 @@ def main() -> int:
 
     c = AttioClient(workers=8)
     lists = {l["api_slug"]: l["id"]["list_id"] for l in c.req("GET", "/lists").json()["data"]}
+    allp = {p["id"]["record_id"]: p for p in c.query_all("people")}
+    with_deal = NCC.deal_people(c)
 
     for L in spec["call_lists"]:
         slug = ("call_" + re.sub(r"[^a-z0-9]+", "_", L["name"].lower()).strip("_"))[:50]
@@ -137,8 +138,10 @@ def main() -> int:
         for e in ents:
             ev = e.get("entry_values") or {}
             # A resolved lead (marked lost / won / booked from the dashboard, or by a call result) is never dialled again.
-            oc = ((ev.get("call_outcome") or [{}])[0].get("option") or {}).get("title")
-            if oc in DONE_OUTCOMES:
+            # Ife 5 Nov: the cold lists skip anyone Lost, do-not-contact, talking to us or with a deal (no_cold_call.py).
+            # Positive Replies is the opposite: people with a deal belong there, so only a finished call result counts.
+            cold = "Positive Replies" not in L["name"]
+            if NCC.reason(ev, allp.get(e["parent_record_id"]) if cold else None, with_deal if cold else set()):
                 continue
             if (ev.get("main_done") or [{}])[0].get("value"):      # tries used up: only the list's Redial rings them now
                 continue
