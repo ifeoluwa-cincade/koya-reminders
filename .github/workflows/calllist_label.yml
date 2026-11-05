@@ -2,12 +2,18 @@ name: Call list labels
 
 # A person added to (or removed from) an Attio call list gets (or loses) the matching CloudTalk tag, which fills (or empties) the dialler campaign.
 # Starts the moment the Attio webhook reports a change (via the Apps Script relay), and once an hour from the routine push as a safety net.
+# Also starts right AFTER "CRM sync" (an email reply can mark someone Lost) and "Deal stage to PlusVibe" (a deal created or set to
+# Lost from Koya HQ or Attio) finish, so a person the never-cold-call rule now blocks leaves every dialler queue within minutes,
+# not at the next hourly run (Ife 5 Nov 2026). After the labels, Redial is cleaned the same way.
 # workflow_dispatch defaults to a DRY RUN that changes nothing. The script prints COUNTS ONLY (public repo).
 on:
   push:
     branches: [crm-trigger]
   repository_dispatch:
     types: [calllist_changed]
+  workflow_run:
+    workflows: ["CRM sync", "Deal stage to PlusVibe"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -36,7 +42,7 @@ jobs:
       group: calllist-label
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       ATTIO_KEY_VAR: ATTIO_API_KEY_2
       ATTIO_API_KEY_2: ${{ secrets.ATTIO_API_KEY_2 }}
@@ -61,3 +67,6 @@ jobs:
           # a manual run with dry_run=true changes nothing; every automatic run is real
           if [ "$DRY" = "true" ]; then FLAG=""; echo "DRY RUN: nothing will be written"; else FLAG="--commit"; echo "REAL RUN"; fi
           python crm/scripts/calllist_to_cloudtalk.py $FLAG
+      - name: Take blocked people out of Redial too (same rule, never-cold-call)
+        if: ${{ env.DRY != 'true' }}
+        run: python crm/scripts/call_recall.py --commit
