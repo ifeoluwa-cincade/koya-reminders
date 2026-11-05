@@ -177,8 +177,8 @@ def main() -> int:
         # people in the current round the dialler has not used up yet keep their place in the next one (no round added)
         carry = holders - cur_used - finished_holders - set(due)
         start_round = bool(due) and (a.force_round or current is None or cur_age >= ROUND_EVERY_DAYS)
-        print(f"{label}: used up {len(used_up)} | due {len(due)} | not due {dict(why)} | Redial "
-              f"{'none' if not current else f'{current['id']} ({cur_age} days old, {len(holders)} in it, {len(carry)} still to finish)'} | "
+        cur_txt = "none" if not current else f"{current['id']} ({cur_age} days old, {len(holders)} in it, {len(carry)} still to finish)"
+        print(f"{label}: used up {len(used_up)} | due {len(due)} | not due {dict(why)} | Redial {cur_txt} | "
               f"finished to take out {len(finished_holders)} | {'NEW ROUND' if start_round else 'no new round'}")
         if not a.commit:
             continue
