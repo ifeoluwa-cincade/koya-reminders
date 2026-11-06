@@ -53,8 +53,15 @@ jobs:
               body = json.dumps(pl).encode()
               for i in range(5):
                   try:
-                      req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json", "User-Agent": "DiscordBot (https://koya.dev, 1.0)"})
-                      urllib.request.urlopen(req, timeout=30); break
+                      req = urllib.request.Request(url + ("&" if "?" in url else "?") + "wait=true", data=body, headers={"Content-Type": "application/json", "User-Agent": "DiscordBot (https://koya.dev, 1.0)"})
+                      mid = str(json.loads(urllib.request.urlopen(req, timeout=30).read().decode() or "{}").get("id") or "")
+                      where = "TEST" if test else "Hot Leads"
+                      print(time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()), "posted", str(m.get("id", "")).split("|")[0], "in", where, "message", mid)   # the proof (no names: public log)
+                      try:   # Koya HQ records it (Systems log, and the 09:30 check)
+                          urllib.request.urlopen("https://hq.koyatalent.com/hook/fugroup?" + urllib.parse.urlencode({"k": os.environ["HOOK"], "posted": m.get("id", ""), "mid": mid, "ch": "test" if test else "live"}), timeout=30).read()
+                      except Exception as e:
+                          print("could not tell Koya HQ:", type(e).__name__)
+                      break
                   except urllib.error.HTTPError as e:
                       if e.code != 429 and e.code < 500: bad += 1; print("Discord answered", e.code); break
                       time.sleep(3 * (i + 1))
