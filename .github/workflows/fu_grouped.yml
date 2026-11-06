@@ -4,7 +4,11 @@ name: Follow-ups grouped message
 # (09:00 to 17:00 Lagos) this asks Koya HQ which grouped messages are due (the 09:00 per-SDR summary, and in hourly mode the list for the hour)
 # and posts each one to Hot Leads. Koya HQ hands each message out once and returns nothing while its ping mode is per-lead (the default), so
 # this job posts nothing until the owner switches the mode in HQ. test=true posts what would go out now to the TEST channel only.
+# Started by Koya HQ itself (lib/fusync.js kickTick) at :05 and :35 through the relay (repository_dispatch call_note, which also follows every
+# ended call), because GitHub's schedule on this repo does not fire reliably; the cron stays as a backup. HQ hands each message out once.
 on:
+  repository_dispatch:
+    types: [call_note]
   schedule:
     - cron: "2,32 8-15 * * 1-5"
   workflow_dispatch:
