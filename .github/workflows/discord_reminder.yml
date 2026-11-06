@@ -73,7 +73,7 @@ jobs:
         if: ${{ steps.seen.outputs.cache-hit != 'true' }}
         run: |
           python3 - <<'PY'
-          import os, json, time, urllib.request, urllib.error, urllib.parse
+          import os, re, json, time, urllib.request, urllib.error, urllib.parse
           test = os.environ.get("TEST") == "true"
           system = os.environ.get("CHANNEL") == "system" and not test      # system alerts never go to the Hot Leads channel
           url = os.environ["SYSTEM_URL" if system else ("TEST_URL" if test else "LIVE_URL")]
@@ -83,11 +83,16 @@ jobs:
           # Plan leads' ping mode (Koya HQ, 6 Nov 2026): a per-lead follow-up reminder for a lead on an SDR follow-up plan is left out when
           # the owner switched plan leads to the grouped 09:00 message (HQ answers { skip }; HQ unreachable or slow = posted as before).
           # Only 'reminder' posts to Hot Leads are asked; tests, system alerts and grouped messages never are.
+          mention = None
           if os.environ.get("LABEL") == "reminder" and not test and not system and os.environ.get("LEAD"):
               skip = False
               try:
-                  g = urllib.request.urlopen("https://hq.koyatalent.com/hook/fuping?" + urllib.parse.urlencode({"lead": os.environ["LEAD"]}), timeout=15)
-                  skip = json.loads(g.read().decode() or "{}").get("skip") is True
+                  g = urllib.request.urlopen("https://hq.koyatalent.com/hook/fuping?" + urllib.parse.urlencode({"lead": os.environ["LEAD"], "k": os.environ.get("LEAD_ACTIONS_HOOK", "")}), timeout=15)
+                  gj = json.loads(g.read().decode() or "{}")
+                  skip = gj.get("skip") is True
+                  # the plan lead's owner is tagged (Discord user id from Koya HQ; never printed here: this repo's logs are public)
+                  if not skip and re.fullmatch(r"\d{15,22}", str(gj.get("mention") or "")):
+                      mention = str(gj["mention"]); msg = "<@" + mention + "> " + msg
               except Exception as e:
                   print("HQ ping mode not reachable, posting as before:", type(e).__name__)
               if skip:
@@ -99,7 +104,9 @@ jobs:
                   print("grouped: not posted on its own")
                   raise SystemExit(0)
           def post():
-              req = urllib.request.Request(url, data=json.dumps({"content": msg, "username": "Koya systems" if system else "Koya follow-ups" + (" (TEST)" if test else "")}).encode(),
+              payload = {"content": msg, "username": "Koya systems" if system else "Koya follow-ups" + (" (TEST)" if test else "")}
+              if mention: payload["allowed_mentions"] = {"parse": [], "users": [mention]}   # only that person is pinged
+              req = urllib.request.Request(url, data=json.dumps(payload).encode(),
                                            headers={"Content-Type": "application/json", "User-Agent": "DiscordBot (https://koya.dev, 1.0)"})
               return urllib.request.urlopen(req, timeout=30).status
           result, err = None, ""

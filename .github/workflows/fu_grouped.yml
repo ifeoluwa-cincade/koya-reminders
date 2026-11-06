@@ -32,7 +32,7 @@ jobs:
       - name: Ask Koya HQ and post
         run: |
           python3 - <<'PY'
-          import os, json, time, urllib.request, urllib.error, urllib.parse
+          import os, re, json, time, urllib.request, urllib.error, urllib.parse
           test = os.environ.get("TEST") == "true"
           q = urllib.parse.urlencode({"k": os.environ["HOOK"], "test": "1" if test else "0"})
           try:
@@ -44,7 +44,9 @@ jobs:
           url = os.environ["TEST_URL" if test else "LIVE_URL"]
           bad = 0
           for m in msgs:
-              body = json.dumps({"content": str(m.get("text", ""))[:1900], "username": "Koya follow-ups" + (" (TEST)" if test else "")}).encode()
+              pl = {"content": str(m.get("text", ""))[:1900], "username": "Koya follow-ups" + (" (TEST)" if test else ""), "allowed_mentions": {"parse": []}}
+              if not test and re.fullmatch(r"\d{15,22}", str(m.get("mention") or "")): pl["allowed_mentions"]["users"] = [str(m["mention"])]   # only the SDR the message is for
+              body = json.dumps(pl).encode()
               for i in range(5):
                   try:
                       req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json", "User-Agent": "DiscordBot (https://koya.dev, 1.0)"})
