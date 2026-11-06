@@ -80,6 +80,24 @@ jobs:
           msg = os.environ.get("MESSAGE", "").strip()
           if not msg:
               raise SystemExit("no message to post")
+          # Plan leads' ping mode (Koya HQ, 6 Nov 2026): a per-lead follow-up reminder for a lead on an SDR follow-up plan is left out when
+          # the owner switched plan leads to the grouped 09:00 message (HQ answers { skip }; HQ unreachable or slow = posted as before).
+          # Only 'reminder' posts to Hot Leads are asked; tests, system alerts and grouped messages never are.
+          if os.environ.get("LABEL") == "reminder" and not test and not system and os.environ.get("LEAD"):
+              skip = False
+              try:
+                  g = urllib.request.urlopen("https://hq.koyatalent.com/hook/fuping?" + urllib.parse.urlencode({"lead": os.environ["LEAD"]}), timeout=15)
+                  skip = json.loads(g.read().decode() or "{}").get("skip") is True
+              except Exception as e:
+                  print("HQ ping mode not reachable, posting as before:", type(e).__name__)
+              if skip:
+                  try:
+                      q = urllib.parse.urlencode({"logact": os.environ["LEAD_ACTIONS_HOOK"], "kind": "reminder", "text": "Follow-up reminder grouped: this plan lead is in the 09:00 Follow-ups message, not pinged on its own in Hot Leads", "lead": os.environ.get("LEAD", ""), "level": "info"})
+                      urllib.request.urlopen(os.environ["LEAD_ACTIONS_URL"] + "?" + q, timeout=60).read()
+                  except Exception as e:
+                      print("could not write to the activity log:", type(e).__name__)
+                  print("grouped: not posted on its own")
+                  raise SystemExit(0)
           def post():
               req = urllib.request.Request(url, data=json.dumps({"content": msg, "username": "Koya systems" if system else "Koya follow-ups" + (" (TEST)" if test else "")}).encode(),
                                            headers={"Content-Type": "application/json", "User-Agent": "DiscordBot (https://koya.dev, 1.0)"})
