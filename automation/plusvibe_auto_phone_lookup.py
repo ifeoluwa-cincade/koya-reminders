@@ -163,12 +163,16 @@ def extract_domain(url: str) -> str:
 
 
 def prospeo_lookup(linkedin: str = "", full_name: str = "", company_name: str = "",
-                    company_website: str = "") -> tuple[str, str]:
-    """Returns (phone, resolved_website). Empty phone means no verified mobile."""
+                    company_website: str = "", email: str = "") -> tuple[str, str]:
+    """Returns (phone, resolved_website). Empty phone means no verified mobile.
+    15 Nov 2026: the email is sent too. Leads with no LinkedIn used to go with only a FIRST name, which Prospeo refuses
+    (INVALID_DATAPOINTS); every positive reply has an email, which Prospeo matches on its own."""
     data = {}
+    if email:
+        data["email"] = email
     if linkedin:
         data["linkedin_url"] = linkedin
-    else:
+    elif not email:
         if not (full_name and (company_name or company_website)):
             return "", ""
         data["full_name"] = full_name
@@ -189,7 +193,7 @@ def prospeo_lookup(linkedin: str = "", full_name: str = "", company_name: str = 
         # NO_MATCH is a real answer (nobody found). Anything else (no credits, bad key, rate limit, server error) is a failed
         # lookup: it must not be remembered as "no phone" (15 Nov 2026: November's positives all went down as "no phone" while
         # the lookups were failing, and were never tried again).
-        if code.upper() not in ("NO_MATCH", "NOT_FOUND"):
+        if code.upper() not in ("NO_MATCH", "NOT_FOUND", "INVALID_DATAPOINTS"):   # not enough to match on is an answer too, not a failure
             PROVIDER_PROBLEM = f"Prospeo refused the lookup ({code})"
         return "", ""
     person = d.get("person") or {}
@@ -296,7 +300,7 @@ def retry_failed(out_ws, data_rows, limit: int = 5, no_discord: bool = False):
         r = r + [""] * 10
         first_name, company, email, linkedin, website = r[0], r[1], r[6], r[7], r[8]
         PROVIDER_PROBLEM = ""
-        phone, _w = prospeo_lookup(linkedin=linkedin, full_name=first_name, company_name=company, company_website=website)
+        phone, _w = prospeo_lookup(linkedin=linkedin, full_name=first_name, company_name=company, company_website=website, email=email)
         source = "Prospeo (verified)" if phone else ""
         if not phone:
             a = aiark_lookup(linkedin)
@@ -381,7 +385,7 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
             global PROVIDER_PROBLEM
             PROVIDER_PROBLEM = ""
             p_phone, p_website = prospeo_lookup(linkedin=linkedin, full_name=first_name,
-                                                 company_name=company, company_website=website)
+                                                 company_name=company, company_website=website, email=email)
             if p_phone:
                 phone, source = p_phone, "Prospeo (verified)"
             if not website and p_website:
