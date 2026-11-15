@@ -194,7 +194,7 @@ def prospeo_lookup(linkedin: str = "", full_name: str = "", company_name: str = 
         # lookup: it must not be remembered as "no phone" (15 Nov 2026: November's positives all went down as "no phone" while
         # the lookups were failing, and were never tried again).
         if code.upper() not in ("NO_MATCH", "NOT_FOUND", "INVALID_DATAPOINTS"):   # not enough to match on is an answer too, not a failure
-            PROVIDER_PROBLEM = f"Prospeo refused the lookup ({code})"
+            PROVIDER_PROBLEM = "Prospeo " + plain_reason(code, r.status_code)
         return "", ""
     person = d.get("person") or {}
     mobile = person.get("mobile") or {}
@@ -205,6 +205,41 @@ def prospeo_lookup(linkedin: str = "", full_name: str = "", company_name: str = 
 
 AIARK_ON = os.environ.get("AIARK_PHONES", "off").lower() in ("1", "on", "true", "yes")   # off since 15 Nov 2026: the key's account is
 # past due; set the AIARK_PHONES repository variable to "on" once the new AI Ark key is in AI_ARK_KEY_2
+
+
+def plain_reason(code: str, status: int = 0) -> str:
+    c = str(code or "").upper()
+    if "CREDIT" in c or status == 402: return "is out of credits"
+    if "KEY" in c or "AUTH" in c or status in (401, 403): return "did not accept our key (plan or payment problem)"
+    if "RATE" in c or status == 429: return "is busy (rate limit)"
+    return f"refused the lookup ({code or status})"
+
+
+def prospeo_credits() -> tuple[int | None, str]:
+    """Free check before any lookup: (credits left or None if it could not be read, renewal date)."""
+    try:
+        r = requests.get("https://api.prospeo.io/account-information", headers={"X-KEY": env("PROSPEO_API_KEY")}, timeout=20)
+        d = (r.json() or {}).get("response") or {}
+        return (int(d["remaining_credits"]) if "remaining_credits" in d else None), str(d.get("next_quota_renewal_date") or "")[:10]
+    except Exception:
+        return None, ""
+
+
+LOW_CREDITS = 150   # about 15 verified mobiles left: warn before it runs out
+AIARK_OFF_WHY = "AI Ark is off (its account has a payment problem; a new key is coming)"
+
+
+def credit_alert(memory: dict, key: str, text: str):
+    """One Discord alert per problem per day in the phone channel, so the team knows the real cause (15 Nov 2026, Ife: the posts said
+    "no number found" while both providers were out of credits)."""
+    today = time.strftime("%Y-%m-%d")
+    alerts = memory.setdefault("_alerts", {})
+    if alerts.get(key) == today:
+        return
+    alerts[key] = today
+    alerts["at"] = time.time()          # load_memory keeps only entries with a recent "at"
+    save_memory(memory)
+    post_discord(text)
 
 
 def aiark_lookup(linkedin: str) -> str:
@@ -219,6 +254,8 @@ def aiark_lookup(linkedin: str) -> str:
         return ""
     if r.status_code in (401, 402, 403):
         AIARK_ON = False                                   # refused (plan, payment, credits): skip it for the rest of this run
+        global AIARK_OFF_WHY
+        AIARK_OFF_WHY = "AI Ark " + plain_reason("", r.status_code)
         print(f"  AI Ark refused the lookup ({r.status_code}); AI Ark is skipped for the rest of this run", file=sys.stderr)
         return ""
     if body.get("status") != 200:
@@ -359,6 +396,15 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
     memory = load_memory()
     reused = 0
     failed_lookups = 0
+    out_of_credits = ""
+    if not dry_run:
+        left, renew = prospeo_credits()
+        if left is not None and left <= 0:
+            out_of_credits = f"Prospeo is out of credits{' (renews ' + renew + ')' if renew else ''}"
+            credit_alert(memory, "prospeo_out", f"⚠️ **Phone lookups paused:** {out_of_credits}. {AIARK_OFF_WHY if not AIARK_ON else ''}\n"
+                         "New positive replies are still posted here, marked \"lookup failed\", and get their phone automatically once credits are back.")
+        elif left is not None and left < LOW_CREDITS:
+            credit_alert(memory, "prospeo_low", f"⚠️ Prospeo credits are low: {left} left (about {left // 10} phones){'; renews ' + renew if renew else ''}.")
     for lead in new_leads:
         first_name = lead.get("first_name", "")
         company = lead.get("company_name", "")
@@ -372,7 +418,7 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
         if dry_run:
             # Prospeo, AI Ark and SalesQL cost credits, and a dry run writes nothing to the sheet (this job's only memory),
             # so every dry run used to pay for the same people again. A dry run now only says who would be looked up.
-            print(f"  [DRY RUN] lead -> would look up a phone (Prospeo, then AI Ark{' (has LinkedIn)' if linkedin else ' (no LinkedIn: skipped)'}, then SalesQL)")
+            print(f"  [DRY RUN] lead -> would look up a phone (Prospeo{', then AI Ark' if AIARK_ON else ''}, then SalesQL)")
             print("  Would post one message to Discord")
             continue
         mkey = (email or linkedin).strip().lower()
@@ -383,8 +429,8 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
             reused += 1
         else:
             global PROVIDER_PROBLEM
-            PROVIDER_PROBLEM = ""
-            p_phone, p_website = prospeo_lookup(linkedin=linkedin, full_name=first_name,
+            PROVIDER_PROBLEM = out_of_credits
+            p_phone, p_website = ("", "") if out_of_credits else prospeo_lookup(linkedin=linkedin, full_name=first_name,
                                                  company_name=company, company_website=website, email=email)
             if p_phone:
                 phone, source = p_phone, "Prospeo (verified)"
@@ -417,7 +463,7 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
         elif hint:
             msg += f"\n⚠️ No verified number. SalesQL has an unconfirmed candidate: {hint} — verify before calling."
         elif source.startswith("Lookup failed"):
-            msg += "\n Phone lookup failed this time (provider problem); it is tried again automatically."
+            msg += f"\n⚠️ No phone lookup: {PROVIDER_PROBLEM}" + ("" if AIARK_ON else f"; {AIARK_OFF_WHY}") + ". Not a missing number: it is looked up again automatically."
         else:
             msg += "\n No phone number found (" + ("Prospeo, AI Ark, SalesQL" if AIARK_ON else "Prospeo, SalesQL") + " checked)."
 
