@@ -67,6 +67,7 @@ jobs:
           PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}
           PROSPEO_API_KEY: ${{ secrets.PROSPEO_API_KEY }}
           AI_ARK_KEY_2: ${{ secrets.AI_ARK_KEY_2 }}
+          AIARK_PHONES: ${{ vars.AIARK_PHONES }}   # off until the new AI Ark key is in (15 Nov 2026)
           SALES_QL_API_KEY: ${{ secrets.SALES_QL_API_KEY }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           DISCORD_WEBHOOK_URL: ${{ secrets.PHONE_BOT_WEBHOOK_URL }}

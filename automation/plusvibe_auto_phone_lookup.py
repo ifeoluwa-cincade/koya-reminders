@@ -44,6 +44,7 @@ POSITIVE_LABELS = {"CYCLE_1", "CYCLE_2", "MEETING_BOOKED", "INTERESTED"}
 
 ARK_URL = "https://api.ai-ark.com/api/developer-portal/v2/people/mobile-phone-finder"
 PROSPEO_URL = "https://api.prospeo.io/enrich-person"
+PROVIDER_PROBLEM = ""   # set when a lookup FAILED (as opposed to finding nothing): that lead is not remembered and is tried again
 SALESQL_URL = "https://api-public.salesql.com/v1/persons/enrich"
 
 # What was paid for, written BEFORE the sheet row (2026-10-17). The sheet is this job's main memory, but a run that died between
@@ -175,13 +176,21 @@ def prospeo_lookup(linkedin: str = "", full_name: str = "", company_name: str = 
             data["company_name"] = company_name
         if company_website:
             data["company_website"] = company_website
+    global PROVIDER_PROBLEM
     try:
         r = requests.post(PROSPEO_URL, headers={"X-KEY": env("PROSPEO_API_KEY"), "Content-Type": "application/json"},
                            json={"enrich_mobile": True, "data": data}, timeout=30)
         d = r.json()
-    except Exception:
+    except Exception as e:
+        PROVIDER_PROBLEM = f"Prospeo did not answer ({type(e).__name__})"
         return "", ""
     if d.get("error"):
+        code = str(d.get("error_code") or r.status_code)
+        # NO_MATCH is a real answer (nobody found). Anything else (no credits, bad key, rate limit, server error) is a failed
+        # lookup: it must not be remembered as "no phone" (15 Nov 2026: November's positives all went down as "no phone" while
+        # the lookups were failing, and were never tried again).
+        if code.upper() not in ("NO_MATCH", "NOT_FOUND"):
+            PROVIDER_PROBLEM = f"Prospeo refused the lookup ({code})"
         return "", ""
     person = d.get("person") or {}
     mobile = person.get("mobile") or {}
@@ -190,14 +199,23 @@ def prospeo_lookup(linkedin: str = "", full_name: str = "", company_name: str = 
     return phone.replace(" ", "") if phone else "", website
 
 
+AIARK_ON = os.environ.get("AIARK_PHONES", "off").lower() in ("1", "on", "true", "yes")   # off since 15 Nov 2026: the key's account is
+# past due; set the AIARK_PHONES repository variable to "on" once the new AI Ark key is in AI_ARK_KEY_2
+
+
 def aiark_lookup(linkedin: str) -> str:
-    if not linkedin:
+    global AIARK_ON
+    if not linkedin or not AIARK_ON:
         return ""
     try:
         r = requests.post(ARK_URL, headers={"Content-Type": "application/json", "X-TOKEN": env("AI_ARK_KEY_2")},
                            json={"linkedin": linkedin}, timeout=30)
         body = r.json()
     except Exception:
+        return ""
+    if r.status_code in (401, 402, 403):
+        AIARK_ON = False                                   # refused (plan, payment, credits): skip it for the rest of this run
+        print(f"  AI Ark refused the lookup ({r.status_code}); AI Ark is skipped for the rest of this run", file=sys.stderr)
         return ""
     if body.get("status") != 200:
         return ""
@@ -260,10 +278,40 @@ def attio_phone_first(email: str, phone: str, source: str = "") -> str:
 
 
 REQUIRED_ENV_VARS = [
-    "PLUS_VIBE_API_KEY", "PROSPEO_API_KEY", "AI_ARK_KEY_2", "SALES_QL_API_KEY",
+    "PLUS_VIBE_API_KEY", "PROSPEO_API_KEY", "SALES_QL_API_KEY",
     "GOOGLE_SERVICE_ACCOUNT_JSON", "DISCORD_WEBHOOK_URL",
     "CALLLIST_SHEET_ID",
 ]
+
+
+def retry_failed(out_ws, data_rows, limit: int = 5, no_discord: bool = False):
+    """Rows whose lookup FAILED (source "Lookup failed, will retry") are looked up again, a few per run, until they get a real
+    answer. Phone in col E, Source in col F; a number found goes to Attio first, like a new lead."""
+    global PROVIDER_PROBLEM
+    todo = [(i + 2, r) for i, r in enumerate(data_rows) if len(r) > 5 and not (r[4] or "").strip() and (r[5] or "").startswith("Lookup failed")]
+    if not todo:
+        return
+    print(f"Retrying {min(len(todo), limit)} of {len(todo)} earlier failed lookups")
+    for rown, r in todo[:limit]:
+        r = r + [""] * 10
+        first_name, company, email, linkedin, website = r[0], r[1], r[6], r[7], r[8]
+        PROVIDER_PROBLEM = ""
+        phone, _w = prospeo_lookup(linkedin=linkedin, full_name=first_name, company_name=company, company_website=website)
+        source = "Prospeo (verified)" if phone else ""
+        if not phone:
+            a = aiark_lookup(linkedin)
+            if a:
+                phone, source = a, "AI Ark"
+        if PROVIDER_PROBLEM and not phone:
+            print(f"  retry row {rown}: LOOKUP FAILED again ({PROVIDER_PROBLEM}); tried again next run")
+            continue
+        out_ws.update([[phone, source or "No phone found"]], f"E{rown}:F{rown}", value_input_option="RAW")
+        if phone and PP.verified_source(source):
+            attio_phone_first(email, phone, source)
+            if not no_discord:
+                post_discord(f"**Phone found** for {first_name} @ {company} (earlier lookup had failed)\n📞 {phone} ({source})")
+        print(f"  retry row {rown}: phone {'found' if phone else 'none'}")
+        time.sleep(1)
 
 
 def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
@@ -289,6 +337,8 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
         already_seen = {row[6] for row in data_rows if len(row) > 6 and row[6]}  # Email is col G (index 6)
         next_row = len(data_rows) + 2
     print(f"Already tracked: {len(already_seen)} leads")
+    if not dry_run:
+        retry_failed(out_ws, data_rows, limit=limit, no_discord=no_discord)
 
     new_leads = fetch_new_positive_leads(already_seen)
     print(f"New positive leads this run: {len(new_leads)}")
@@ -304,6 +354,7 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
 
     memory = load_memory()
     reused = 0
+    failed_lookups = 0
     for lead in new_leads:
         first_name = lead.get("first_name", "")
         company = lead.get("company_name", "")
@@ -327,6 +378,8 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
             website = website or m.get("website", "")
             reused += 1
         else:
+            global PROVIDER_PROBLEM
+            PROVIDER_PROBLEM = ""
             p_phone, p_website = prospeo_lookup(linkedin=linkedin, full_name=first_name,
                                                  company_name=company, company_website=website)
             if p_phone:
@@ -340,7 +393,11 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
                     phone, source = a_phone, "AI Ark"
 
             hint = "" if phone else salesql_hint(linkedin)
-            if mkey:
+            if PROVIDER_PROBLEM and not phone:
+                failed_lookups += 1
+                source = "Lookup failed, will retry"
+                print(f"  LOOKUP FAILED: {PROVIDER_PROBLEM}. Not remembered; this lead is tried again on the next run.")
+            elif mkey:
                 memory[mkey] = {"phone": phone, "source": source, "hint": hint, "website": website, "at": time.time()}
                 save_memory(memory)                # before the sheet write: a crash from here on costs nothing next run
 
@@ -355,8 +412,10 @@ def main(dry_run: bool = False, limit: int = 5, no_discord: bool = False):
                 msg += "\nNow the main number in Attio; the older number is kept as an extra."
         elif hint:
             msg += f"\n⚠️ No verified number. SalesQL has an unconfirmed candidate: {hint} — verify before calling."
+        elif source.startswith("Lookup failed"):
+            msg += "\n Phone lookup failed this time (provider problem); it is tried again automatically."
         else:
-            msg += "\n No phone number found (Prospeo, AI Ark, SalesQL all checked)."
+            msg += "\n No phone number found (" + ("Prospeo, AI Ark, SalesQL" if AIARK_ON else "Prospeo, SalesQL") + " checked)."
 
         if dry_run:
             print(f"  [DRY RUN] lead -> phone {'found' if phone else 'none'}, hint {'yes' if hint else 'no'}")
