@@ -1,0 +1,50 @@
+# Download PUBLIC files from a US machine (Ife 2026-11-17): some US state sites refuse our Nigerian IP.
+# Input: a JSON list of {"name": "...", "url": "..."} (public government download links only).
+# Output: every file tarred, encrypted with AUDIT_ENC_KEY and pushed to orphan branch cloud-fetch-out/<batch>.
+# Fetch locally with:  python3 tools/cloud_fetch.py collect --batch <batch> --out <dir>
+name: Cloud fetch (manual only)
+on:
+  workflow_dispatch:
+    inputs:
+      batch: { description: "batch name", required: true }
+      urls:  { description: 'JSON list [{"name":"fl_hca.xlsx","url":"https://..."}]', required: true }
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AUDIT_ENC_KEY: ${{ secrets.AUDIT_ENC_KEY }}
+      URLS: ${{ inputs.urls }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download
+        run: |
+          mkdir -p /tmp/files
+          python3 - <<'PY'
+          import json, os, subprocess
+          items = json.loads(os.environ["URLS"])
+          ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+          rep = []
+          for it in items:
+              p = os.path.join("/tmp/files", os.path.basename(it["name"]))
+              r = subprocess.run(["curl", "-sSL", "--max-time", "600", "-A", ua, "-o", p, "-w", "%{http_code}", it["url"]], capture_output=True, text=True)
+              size = os.path.getsize(p) if os.path.exists(p) else 0
+              rep.append({"name": it["name"], "http": r.stdout.strip(), "bytes": size, "err": r.stderr.strip()[:200]})
+              print(it["name"], r.stdout.strip(), size)
+          json.dump(rep, open("/tmp/files/_report.json", "w"), indent=1)
+          PY
+      - name: Save (encrypted)
+        if: always()
+        run: |
+          cd /tmp && tar czf files.tgz files && openssl enc -aes-256-cbc -pbkdf2 -pass env:AUDIT_ENC_KEY -in files.tgz -out out.enc
+          B="cloud-fetch-out/${{ inputs.batch }}"
+          mkdir -p /tmp/out && cd /tmp/out && git init -q && git checkout -q --orphan "$B"
+          cp /tmp/out.enc . && git add out.enc
+          git -c user.name=cloud-fetch -c user.email=cloud-fetch@users.noreply.github.com commit -q -m "cloud fetch $B"
+          git -c http.extraheader="$(git -C "$GITHUB_WORKSPACE" config --get http.https://github.com/.extraheader)" \
+            push -q -f "https://github.com/${{ github.repository }}.git" "$B:$B"
+          echo "pushed encrypted files"
