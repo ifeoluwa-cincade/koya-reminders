@@ -33,7 +33,10 @@ jobs:
               p = os.path.join("/tmp/files", os.path.basename(it["name"]))
               r = subprocess.run(["curl", "-sSL", "--max-time", "600", "-A", ua, "-o", p, "-w", "%{http_code}", it["url"]], capture_output=True, text=True)
               size = os.path.getsize(p) if os.path.exists(p) else 0
-              rep.append({"name": it["name"], "http": r.stdout.strip(), "bytes": size, "err": r.stderr.strip()[:200]})
+              err = r.stderr.strip()[:200]
+              if size > 60_000_000:            # GitHub refuses files over 100 MB: drop it, say so, keep the rest
+                  os.remove(p); err = f"TOO BIG ({size:,} bytes), dropped: filter it at the source"
+              rep.append({"name": it["name"], "http": r.stdout.strip(), "bytes": size, "err": err})
               print(it["name"], r.stdout.strip(), size)
           json.dump(rep, open("/tmp/files/_report.json", "w"), indent=1)
           PY
