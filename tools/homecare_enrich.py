@@ -16,8 +16,13 @@ import argparse, csv, json, os, re, subprocess, sys, threading
 from concurrent.futures import ThreadPoolExecutor
 
 SCHEMA = {"type": "object", "additionalProperties": False,
-          "required": ["website", "owner_full_name", "owner_title", "linkedin_url", "evidence_url", "evidence_quote", "confidence"],
-          "properties": {"website": {"type": ["string", "null"]}, "owner_full_name": {"type": ["string", "null"]},
+          "required": ["business_type", "type_evidence", "website", "owner_full_name", "owner_title", "linkedin_url",
+                       "evidence_url", "evidence_quote", "confidence", "named_person_confirmed"],
+          "properties": {"business_type": {"enum": ["private_home_care", "home_health_medical", "supported_living_or_disability",
+                                                    "senior_living_facility", "staffing", "big_chain_corporate", "closed_or_not_found", "unclear"]},
+                         "type_evidence": {"type": ["string", "null"]},
+                         "named_person_confirmed": {"enum": ["yes", "no", "not_found"]},
+                         "website": {"type": ["string", "null"]}, "owner_full_name": {"type": ["string", "null"]},
                          "owner_title": {"type": ["string", "null"]}, "linkedin_url": {"type": ["string", "null"]},
                          "evidence_url": {"type": ["string", "null"]}, "evidence_quote": {"type": ["string", "null"]},
                          "confidence": {"enum": ["high", "medium", "low"]}}}
@@ -32,6 +37,13 @@ Contact named on the state licence: {contact}
 Known website: {site}
 
 Find:
+0. business_type: what this business REALLY is today. private_home_care = sends caregivers into clients' homes for
+   NON-MEDICAL care (companion, personal care, homemaker, respite, sitter, in-home dementia care), small/independent or a
+   franchise LOCATION. home_health_medical = mainly nurses/therapy/Medicare home health. supported_living_or_disability =
+   IDD, supported/shared living, group homes, day programmes, behavioural services. big_chain_corporate = a national
+   multi-state operator's corporate entity. closed_or_not_found = no trace it operates. type_evidence = short quote.
+   named_person_confirmed: "yes" if a source ties the licence contact ({contact}) to this agency, "no" if sources show
+   someone else runs it now, "not_found" if nothing either way.
 1. website: the agency's own official website (not a directory like caring.com, yelp, care.com, a franchise HQ national homepage
    is OK only if the location page is not findable; prefer the location page URL).
 2. owner_full_name + owner_title: the OWNER or founder of THIS agency/location. If no owner is findable, the CEO, President,
@@ -90,7 +102,7 @@ def main():
             if len(res) % 25 == 0: print(f"  {len(res)}/{len(rows)}", flush=True)
     with ThreadPoolExecutor(a.workers) as ex:
         list(ex.map(one, range(len(rows))))
-    cols = ["key", "name", "website", "owner_full_name", "owner_first_name", "owner_title", "linkedin_url", "evidence_url",
+    cols = ["key", "name", "business_type", "type_evidence", "named_person_confirmed", "website", "owner_full_name", "owner_first_name", "owner_title", "linkedin_url", "evidence_url",
             "evidence_quote", "confidence", "error", "audit_route", "audit_classification"]
     found = 0
     with open(a.output, "w", newline="", encoding="utf-8") as f:
@@ -102,7 +114,9 @@ def main():
             found += bool(full)
             li = so.get("linkedin_url") or ""
             if li and "linkedin.com/in/" not in li: li = ""
-            w.writerow({"key": r.get("key", ""), "name": r.get("name", ""), "website": so.get("website") or "",
+            w.writerow({"key": r.get("key", ""), "name": r.get("name", ""), "business_type": so.get("business_type") or "",
+                        "type_evidence": (so.get("type_evidence") or "")[:200], "named_person_confirmed": so.get("named_person_confirmed") or "",
+                        "website": so.get("website") or "",
                         "owner_full_name": full, "owner_first_name": full.split()[0] if full else "", "owner_title": so.get("owner_title") or "",
                         "linkedin_url": li, "evidence_url": so.get("evidence_url") or "", "evidence_quote": (so.get("evidence_quote") or "")[:300],
                         "confidence": so.get("confidence") or "", "error": err,
