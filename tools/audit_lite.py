@@ -28,6 +28,39 @@ DEAD = {"dns_fail", "connect_timeout"}
 LITE_PROMPT = ("You will be given the company's own WEBSITE TEXT (homepage and a few subpages, possibly cut short), "
                "not a summary. Read it and apply the routing rules below directly.\n\n" + v5.AIA_ICP_FIT_PROMPT)
 
+# Home care rubric (Ife 2026-11-17): state-licensed home care agencies; confirm each is a PRIVATE (non-medical) in-home
+# care business and drop licence holders that are really something else. Used with --icp homecare.
+HOMECARE_PROMPT = """You will be given the company's own WEBSITE TEXT (homepage and a few subpages, possibly cut short).
+Every company holds a state home care licence. Decide what the business REALLY is, from the text only.
+
+Buckets:
+- private_home_care: sends caregivers into clients' homes for NON-MEDICAL care (companion, personal care, homemaker,
+  respite, sitter, dementia/Alzheimer's in-home care, live-in care). Includes franchise LOCATIONS (Visiting Angels,
+  Home Instead, Comfort Keepers, Right at Home, BrightStar, Griswold, SYNERGY, etc.) and agencies that ALSO offer some
+  nursing, as long as in-home non-medical care is a main service.
+- home_health_medical: mainly skilled/medical home health (nurses, therapy, Medicare home health, infusion), little or
+  no non-medical in-home care.
+- senior_living_facility: assisted living, memory care community, nursing home, retirement community, group home
+  (clients live at the facility).
+- disability_services: mainly IDD / disability support, shared living, day habilitation, behavioural or recovery programmes.
+- staffing: supplies nurses/caregivers to facilities or hospitals (healthcare staffing), not care in clients' homes.
+- other: anything else (hospital system, equipment supplier, unrelated business, parked/placeholder site).
+
+Route: private_home_care -> "leads"; other buckets -> "excluded"; if the text is too thin to tell -> "review" with bucket
+"other". segment_label: a few words on what they do. reason: one short sentence quoting the deciding evidence."""
+HOMECARE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "route": {"enum": ["leads", "excluded", "review"]},
+        "bucket": {"enum": ["private_home_care", "home_health_medical", "senior_living_facility", "disability_services", "staffing", "other"]},
+        "segment_label": {"type": "string"},
+        "confidence": {"enum": ["high", "medium", "low"]},
+        "reason": {"type": "string"},
+    },
+    "required": ["route", "bucket", "segment_label", "confidence", "reason"],
+    "additionalProperties": False,
+}
+
 # Pre-filter: only the unmistakable cases skip Claude. Self-serve signals with zero service signals.
 SAAS = re.compile(r"start (your )?free trial|sign up free|try (it )?free|create (a free |your )?account|log ?in|"
                   r"per (user|seat)|/ ?(mo|month)\b|pricing plans|download the app|api (docs|reference)", re.I)
@@ -102,7 +135,11 @@ def main():
     ap.add_argument("--output", required=True)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--founders", action="store_true", help="also read the founder off the site text for agency/GTM keepers")
+    ap.add_argument("--icp", default="aia", choices=["aia", "homecare"], help="aia = AI-agency rules (default); homecare = home care rubric")
     a = ap.parse_args()
+    home = a.icp == "homecare"
+    prompt = HOMECARE_PROMPT if home else LITE_PROMPT
+    schema = HOMECARE_SCHEMA if home else v5.AIA_ICP_FIT_SCHEMA
 
     leads = v5.read_deduped_csv(a.input)
     if a.limit:
@@ -122,7 +159,7 @@ def main():
             out[rid] = {"route": "excluded" if status in DEAD else "review", "bucket": "unknown",
                         "reason": f"site not readable ({status})", "mode": "prefilter", "fetch": status}
             continue
-        if prefilter(text):
+        if not home and prefilter(text):
             out[rid] = {"route": "excluded", "bucket": "saas_product", "reason": "self-serve signals, no service signals",
                         "mode": "prefilter", "fetch": status}
             continue
@@ -130,7 +167,7 @@ def main():
         out[rid] = {"fetch": status}
 
     print(f"  lite: {len(leads)} companies | {len(items)} to Claude | {len(leads) - len(items)} settled free")
-    res, errs = v5._run_batched_stage(items, LITE_PROMPT, v5.AIA_ICP_FIT_SCHEMA, label="lite", batch_size=BATCH)
+    res, errs = v5._run_batched_stage(items, prompt, schema, label="lite", batch_size=BATCH)
     for it in items:
         r = res.get(it["id"])
         if r:
@@ -156,7 +193,7 @@ def main():
             o = out[str(i)]
             fd = founders.get((l.get("companyWebsite") or "").split("//")[-1].split("/")[0].removeprefix("www.").lower(), {})
             w.writerow({"founder_name": fd.get("name", ""), "founder_title": fd.get("title", ""), "founder_quote": fd.get("quote", ""),"company_url": l.get("companyWebsite", ""), "name": l.get("name", ""), "audit_route": o["route"],
-                        "audit_classification": o["bucket"], "audit_crm_type": v5.AIA_CRM_TYPES.get(o["bucket"], ""),
+                        "audit_classification": o["bucket"], "audit_crm_type": "" if home else v5.AIA_CRM_TYPES.get(o["bucket"], ""),
                         "audit_confidence": o.get("confidence", ""), "audit_reason": o.get("reason", ""),
                         "fetch_status": o.get("fetch", ""), "audit_mode": o.get("mode", "")})
     print(f"  lite: wrote {len(leads)} rows | batch errors {len(errs)}")
