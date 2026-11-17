@@ -82,6 +82,9 @@ jobs:
           if [ "${{ inputs.mode }}" = "founders" ]; then
             python3 tools/cloud_founders.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} \
               --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "founders exited non-zero"
+          elif [ "${{ inputs.mode }}" = "hc_enrich" ]; then
+            python3 tools/homecare_enrich.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} \
+              --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "hc_enrich exited non-zero"
           elif [ "${{ inputs.mode }}" = "judge" ]; then
             python3 tools/cloud_judge.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} \
               --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "judge exited non-zero"
