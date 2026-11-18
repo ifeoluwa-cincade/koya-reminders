@@ -56,6 +56,7 @@ LinkedIn. Put that source in evidence_url and a short verbatim quote in evidence
 Use null for anything you cannot confirm. Do at most 4 searches."""
 
 lock = threading.Lock()
+LIMIT_HIT = threading.Event()   # once the account says "session limit", stop calling (18 Nov: 1,172 calls wasted retrying)
 
 
 def ask(row):
@@ -66,15 +67,25 @@ def ask(row):
            "--permission-mode", "bypassPermissions", "--strict-mcp-config", "--tools", "WebSearch,WebFetch",
            "--json-schema", json.dumps(SCHEMA)]
     for att in range(3):
+        if LIMIT_HIT.is_set():
+            return {}, "skipped: account hit its usage limit"
         try:
             r = subprocess.run(cmd, input=p, capture_output=True, text=True, timeout=240)
             if r.returncode != 0:
                 # claude -p puts the real reason (limit, auth) in stdout JSON, not stderr
                 err = f"exit {r.returncode}: {(r.stderr or '')[:100]} | {(r.stdout or '')[:200]}"
+                if "limit" in (r.stdout or "").lower() and "429" in (r.stdout or ""):
+                    LIMIT_HIT.set(); return {}, err
                 time.sleep(30 * (att + 1)); continue
             out = json.loads(r.stdout)
             so = out.get("structured_output")
             if isinstance(so, dict):
+                u = out.get("usage") or {}
+                stu = u.get("server_tool_use") or {}
+                so["_meter"] = {"cost_usd": out.get("total_cost_usd"), "turns": out.get("num_turns"),
+                                "in": (u.get("input_tokens") or 0) + (u.get("cache_creation_input_tokens") or 0),
+                                "cache_read": u.get("cache_read_input_tokens") or 0, "out": u.get("output_tokens") or 0,
+                                "searches": stu.get("web_search_requests") or 0, "secs": round((out.get("duration_ms") or 0) / 1000)}
                 return so, ""
             err = "no structured output: " + str(out.get("result", ""))[:150]
         except Exception as e:
@@ -105,7 +116,8 @@ def main():
     with ThreadPoolExecutor(a.workers) as ex:
         list(ex.map(one, range(len(rows))))
     cols = ["key", "name", "business_type", "type_evidence", "named_person_confirmed", "website", "owner_full_name", "owner_first_name", "owner_title", "linkedin_url", "evidence_url",
-            "evidence_quote", "confidence", "error", "audit_route", "audit_classification"]
+            "evidence_quote", "confidence", "error", "audit_route", "audit_classification",
+            "m_cost_usd", "m_turns", "m_in", "m_cache_read", "m_out", "m_searches", "m_secs"]
     found = 0
     with open(a.output, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=cols); w.writeheader()
@@ -122,7 +134,8 @@ def main():
                         "owner_full_name": full, "owner_first_name": full.split()[0] if full else "", "owner_title": so.get("owner_title") or "",
                         "linkedin_url": li, "evidence_url": so.get("evidence_url") or "", "evidence_quote": (so.get("evidence_quote") or "")[:300],
                         "confidence": so.get("confidence") or "", "error": err,
-                        "audit_route": "leads" if full else "review", "audit_classification": "named" if full else "no_name"})
+                        "audit_route": "leads" if full else "review", "audit_classification": "named" if full else "no_name",
+                        **{f"m_{k}": v for k, v in (so.get("_meter") or {}).items()}})
     print(f"  enrich: {len(rows)} agencies | named {found} | errors {sum(1 for v in res.values() if v[1])}", flush=True)
 
 
