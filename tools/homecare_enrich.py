@@ -12,7 +12,7 @@ Input CSV (cloud_audit shard format + extras): name, domain, companyWebsite, lin
 Output: --output CSV with key + website, owner_full_name, owner_first_name, owner_title, linkedin_url, evidence_url,
         evidence_quote, confidence, error.
 """
-import argparse, csv, json, os, re, subprocess, sys, threading
+import argparse, csv, json, os, re, subprocess, sys, threading, time
 from concurrent.futures import ThreadPoolExecutor
 
 SCHEMA = {"type": "object", "additionalProperties": False,
@@ -65,11 +65,13 @@ def ask(row):
     cmd = ["claude", "-p", "--no-session-persistence", "--model", "haiku", "--output-format", "json",
            "--permission-mode", "bypassPermissions", "--strict-mcp-config", "--tools", "WebSearch,WebFetch",
            "--json-schema", json.dumps(SCHEMA)]
-    for att in range(2):
+    for att in range(3):
         try:
             r = subprocess.run(cmd, input=p, capture_output=True, text=True, timeout=240)
             if r.returncode != 0:
-                err = f"exit {r.returncode}: {r.stderr[:150]}"; continue
+                # claude -p puts the real reason (limit, auth) in stdout JSON, not stderr
+                err = f"exit {r.returncode}: {(r.stderr or '')[:100]} | {(r.stdout or '')[:200]}"
+                time.sleep(30 * (att + 1)); continue
             out = json.loads(r.stdout)
             so = out.get("structured_output")
             if isinstance(so, dict):
