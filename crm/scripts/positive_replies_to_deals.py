@@ -167,6 +167,15 @@ def create_for(c, owner, e, l, rid):
     if r.status_code >= 300:
         print(f"   DEAL FAIL {r.status_code} {_why(r)}")
         return rid, False
+    # A deal CREATED at a stopping stage (Later, Meeting Booked) fires only Attio's record.created, never the stage webhook, so the
+    # stage job must run here (20 Nov 2026: three leads made at Later kept getting another campaign's emails for 8-9 days).
+    import stage_to_plusvibe as STP
+    if stage in STP.RULES:
+        try:
+            dj = r.json().get("data") or {}
+        except Exception:
+            dj = {}
+        STP.run_for_deal(c, dj if (dj.get("values") and dj.get("id")) else ((dj.get("id") or {}).get("record_id") or ""), commit=True)
     return rid, True
 
 

@@ -3,7 +3,12 @@ name: Deal stage to PlusVibe
 # When a deal's stage is set (dashboard, a call outcome, or Attio itself), PlusVibe is made to match: Later / Meeting Booked / Profiles Sent / Trial / Won / Lost
 # stop every sequence the lead is in (the subsequence too) and set the matching tag. See crm/scripts/stage_to_plusvibe.py for the rule table.
 # Started by an Attio deal webhook through the relay (event deal_stage, client_payload.deals = deal record ids). A manual run defaults to a DRY RUN.
+# Every hour (since 20 Nov 2026) the SWEEP runs with commit: every deal at a stopping stage, Later included, gets anything still running
+# stopped and a MISSING tag filled (it never replaces a tag). Three leads made at Later kept getting emails for 8-9 days: a deal CREATED
+# at a stage fires no stage webhook, and the old daily sweep skipped Later.
 on:
+  schedule:
+    - cron: "41 * * * *"
   repository_dispatch:
     types: [deal_stage]
   workflow_dispatch:
@@ -12,7 +17,7 @@ on:
         description: "deal record id (leave empty with sweep = true)"
         default: ""
       sweep:
-        description: "true = every deal already in a closed stage: stop sequences still running"
+        description: "true = every deal at a stopping stage (Later included): stop what still runs, fill a missing tag"
         default: "false"
       dry_run:
         description: "true = report only"
@@ -23,7 +28,7 @@ permissions: {}
 # One group PER RUN on purpose. A single shared group keeps only one waiting run: a burst of deal changes made GitHub cancel the
 # older waiting runs, and with them the deal ids in their client_payload (those stage changes were lost). stage_to_plusvibe.py only
 # changes what does not already match and reads every change back, so two runs at once (even for the same deal) are harmless.
-# The daily sweep in crm_daily.yml is the safety net for anything that still slips through.
+# The hourly sweep (schedule above) is the safety net for anything that still slips through.
 concurrency:
   group: stage-sync-${{ github.run_id }}
   cancel-in-progress: false
@@ -31,15 +36,15 @@ concurrency:
 jobs:
   stage:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     env:
       ATTIO_KEY_VAR: ATTIO_API_KEY_2
       ATTIO_API_KEY_2: ${{ secrets.ATTIO_API_KEY_2 }}
       PLUS_VIBE_API_KEY: ${{ secrets.PLUS_VIBE_API_KEY }}
       DEALS: ${{ github.event.client_payload.deals }}
       DEAL_IN: ${{ github.event.inputs.deal }}
-      SWEEP: ${{ github.event.inputs.sweep }}
-      DRY: ${{ github.event.inputs.dry_run }}
+      SWEEP: ${{ github.event_name == 'schedule' && 'true' || github.event.inputs.sweep }}
+      DRY: ${{ github.event_name == 'schedule' && 'false' || github.event.inputs.dry_run }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,6 +58,6 @@ jobs:
         run: |
           ARGS=""
           for d in $(echo "$DEALS $DEAL_IN" | tr ',' ' '); do ARGS="$ARGS --deal $d"; done
-          if [ "$SWEEP" = "true" ]; then ARGS="$ARGS --sweep-closed"; fi
+          if [ "$SWEEP" = "true" ]; then ARGS="$ARGS --sweep"; fi
           if [ -z "$ARGS" ]; then echo "nothing to do"; exit 0; fi
           if [ "$DRY" = "true" ]; then python crm/scripts/stage_to_plusvibe.py $ARGS; else python crm/scripts/stage_to_plusvibe.py $ARGS --commit; fi

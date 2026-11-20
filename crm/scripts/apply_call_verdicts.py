@@ -317,6 +317,14 @@ def main() -> int:
             else:
                 bump("d")
                 has_deal.add(rid)
+                # created at Meeting Booked: Attio sends only record.created, never the stage webhook, so stop the emails here (20 Nov 2026)
+                import stage_to_plusvibe as STP
+                try:
+                    did_ = ((rd.json().get("data") or {}).get("id") or {}).get("record_id") or ""
+                except Exception:
+                    did_ = ""
+                if did_:
+                    STP.run_for_deal(c, did_, commit=True)
         notes_now = c.req("GET", "/notes", params={
             "parent_object": "people", "parent_record_id": rid, "limit": 50}).json().get("data", [])
         have = {n.get("title") for n in notes_now}
