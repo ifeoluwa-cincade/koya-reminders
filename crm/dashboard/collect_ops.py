@@ -34,6 +34,7 @@ sys.path.insert(0, str(ROOT / "crm" / "dashboard"))
 import lead_company as LC  # noqa: E402
 import lead_bucket as LB  # noqa: E402
 import lead_source as LS  # noqa: E402
+import lead_touch as LT  # noqa: E402
 
 OUT = ROOT / "data/working/ops.json"
 SCHEMA = ROOT / "crm/schema/attio-schema.yaml"
@@ -506,7 +507,7 @@ def as_text(v) -> str:
 
 
 def finalize_dates(o: dict) -> None:
-    """The last touch is the newest of everything we know: deal and call activity, the newest email in the thread, and
+    """The last touch is the newest of everything we know: deal and call activity, a note a person wrote (fetch_notes), the newest email in the thread, and
     (only when nothing else exists) the day the deal was created. The follow-up date follows from it."""
     cands = [parse(o.get("last_touch"))] + [parse(m.get("t")) for m in o.get("thread") or []]
     last = max([t for t in cands if t], default=None) or parse(o.get("created"))
@@ -835,7 +836,7 @@ def fetch_notes(c: AttioClient, opps: list[dict]) -> None:
     """Every Attio note on the person and on their deal, so the lead panel shows what the team wrote, not only the email thread
     and the call summary. kind: note (written by a person), call (a call result), auto (a script)."""
     def one(o):
-        out, seen = [], set()
+        out, seen, raw = [], set(), []
         targets = [("people", o["id"])]
         m = re.search(r"([0-9a-f-]{36})\s*$", (o.get("links") or {}).get("deal") or "")
         if m:
@@ -851,6 +852,7 @@ def fetch_notes(c: AttioClient, opps: list[dict]) -> None:
                 if nid in seen:
                     continue
                 seen.add(nid)
+                raw.append(n)
                 title = n.get("title") or ""
                 actor = (n.get("created_by_actor") or {}).get("type")
                 kind = "call" if title.startswith("Call") else "auto" if (actor == "api-token" or "(automatic)" in title) else "note"
@@ -869,6 +871,11 @@ def fetch_notes(c: AttioClient, opps: list[dict]) -> None:
                             "kind": kind, "on": "deal" if obj == "deals" else "person"})
         out.sort(key=lambda x: x["t"] or "", reverse=True)
         o["notes"] = out[:30]
+        # a note a person wrote (in Attio, or in Koya HQ) is a touch too (lead_touch.py, Ife 20 Nov 2026); finalize_dates() below then
+        # moves the due date with it when no follow-up date is set
+        nt, lt = parse(LT.newest(raw)), parse(o.get("last_touch"))
+        if nt and (not lt or nt > lt):
+            o["last_touch"] = nt.isoformat()
     with ThreadPoolExecutor(max_workers=4) as ex:
         list(ex.map(one, opps))
 
