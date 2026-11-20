@@ -16,7 +16,7 @@ doing so would pull those campaigns into the CRM by the back door.
 Since 2026-10-26 "AI agency" also means TAM re-outreach (and its cycles) and the nurture campaign (reply_scope.in_scope): Ramsey Sweis
 and Rachael Quisel replied there and got no deal, because only names containing "ai agency" were read.
 The label used is the FINAL one (the last label_history entry: our reply check beats PlusVibe's first AI guess) and the stage comes
-from reply_scope.stage_for_label (Later gets a follow-up about 30 days out).
+from reply_scope.stage_for_label (Later gets a follow-up 90 days after the label, at the label's time of day).
 Old replies in the newly added campaigns are a backfill: the full sync only takes those that came in after NEW_SCOPE_SINCE unless
 --since is given (a backfill needs Ife's go).
 
@@ -117,7 +117,7 @@ def _why(r):
 
 def stage_for(H, e: str, label: str) -> str:
     """The deal stage for a NEW deal (Ife, 2026-10-26): reply_scope.stage_for_label. Interested -> Interested; Later -> Later (with a
-    follow-up about 30 days out); CYCLE_1 / CYCLE_2 (our "send info" subsequence) -> Interested; MEETING_BOOKED -> Meeting Booked.
+    follow-up 90 days after the label, same time of day); CYCLE_1 / CYCLE_2 (our "send info" subsequence) -> Interested; MEETING_BOOKED -> Meeting Booked.
     The old guess from the email thread (12 Oct) is gone: our reply check already read the reply and set the label."""
     return RS.stage_for_label(label) or "Interested"
 
@@ -153,7 +153,7 @@ def create_for(c, owner, e, l, rid):
     title = f"{full or e} / {l.get('company_name') or ''}".strip(" /")
     stage = l.get("stage") or RS.stage_for_label(l["label"]) or "Interested"
     extra = {}
-    fu = RS.follow_up_at(stage)
+    fu = RS.follow_up_at(stage, at=RS.parse_ts(l.get("label_at") or l.get("modified_at")))   # 90 days from when it went Later, that time of day
     if fu:
         extra["next_action_at"] = [{"value": fu}]                 # Later: the follow-up date the Follow-ups queue shows
     r = c.req("PUT", "/objects/deals/records?matching_attribute=external_opportunity_id", json={"data": {"values": {
@@ -204,7 +204,7 @@ def fast(email: str, commit: bool, settle: int = SETTLE_S, sleep=time.sleep, now
        check's correction (INTERESTED -> LATER / CYCLE_1 came 40-58 s later), then read again. The FINAL label decides.
     2. Find the person in Attio by email, then by first name + company; create them when there is none.
     3. Any open deal (not Lost / Won) on the person -> reuse it (nothing made). Otherwise create the deal at the label's stage, with
-       source channel Cold email, source campaign = the reply's campaign, owner as every other deal, Later + follow-up ~30 days.
+       source channel Cold email, source campaign = the reply's campaign, owner as every other deal, Later + follow-up 90 days after the label.
     The deal is an upsert on external id pv-<hash>, the same as the hourly sync, so both running at once never make two."""
     from datetime import datetime, timezone
     H = {"x-api-key": env()["PLUS_VIBE_API_KEY"]}
@@ -232,8 +232,9 @@ def fast(email: str, commit: bool, settle: int = SETTLE_S, sleep=time.sleep, now
             rows = read(); got = pick_row(rows)
     if not got:
         print("no deal label in an AI-agency campaign (or a hard no); the hourly sync looks again"); return 0
-    row, label, by, _ = got
+    row, label, by, label_at = got
     lead = lead_of(row, e, label)
+    lead["label_at"] = label_at                      # Later: the follow-up counts from when it went Later
     c = AttioClient(workers=2)
     import attio_fast as AF
     def norm(s):

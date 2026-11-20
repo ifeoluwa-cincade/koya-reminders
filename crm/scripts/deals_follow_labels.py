@@ -188,8 +188,8 @@ def main() -> int:
     for d, frm, to, reason, label, camp, email in plan:
         rid = d["id"]["record_id"]
         vals = {"stage": [{"status": to}]}
-        fu = RS.follow_up_at(to)
-        if fu and not one(d, "next_action_at"):         # Later: a follow-up about 30 days out, unless a person already set one
+        fu = RS.follow_up_at(to, at=RS.parse_ts(labels[email][2]) if email in labels else None)
+        if fu and not one(d, "next_action_at"):         # Later: 90 days after the label, at its time of day, unless a person already set one
             vals["next_action_at"] = [{"value": fu}]
         if reason:
             vals["lost_reason"] = [{"option": reason}]

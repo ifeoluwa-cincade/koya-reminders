@@ -8,7 +8,7 @@ Why it exists: Ramsey Sweis ("interested, but not at this time") and Rachael Qui
     in_scope(campaign name)       AI-agency outreach: "AI Agency ..." campaigns, TAM re-outreach (and its cycles), the nurture campaign
     final_label(lead row)         the LAST label_history entry (ours, "updated by User API", beats the AI's first guess), else `label`
     stage_for_label(label)        the deal stage a NEW deal starts at, or None (no deal)
-    follow_up_at(stage, now)      Later -> about 30 days out (08:00 UTC, like the hand-made Ramsey deal); otherwise None
+    follow_up_at(stage, now, at)  Later -> 90 days after the move (Ife, 20 Nov 2026; was 30), at the time of day it was moved; otherwise None
     phones_in(text, region)       valid E.164 numbers in a reply's own words (signature included, the quoted thread left out)
 
 Public repo: nothing here prints names, emails or numbers.
@@ -27,7 +27,7 @@ STAGE_OF = {"INTERESTED": "Interested", "CYCLE_1": "Interested", "CYCLE_2": "Int
 DEAL_LABELS = set(STAGE_OF)
 # a hard no: never a deal
 HARD_NO = {"NOT_INTERESTED", "WRONG_PERSON", "UNSUBSCRIBED", "UNSUBSCRIBE", "DO_NOT_CONTACT", "DNC", "BOUNCED"}
-FOLLOW_UP_DAYS = 30
+FOLLOW_UP_DAYS = 90          # Later: check in 90 days later by default (Ife, 20 Nov 2026; it was 30)
 AI_ACTION = "updated by AI reply detection"
 
 
@@ -74,13 +74,16 @@ def is_hard_no(label: str) -> bool:
     return norm_label(label) in HARD_NO
 
 
-def follow_up_at(stage: str, now: datetime | None = None):
-    """ISO timestamp for the deal's next_action_at, or None."""
+def follow_up_at(stage: str, now: datetime | None = None, at: datetime | None = None):
+    """ISO timestamp for the deal's next_action_at, or None.
+    at: when the lead was moved to Later (the label time); now when unknown or in the future. The follow-up is FOLLOW_UP_DAYS after it at
+    the same time of day, to the minute (Ife, 20 Nov 2026: "the actual time should be the time I'm setting it"; it was forced to 08:00 UTC)."""
     if stage != "Later":
         return None
     now = now or datetime.now(timezone.utc)
-    d = (now + timedelta(days=FOLLOW_UP_DAYS)).astimezone(timezone.utc)
-    return d.replace(hour=8, minute=0, second=0, microsecond=0).isoformat().replace("+00:00", "Z")
+    base = at if (at is not None and at <= now) else now
+    d = (base + timedelta(days=FOLLOW_UP_DAYS)).astimezone(timezone.utc)
+    return d.replace(second=0, microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def parse_ts(x):

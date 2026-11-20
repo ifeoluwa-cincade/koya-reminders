@@ -11,7 +11,7 @@ OPPORTUNITIES  one row per person who showed real interest, from two places:
   Each row carries the links Ife asked for (Attio, LinkedIn, CloudTalk), the call summary, and the last few
   messages of the PlusVibe email thread, so a lead can be read without opening four tools.
   The follow-up date is the deal's own next_action_at when set, otherwise last touch + a rule per outcome (Ife 2026-10-09):
-  meeting booked +3 days (check after the meeting), follow-up and interested +2, callback +1, not now / later +30.
+  meeting booked +3 days (check after the meeting), follow-up and interested +2, callback +1, not now / later +90 (Ife, 20 Nov 2026; was +30).
 
 CHECKS  one per automation, each with a status: ok / warn / bad / info.
 
@@ -48,7 +48,7 @@ OPEN_STAGES = {"Interested", "Multi-touch", "Meeting Booked", "Later", "Profiles
 # the caller's own note decides first, so "send email" / "follow up" on a call makes it SEND_FOLLOW_UP and it appears here.
 REAL_CALL = LB.REAL_CALL
 # days after the last touch before the lead is due again
-DUE_DAYS = {"meeting": 3, "aftercall": 2, "followup": 2, "callback": 1, "later": 30, "chasing": 2, "lost": 0, "won": 0}
+DUE_DAYS = {"meeting": 3, "aftercall": 2, "followup": 2, "callback": 1, "later": 90, "chasing": 2, "lost": 0, "won": 0}
 BUCKET_LABEL = {"meeting": "Meeting booked", "aftercall": "After the call", "followup": "Follow up", "chasing": "Multi-touch", "callback": "Callback", "later": "Not now", "lost": "Lost", "won": "Won"}
 
 

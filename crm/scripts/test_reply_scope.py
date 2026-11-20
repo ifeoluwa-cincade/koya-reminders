@@ -43,7 +43,9 @@ check("no stage for OOO", RS.stage_for_label("OUT_OF_OFFICE"), None)
 check("hard no", RS.is_hard_no("NOT_INTERESTED") and RS.is_hard_no("wrong person"), True)
 check("later is not a hard no", RS.is_hard_no("LATER"), False)
 now = datetime(2026, 10, 26, 18, 0, tzinfo=timezone.utc)
-check("Later follow-up 30 days out at 08:00 UTC", RS.follow_up_at("Later", now), "2026-11-25T08:00:00Z")
+check("Later follow-up 90 days out, at the time it was set", RS.follow_up_at("Later", now), "2027-01-24T18:00:00Z")
+check("Later follow-up from the label time, to the minute", RS.follow_up_at("Later", now, at=datetime(2026, 10, 26, 14, 37, 21, tzinfo=timezone.utc)), "2027-01-24T14:37:00Z")
+check("a label time in the future is not used", RS.follow_up_at("Later", now, at=datetime(2026, 12, 1, 9, 0, tzinfo=timezone.utc)), "2027-01-24T18:00:00Z")
 check("no follow-up for Interested", RS.follow_up_at("Interested", now), None)
 
 # phones from the signature
