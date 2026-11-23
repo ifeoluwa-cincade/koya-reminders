@@ -46,6 +46,8 @@ def probe(c, name):
         if r is not None:
             js = re.findall(r'src="([^"]+\.js[^"]*)"', r.text)
             print("PAGE", u, r.status_code, "scripts:", js[:10], flush=True)
+            for m in re.finditer(r"ajaxUrl", r.text):
+                print("AJAXCTX", r.text[max(0, m.start() - 700): m.start() + 400].replace("\n", " "), flush=True)
             for m in re.finditer(r"(api[a-z0-9.\-]*\.comptroller[^\"'\s<]*|x-api-key[^\n]{0,120}|apikey[^\n]{0,120}|ajax\([^\n]{0,300}|fetch\([^\n]{0,300}|url\s*:\s*[^\n]{0,200})", r.text, re.I):
                 print("INLINE", m.group(0)[:300], flush=True)
             for j in [x for x in js if "comptroller" in x or x.startswith("/")][:8]:
