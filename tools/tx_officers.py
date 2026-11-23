@@ -132,7 +132,7 @@ def main():
     if a.limit: rows = rows[: a.limit]
     with httpx.Client(follow_redirects=True) as c:
         if a.probe:
-            probe(c, rows[0]["name"])
+            probe(c, rows[1]["name"])
         out = []
         for r in rows:
             out.append(one(c, r)); time.sleep(0.4)
