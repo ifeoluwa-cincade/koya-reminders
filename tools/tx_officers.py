@@ -13,8 +13,8 @@ import httpx
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36",
       "Accept": "application/json, text/plain, */*", "Origin": "https://comptroller.texas.gov",
       "Referer": "https://comptroller.texas.gov/taxes/franchise/account-status/search"}
-BASES = ["https://api.comptroller.texas.gov/public-data/v1/public"]
-SEARCH = ["{b}/franchise-tax-list?name={q}", "{b}/franchise-tax?name={q}"]
+BASES = ["https://comptroller.texas.gov/data-search"]
+SEARCH = ["{b}/franchise-tax?name={q}"]
 DETAIL = ["{b}/franchise-tax/{id}"]
 
 
@@ -37,6 +37,16 @@ def get(c, url):
 
 def probe(c, name):
     q = urllib.parse.quote(name)
+    r = get(c, f"https://comptroller.texas.gov/data-search/franchise-tax?name={q}")
+    print("SEARCHRAW", r.status_code if r else None, r.text[:2000] if r else "", flush=True)
+    try:
+        recs = records(r.json()); x = recs[0]
+        tid = x.get("taxpayerId") or x.get("id") or x.get("taxpayerNumber")
+        d = get(c, f"https://comptroller.texas.gov/data-search/franchise-tax/{tid}")
+        print("DETAILRAW", d.status_code if d else None, d.text[:3000] if d else "", flush=True)
+    except Exception as e:
+        print("probe parse", e, flush=True)
+    return
     for b in BASES:
         for s in SEARCH:
             u = s.format(b=b, q=q); r = get(c, u)
