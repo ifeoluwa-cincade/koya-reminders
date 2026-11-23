@@ -108,21 +108,17 @@ def one(c, row):
                 except ValueError: pass
         if det: break
     blob = json.dumps(det or best)
-    offs = []
-    def walk(o):
-        if isinstance(o, dict):
-            n = o.get("name") or o.get("officerName") or o.get("agentName")
-            t = o.get("title") or o.get("officerTitle") or ""
-            if n and t: offs.append((str(n), str(t)))
-            for v in o.values(): walk(v)
-        elif isinstance(o, list):
-            for v in o: walk(v)
-    walk(det or best)
-    pt = [t for t in re.findall(r"[a-z]+", row["person"].lower()) if len(t) > 2]
-    hit = [(n, t) for n, t in offs if pt and pt[-1] in n.lower() and (pt[0] in n.lower() or len(pt) == 1)]
+    data = (det or {}).get("data") or {}
+    offs = [(str(o.get("AGNT_NM", "")).strip(), str(o.get("AGNT_TITL_TX", "")).strip()) for o in (data.get("officerInfo") or [])
+            if o.get("AGNT_NM")]
+    pt = {t for t in re.findall(r"[a-z]+", row["person"].lower()) if len(t) > 2}
+    def same(n):
+        ot = {t for t in re.findall(r"[a-z]+", n.lower()) if len(t) > 2}
+        return len(pt & ot) >= min(2, len(ot), len(pt)) and bool(pt & ot)
+    hit = [(n, t) for n, t in offs if same(n)]
     return {**row, "tx_id": tid, "officers": "; ".join(f"{n} ({t})" for n, t in offs)[:500],
             "person_listed": "yes" if hit else "no", "person_title": hit[0][1] if hit else "", "status": "ok" if offs else "no_officers",
-            "raw": blob[:300] if not offs else ""}
+            "sos_status": data.get("sosRegistrationStatus", "")}
 
 
 def main():
@@ -132,7 +128,7 @@ def main():
     if a.limit: rows = rows[: a.limit]
     with httpx.Client(follow_redirects=True) as c:
         if a.probe:
-            probe(c, rows[1]["name"])
+            pass
         out = []
         for r in rows:
             out.append(one(c, r)); time.sleep(0.4)
