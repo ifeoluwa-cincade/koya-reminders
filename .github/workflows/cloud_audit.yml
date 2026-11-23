@@ -12,7 +12,7 @@ on:
       limit:   { description: "rows per shard, 0 = all (small number = test)", required: true, default: "0" }
       only:    { description: "comma list of shard numbers to run (blank = all)", required: false, default: "" }
       account: { description: "alternate | a (ifeoluwa) | b (eyitemi)", required: false, default: "alternate" }
-      mode:    { description: "full (3-step audit_v5) | lite (1 step) | homecare (lite, home care rubric) | phones (website phone numbers, no Claude) | sitefind (own website from name+city via Exa, no Claude) | geo (NA/EU check: site address, phones, web address)", required: false, default: "full" }
+      mode:    { description: "full (3-step audit_v5) | lite (1 step) | homecare (lite, home care rubric) | phones (website phone numbers, no Claude) | txofficers (Texas franchise tax officers, free) | sitefind (own website from name+city via Exa, no Claude) | geo (NA/EU check: site address, phones, web address)", required: false, default: "full" }
       founders: { description: "lite only: also read founders off the site text (yes/no)", required: false, default: "no" }
 
 permissions:
@@ -91,6 +91,10 @@ jobs:
           elif [ "${{ inputs.mode }}" = "geo" ]; then
             python3 tools/cloud_geo.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} \
               --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "geo exited non-zero"
+          elif [ "${{ inputs.mode }}" = "txofficers" ]; then
+            P=""; [ "${{ inputs.limit }}" != "0" ] && P="--probe"
+            python3 tools/tx_officers.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} $P \
+              --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "txofficers exited non-zero"
           elif [ "${{ inputs.mode }}" = "sitefind" ]; then
             python3 tools/cloud_sitefind.py --input data/working/cloud_shard.csv --limit ${{ inputs.limit }} --parallel 3 \
               --output data/working/cloud_shard_audit.csv > run.log 2>&1 || echo "sitefind exited non-zero"
