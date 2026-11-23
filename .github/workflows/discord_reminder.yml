@@ -80,6 +80,30 @@ jobs:
           msg = os.environ.get("MESSAGE", "").strip()
           if not msg:
               raise SystemExit("no message to post")
+          # No follow-up pings at the weekend (Ife, 23 Nov 2026): every Hot Leads post (not a test, not a system alert) is first offered to Koya HQ
+          # (POST /hook/fuhold). On Saturday or Sunday, Lagos time, HQ keeps it (lib/workday.js + lib/fusync.js) and posts it once, grouped, on
+          # Monday at 09:00 Lagos through "Follow-ups grouped message"; this job then posts nothing. HQ unreachable at the weekend = not posted and
+          # the job fails, so Lead Actions hands the reminder over again a few minutes later (its 6-minute check); HQ unreachable on a weekday =
+          # posted as before. The follow-up's due time is never changed, only the ping waits.
+          if not test and not system:
+              lagos_dow = time.gmtime(time.time() + 3600).tm_wday        # Lagos is UTC+1 all year; 5 = Saturday, 6 = Sunday
+              held = None
+              try:
+                  hb = json.dumps({"k": os.environ.get("LEAD_ACTIONS_HOOK", ""), "lead": os.environ.get("LEAD", ""), "label": os.environ.get("LABEL", ""), "message": msg}).encode()
+                  hr = urllib.request.Request("https://hq.koyatalent.com/hook/fuhold", data=hb, headers={"Content-Type": "application/json", "User-Agent": "koya-reminders"})
+                  held = json.loads(urllib.request.urlopen(hr, timeout=20).read().decode() or "{}").get("held") is True
+              except Exception as e:
+                  print("HQ weekend hold not reachable:", type(e).__name__)
+                  if lagos_dow >= 5:
+                      raise SystemExit("weekend in Lagos and Koya HQ could not hold the reminder: not posted (Lead Actions sends it again)")
+              if held:
+                  try:
+                      q = urllib.parse.urlencode({"logact": os.environ["LEAD_ACTIONS_HOOK"], "kind": "reminder", "text": "Follow-up reminder held for Monday 09:00: no Discord pings at the weekend", "lead": os.environ.get("LEAD", ""), "level": "info"})
+                      urllib.request.urlopen(os.environ["LEAD_ACTIONS_URL"] + "?" + q, timeout=60).read()
+                  except Exception as e:
+                      print("could not write to the activity log:", type(e).__name__)
+                  print("weekend: held for Monday, not posted")
+                  raise SystemExit(0)
           # Plan leads' ping mode (Koya HQ, 6 Nov 2026): a per-lead follow-up reminder for a lead on an SDR follow-up plan is left out when
           # the owner switched plan leads to the grouped 09:00 message (HQ answers { skip }; HQ unreachable or slow = posted as before).
           # Only 'reminder' posts to Hot Leads are asked; tests, system alerts and grouped messages never are.
