@@ -96,7 +96,8 @@ async def check(c, url, row):
 
 async def one(c, sem, row):
     async with sem:
-        q = f'{re.split(r"\bdba\b", row["name"], flags=re.I)[-1].strip()} home care {row.get("city", "")} {row.get("state", "")}'
+        nm = re.split(r"\bdba\b", row["name"], flags=re.I)[-1].strip()
+        q = f'{nm} home care {row.get("city", "")} {row.get("state", "")}'
         await asyncio.sleep(random.random() * 2)
         urls = await search(c, q)
         if urls is None:
