@@ -1,0 +1,40 @@
+name: Notion month sync
+
+# Copies Koya HQ's monthly numbers into the Notion Client Acquisition hub (Month by month database) once a day,
+# creating the new month's row on the 1st and finishing last month's numbers during the first 5 days.
+# Human columns (Main bottleneck, Fix this month) are never touched. Ife 2026-11-25. Counts-only logs (public repo).
+on:
+  schedule:
+    - cron: "15 6 * * *"        # 07:15 Lagos, before the team starts
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true = print what would be written, no Notion writes"
+        default: "false"
+
+permissions: {}
+
+concurrency:
+  group: notion-month-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: Sync
+        env:
+          KOYA_HQ_API_KEY: ${{ secrets.KOYA_HQ_API_KEY }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            python crm/dashboard/notion_month_sync.py --dry-run
+          else
+            python crm/dashboard/notion_month_sync.py
+          fi
