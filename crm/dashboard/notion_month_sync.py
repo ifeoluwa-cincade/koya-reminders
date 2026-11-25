@@ -50,7 +50,7 @@ def props_for(month: str, d: dict, today: str) -> dict:
     v = lambda x: (x or {}).get("v") if isinstance(x, dict) else x
     y, m = map(int, month.split("-"))
     p = {
-        "Month": {"title": [{"text": {"content": f"{calendar.month_name[m]} {y}"}}]},
+        "Month": {"title": [{"text": {"content": month}}]},   # "2026-11": short and sorts right in charts
         "Month start": {"date": {"start": f"{month}-01"}},
         "Contacted": {"number": v(e.get("contacted"))},
         "Contacted goal": {"number": (e.get("contacted") or {}).get("target")},
