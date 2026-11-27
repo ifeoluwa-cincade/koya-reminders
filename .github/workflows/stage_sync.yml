@@ -34,7 +34,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Koya HQ's hourly clock starts this job on time (workflow_dispatch, koya-app lib/clockjobs.js, 27 Nov 2026). GitHub's timer stays as
+  # the fallback; a timer run steps aside when a run started in the last 45 min (tools/skip_if_recent.py). Manual/HQ runs always run.
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.g.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: g
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 tools/skip_if_recent.py --window 45 --events schedule,workflow_dispatch
   stage:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
